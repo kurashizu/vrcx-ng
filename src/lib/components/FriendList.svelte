@@ -928,6 +928,9 @@
 		background: var(--bg-1);
 		border-left: 1px solid var(--border);
 		min-height: 0;
+		min-width: 0;
+		max-width: 100%;
+		overflow: hidden;
 	}
 	header {
 		padding: 14px 14px 8px;
@@ -984,6 +987,9 @@
 	.search {
 		font-size: 12px;
 		padding: 6px 8px;
+		min-width: 0;
+		max-width: 100%;
+		width: 100%;
 	}
 	.status-row {
 		display: flex;
@@ -1010,6 +1016,8 @@
 		background: var(--bg-2);
 		border-radius: 8px;
 		align-items: center;
+		flex-wrap: wrap;
+		min-width: 0;
 	}
 	.view-tab {
 		flex: 1;
@@ -1051,7 +1059,9 @@
 	.groups {
 		flex: 1;
 		overflow-y: auto;
+		overflow-x: hidden;
 		padding: 4px 0 20px;
+		min-width: 0;
 	}
 	.group {
 		margin-bottom: 2px;
@@ -1159,6 +1169,9 @@
 		padding: 8px 14px;
 		cursor: pointer;
 		transition: background 0.1s;
+		min-width: 0;
+		max-width: 100%;
+		overflow: hidden;
 	}
 	.friend:hover {
 		background: var(--bg-2);
@@ -1235,6 +1248,11 @@
 		border-radius: 8px;
 		background: var(--bg-3);
 		color: var(--text-dim);
+		white-space: nowrap;
+		flex-shrink: 0;
+		max-width: 90px;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.status-pill.status-join-me {
 		background: rgba(61, 220, 151, 0.15);
@@ -1322,6 +1340,15 @@
 		flex-wrap: wrap;
 		max-width: 100%;
 		overflow: hidden;
+	}
+	.sub > .at-badge {
+		max-width: 80px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.sub > .inst-detail {
+		max-width: 100px;
 	}
 	.sub > .world-link {
 		overflow: hidden;

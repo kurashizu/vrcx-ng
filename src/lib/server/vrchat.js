@@ -489,3 +489,52 @@ export async function getPlayerModerations(accountId, type) {
 	const { status, data } = await api(accountId, `auth/user/playermoderations${q}`);
 	return { ok: status === 200, data: data || [] };
 }
+
+/**
+ * Create a new instance on the current user's account.
+ * @param {string} accountId
+ * @param {{
+ *   worldId: string,
+ *   type?: 'public'|'friends'|'hidden'|'private',
+ *   canRequestInvite?: boolean,
+ *   region?: 'us'|'use'|'eu'|'jp',
+ *   groupId?: string,
+ *   groupAccessType?: 'public'|'plus'|'members',
+ *   queueEnabled?: boolean,
+ *   displayName?: string,
+ *   ageGate?: boolean
+ * }} params
+ */
+export async function createInstance(accountId, params = {}) {
+	const body = { ...params };
+	const { status, data } = await api(accountId, 'instances', {
+		method: 'POST',
+		body
+	});
+	return { ok: status === 200 || status === 201, status, data };
+}
+
+/**
+ * Send a self-invite to an instance. Requires the instance to allow
+ * canRequestInvite.
+ * @param {string} accountId
+ * @param {string} location  e.g. "wrld_xxx:12345"
+ */
+export async function selfInvite(accountId, location) {
+	const { status, data } = await api(accountId, `invite/myself/to/${location}`, {
+		method: 'POST'
+	});
+	return { ok: status === 200 || status === 201, status, data };
+}
+
+/**
+ * Fetch shortName for an instance, which can be used to invite via a
+ * shorter URL.
+ */
+export async function getInstanceShortName(accountId, location) {
+	const { status, data } = await api(
+		accountId,
+		`instances/${location}/shortName`
+	);
+	return { ok: status === 200, status, data };
+}

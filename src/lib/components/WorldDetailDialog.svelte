@@ -21,6 +21,7 @@
 	let memo = $state('');
 	let inviterAccountId = $state('');
 	let inviterMessage = $state('Hello, can I join you?');
+	let inviteMode = $state('create'); // 'create' | 'request'
 
 	$effect(() => {
 		const req = $worldDetailRequest;
@@ -107,29 +108,132 @@
 		if (browser) window.location.href = u;
 	}
 
-	async function requestInvite(instanceId) {
+	// ----- Create new instance + self-invite -----
+	let newInstAccess = $state('public'); // public | friends | friends+ | invite | invite+
+	let newInstRegion = $state('us'); // us | use | eu | jp
+	let newInstBusy = $state(false);
+	let newInstResult = $state(null); // last created instance info
+
+	async function createInstanceAndSelfInvite() {
+		if (!inviterAccountId) {
+			toasts.error('请选择账号');
+			return;
+		}
+		if (!data?.id) return;
+		newInstBusy = true;
+		try {
+			const typeMap = {
+				public: 'public',
+				friends: 'friends',
+				'friends+': 'hidden',
+				invite: 'private',
+				'invite+': 'private'
+			};
+			const params = {
+				action: 'createInstance',
+				worldId: data.id,
+				type: typeMap[newInstAccess],
+				canRequestInvite: newInstAccess === 'invite+',
+				region: newInstRegion
+			};
+			const r = await fetch(
+				`/api/accounts/${encodeURIComponent(inviterAccountId)}/instance-action`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(params)
+				}
+			);
+			const j = await r.json();
+			if (!j.ok) {
+				toasts.error(j.error || '创建实例失败');
+				return;
+			}
+			newInstResult = j.instance;
+			toasts.success('实例已创建');
+
+			// Try self-invite; for public/friends this will likely fail with
+			// 401/403 (those don't accept invite-myself), so just show the
+			// launch URL either way.
+			const loc = j.instance?.location;
+			if (loc && (newInstAccess === 'invite' || newInstAccess === 'invite+')) {
+				const sr = await fetch(
+					`/api/accounts/${encodeURIComponent(inviterAccountId)}/instance-action`,
+					{
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ action: 'selfInvite', location: loc })
+					}
+				);
+				const sj = await sr.json();
+				if (sj.ok) toasts.success('已发送自我邀请');
+				else toasts.info('实例已创建，但 self-invite 失败: ' + (sj.error || '未知'));
+			} else if (loc) {
+				toasts.info('实例已创建。点击"启动"在 VRChat 中打开');
+			}
+		} catch (err) {
+			toasts.error(err.message);
+		} finally {
+			newInstBusy = false;
+		}
+	}
+
+	function launchCreatedInstance() {
+		if (!newInstResult?.location) return;
+		const u = vrcLaunchUrl(newInstResult.location);
+		if (u && browser) window.location.href = u;
+	}
+
+	// ----- Request invite from a friend who owns a private/friends/friends+ instance -----
+	let inviteTargetUserId = $state('');
+	let inviteMessage = $state('Hello, can I join you?');
+	let inviteBusy = $state(false);
+
+	// Filter the API-provided friends-in-world list down to those we can
+	// request invite from (have an ownerUserId) — i.e. private/friends/friends+
+	// instances of our own friends.
+	const friendsHere = $derived(data?.friendsInWorld || []);
+	const inviteableFriends = $derived(
+		friendsHere.filter((f) => f.ownerUserId && f.instanceType !== 'public' && !f.instanceType.startsWith('group'))
+	);
+	const friendOwnerOptions = $derived(inviteableFriends);
+
+	$effect(() => {
+		// Default the dropdown to the first inviteable friend
+		if (!inviteTargetUserId && inviteableFriends.length > 0) {
+			inviteTargetUserId = inviteableFriends[0].ownerUserId;
+		}
+	});
+
+	async function sendInviteRequest() {
 		if (!inviterAccountId) {
 			toasts.error('请选择左边的账号作为邀请来源');
 			return;
 		}
-		if (!instanceId) {
-			toasts.error('该实例没有 owner，不能发送邀请');
+		if (!inviteTargetUserId) {
+			toasts.error('请选择要请求邀请的好友');
 			return;
 		}
+		inviteBusy = true;
 		try {
-			const r = await fetch(`/api/accounts/${inviterAccountId}/actions`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					action: 'requestInvite',
-					userId: instanceId.split('~')[0], // best effort
-					message: inviterMessage
-				})
-			});
+			const r = await fetch(
+				`/api/accounts/${encodeURIComponent(inviterAccountId)}/instance-action`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						action: 'requestInvite',
+						userId: inviteTargetUserId,
+						message: inviteMessage
+					})
+				}
+			);
 			const j = await r.json();
 			j.ok ? toasts.success('邀请请求已发送') : toasts.error(j.error || '失败');
 		} catch (err) {
 			toasts.error('失败: ' + err.message);
+		} finally {
+			inviteBusy = false;
 		}
 	}
 
@@ -194,9 +298,7 @@
 		$accounts.filter((a) => a.loggedIn && a.connected)
 	);
 
-	// Friends in this world (would need server data — placeholder for now)
-	const friendsHere = $state([]);
-</script>
+	</script>
 
 {#if $worldDetailRequest?.worldId}
 	<div
@@ -382,53 +484,115 @@
 							<code class="wid">{data.id}</code>
 						</section>
 
-						<!-- Self-invite section: pick a left-side account to send invite -->
+						<!-- Self-invite section: create new instance OR request invite from a friend -->
 						<section class="block invite-self">
-							<h3>✉️ 邀请自己加入</h3>
-							<p class="muted small">
-								选择一个左边的账号作为邀请来源（必须是已登录的账号）。目标 instance
-								必须是 invite / invite+ 类型才会成功。
-							</p>
+							<h3>✉️ 加入这个世界</h3>
+
 							{#if eligibleAccounts.length === 0}
-								<div class="muted small">暂无已登录账号</div>
+								<div class="muted small">请先在左边添加并登录一个账号</div>
 							{:else}
-								<div class="invite-form">
-									<label class="row">
-										<span class="lbl">账号</span>
-										<select bind:value={inviterAccountId} class="ipt">
-											{#each eligibleAccounts as a (a.id)}
-												<option value={a.id}>{a.displayName} ({a.username})</option>
-											{/each}
-										</select>
-									</label>
-									<label class="row">
-										<span class="lbl">消息</span>
-										<input
-											type="text"
-											class="ipt"
-											placeholder="邀请消息"
-											bind:value={inviterMessage}
-											maxlength="64"
-										/>
-									</label>
-									<div class="row submit-row">
-										<button
-											class="primary small"
-											onclick={() => {
-												if (instances.length === 0) {
-													toasts.error('该世界没有公开实例');
-													return;
-												}
-												const inviteable = instances.find((i) => i.userId || i.ownerId);
-												if (!inviteable) {
-													toasts.error('没有可邀请的实例');
-													return;
-												}
-												requestInvite(inviteable.userId || inviteable.ownerId);
-											}}
-										>发送邀请请求</button>
-									</div>
+								<label class="row">
+									<span class="lbl">使用账号</span>
+									<select bind:value={inviterAccountId} class="ipt">
+										{#each eligibleAccounts as a (a.id)}
+											<option value={a.id}>{a.displayName} ({a.username})</option>
+										{/each}
+									</select>
+								</label>
+
+								<div class="invite-tabs">
+									<button
+										class="invite-tab"
+										class:active={inviteMode === 'create'}
+										onclick={() => (inviteMode = 'create')}
+									>创建新实例</button>
+									<button
+										class="invite-tab"
+										class:active={inviteMode === 'request'}
+										onclick={() => (inviteMode = 'request')}
+									>请求好友邀请</button>
 								</div>
+
+								{#if inviteMode === 'create'}
+									<div class="form-stack">
+										<label class="row">
+											<span class="lbl">访问类型</span>
+											<select bind:value={newInstAccess} class="ipt">
+												<option value="public">公开</option>
+												<option value="friends">仅好友</option>
+												<option value="friends+">好友+</option>
+												<option value="invite">仅邀请</option>
+												<option value="invite+">邀请+（可申请）</option>
+											</select>
+										</label>
+										<label class="row">
+											<span class="lbl">区域</span>
+											<select bind:value={newInstRegion} class="ipt">
+												<option value="us">US West</option>
+												<option value="use">US East</option>
+												<option value="eu">Europe</option>
+												<option value="jp">Japan</option>
+											</select>
+										</label>
+										<div class="row submit-row">
+											<button
+												class="primary small"
+												disabled={newInstBusy}
+												onclick={createInstanceAndSelfInvite}
+											>{newInstBusy ? '创建中…' : '创建并启动'}</button>
+											{#if newInstResult?.location}
+												<button class="ghost small" onclick={launchCreatedInstance}>
+													↗ 启动刚创建的实例
+												</button>
+											{/if}
+										</div>
+										{#if newInstResult?.location}
+											<p class="muted small mono">{newInstResult.location}</p>
+										{/if}
+										<p class="muted small">
+											仅邀请 / 邀请+ 类型的实例会自动尝试发送 self-invite；其他类型会
+											让你在 VRChat 中手动启动。
+										</p>
+									</div>
+								{:else}
+									<!-- request mode: pick a friend whose private/friends/friends+ instance you want to join -->
+									<div class="form-stack">
+										{#if friendOwnerOptions.length === 0}
+											<div class="muted small">
+												目前没有好友在这个世界拥有可邀请的实例（需要 invite / invite+ /
+												friends / friends+ 类型）。
+											</div>
+										{:else}
+											<label class="row">
+												<span class="lbl">好友</span>
+												<select bind:value={inviteTargetUserId} class="ipt">
+													{#each friendOwnerOptions as f (f.userId + f.location)}
+														<option value={f.ownerUserId}>
+															{f.displayName} · {accessTypeLabel(f.accessTypeLabel)}
+														</option>
+													{/each}
+												</select>
+											</label>
+											<label class="row">
+												<span class="lbl">消息</span>
+												<input
+													type="text"
+													class="ipt"
+													placeholder="请求消息"
+													bind:value={inviteMessage}
+													maxlength="64"
+												/>
+											</label>
+											<div class="row submit-row">
+												<button
+													class="primary small"
+													disabled={inviteBusy}
+													onclick={sendInviteRequest}
+												>{inviteBusy ? '发送中…' : '发送邀请请求'}</button>
+											</div>
+										{/if}
+									</div>
+								{/if}
 							{/if}
 						</section>
 					{:else if tab === 'instances'}
@@ -823,6 +987,37 @@
 	.invite-form button {
 		font-size: 12px;
 		padding: 6px 12px;
+	}
+	.invite-tabs {
+		display: flex;
+		gap: 4px;
+		margin: 6px 0 2px;
+		border-bottom: 1px solid var(--border);
+	}
+	.invite-tab {
+		flex: 1;
+		padding: 6px 8px;
+		background: transparent;
+		border: none;
+		border-radius: 0;
+		color: var(--text-dim);
+		font-size: 12px;
+		cursor: pointer;
+		border-bottom: 2px solid transparent;
+	}
+	.invite-tab.active {
+		color: var(--text);
+		border-bottom-color: var(--accent);
+	}
+	.form-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin-top: 6px;
+	}
+	.mono {
+		font-family: ui-monospace, monospace;
+		word-break: break-all;
 	}
 	.instances {
 		display: flex;

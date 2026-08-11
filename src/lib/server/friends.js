@@ -298,6 +298,101 @@ export function searchLocal(q, limit = 50) {
 	return sorted.slice(0, limit);
 }
 
+/**
+ * Return all friends currently in a given world, with their instance type
+ * and (for private/friends/friends+ instances) the owner user id extracted
+ * from the location qualifier.
+ *
+ * @param {string} worldId
+ * @returns {Array<{userId, displayName, note, location, instanceType, ownerUserId, accountIds}>}
+ */
+export function friendsInWorld(worldId) {
+	if (!worldId) return [];
+	const out = [];
+	for (const [accountId, friends] of cache) {
+		const sess = getSession(accountId);
+		if (!sess?.user) continue; // skip logged-out accounts
+		for (const f of friends.values()) {
+			const loc = f.location || '';
+			if (!loc || loc === 'offline' || loc === 'private' || loc === 'traveling') continue;
+			const [wId, instanceId] = loc.split(':');
+			if (wId !== worldId) continue;
+			const parsed = parseLocationFull(loc);
+			const owner = parsed.userId || null;
+			out.push({
+				userId: f.id,
+				displayName: f.displayName,
+				note: f.note,
+				location: loc,
+				instanceId: instanceId || null,
+				instanceType: parsed.accessType || 'public',
+				accessTypeLabel: parsed.accessTypeLabel || 'public',
+				ownerUserId: owner,
+				platform: f.platform || '',
+				accountId
+			});
+		}
+	}
+	// Sort: invite-able first (private/friends/friends+), then public, then by name
+	const rank = (t) => {
+		if (t === 'invite' || t === 'invite+') return 0;
+		if (t === 'friends') return 1;
+		if (t === 'friends+') return 2;
+		return 3;
+	};
+	out.sort((a, b) => {
+		const r = rank(a.instanceType) - rank(b.instanceType);
+		if (r !== 0) return r;
+		return (a.displayName || '').localeCompare(b.displayName || '');
+	});
+	return out;
+}
+
+function parseLocationFull(loc) {
+	// Lightweight inline parser — return accessType/userId. Avoids an
+	// import cycle (location.js doesn't depend on this file).
+	let _tag = String(loc || '');
+	const ctx = {
+		accessType: '',
+		accessTypeLabel: '',
+		userId: null,
+		groupId: null,
+		groupAccessType: null
+	};
+	if (!_tag.includes(':')) return ctx;
+	const inst = _tag.split(':')[1] || '';
+	inst.split('~').forEach((s, i) => {
+		if (!i) return;
+		const A = s.indexOf('(');
+		const Z = A >= 0 ? s.lastIndexOf(')') : -1;
+		const key = Z >= 0 ? s.substr(0, A) : s;
+		const value = A < Z ? s.substr(A + 1, Z - A - 1) : '';
+		if (key === 'private') {
+			ctx.accessType = 'invite';
+			ctx.userId = value;
+		} else if (key === 'hidden') {
+			ctx.accessType = 'friends+';
+			ctx.userId = value;
+		} else if (key === 'friends') {
+			ctx.accessType = 'friends';
+			ctx.userId = value;
+		} else if (key === 'canRequestInvite' && ctx.accessType === 'invite') {
+			ctx.accessType = 'invite+';
+		} else if (key === 'group') {
+			ctx.accessType = 'group';
+			ctx.groupId = value;
+		} else if (key === 'groupAccessType') {
+			ctx.groupAccessType = value;
+		}
+	});
+	if (!ctx.accessType) ctx.accessType = 'public';
+	ctx.accessTypeLabel = ctx.accessType;
+	if (ctx.groupId && ctx.groupAccessType) {
+		ctx.accessTypeLabel = `group${ctx.groupAccessType[0].toUpperCase()}${ctx.groupAccessType.slice(1)}`;
+	}
+	return ctx;
+}
+
 export function aggregate() {
 	/** @type {Map<string, Friend & { accountIds: Set<string>, _state: string }>} */
 	const map = new Map();
