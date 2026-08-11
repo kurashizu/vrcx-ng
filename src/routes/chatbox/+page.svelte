@@ -490,6 +490,11 @@
 		gap: 8px;
 		margin: 10px 0 18px;
 	}
+	@media (max-width: 560px) {
+		.actions {
+			grid-template-columns: 1fr;
+		}
+	}
 	.btn {
 		min-height: 52px;
 		border: 0;

@@ -13,6 +13,13 @@
 	import { browser } from '$app/environment';
 
 	let addOpen = $state(false);
+	// mobile drawer states (left menu / right friends)
+	let menuOpen = $state(false);
+	let friendsOpen = $state(false);
+	function closeDrawers() {
+		menuOpen = false;
+		friendsOpen = false;
+	}
 	// 'list' = traditional vertical list; 'bubbles' = full-bleed flex-wrap cards
 	let feedMode = $state(getSetting('ui.feedMode') || 'list');
 	function setFeedMode(m) {
@@ -57,8 +64,13 @@
 	<title>vrcx-ng · 多账号动态</title>
 </svelte:head>
 
-<div class="app">
-	<aside class="sidebar">
+<div class="app" class:menu-open={menuOpen} class:friends-open={friendsOpen}>
+	<div class="mobile-topbar">
+		<button class="mob-btn" onclick={() => (menuOpen = !menuOpen)} aria-label="菜单" title="菜单">☰</button>
+		<span class="mob-title">vrcx-ng</span>
+		<button class="mob-btn" onclick={() => (friendsOpen = !friendsOpen)} aria-label="好友" title="好友">👥</button>
+	</div>
+	<aside class="sidebar" class:open={menuOpen}>
 		<div class="brand">
 			<div class="logo">V</div>
 			<div>
@@ -96,6 +108,10 @@
 		</div>
 	</aside>
 
+	{#if menuOpen || friendsOpen}
+		<div class="drawer-backdrop" onclick={closeDrawers} role="presentation"></div>
+	{/if}
+
 	<main class="main">
 		<FeedFilterBar bind:mode={feedMode} onModeChange={setFeedMode} />
 		<div class="feed" class:bubbles={feedMode === 'bubbles'} bind:this={listEl}>
@@ -115,7 +131,7 @@
 		</div>
 	</main>
 
-	<aside class="rightbar">
+	<aside class="rightbar" class:open={friendsOpen}>
 		<FriendList />
 	</aside>
 </div>
@@ -287,17 +303,84 @@
 		line-height: 1.6;
 	}
 
+	.mobile-topbar {
+		display: none;
+	}
+
 	@media (max-width: 1200px) {
 		.app {
 			grid-template-columns: 240px 1fr 280px;
 		}
 	}
+	/* 移动端：左右栏折叠为抽屉 */
 	@media (max-width: 980px) {
 		.app {
-			grid-template-columns: 220px 1fr;
+			grid-template-columns: 1fr;
+		}
+		.mobile-topbar {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			flex: none;
+			padding: 8px 10px;
+			background: var(--bg-1);
+			border-bottom: 1px solid var(--border);
+		}
+		.mob-btn {
+			width: 36px;
+			height: 36px;
+			border-radius: 8px;
+			border: 1px solid var(--border);
+			background: var(--bg-2);
+			color: var(--text);
+			font-size: 16px;
+			cursor: pointer;
+		}
+		.mob-btn:active {
+			background: var(--bg-3);
+		}
+		.mob-title {
+			font-weight: 700;
+			font-size: 15px;
+		}
+		.sidebar,
+		.rightbar {
+			position: fixed;
+			top: 0;
+			bottom: 0;
+			z-index: 80;
+			width: min(300px, 86vw);
+			box-shadow: 0 0 40px rgba(0, 0, 0, 0.4);
+			transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.3, 1);
+		}
+		.sidebar {
+			left: 0;
+			transform: translateX(-105%);
 		}
 		.rightbar {
-			display: none;
+			right: 0;
+			transform: translateX(105%);
+		}
+		.sidebar.open,
+		.rightbar.open {
+			transform: translateX(0);
+		}
+		.drawer-backdrop {
+			position: fixed;
+			inset: 0;
+			background: rgba(0, 0, 0, 0.5);
+			z-index: 70;
+		}
+		.main {
+			min-height: 0;
+		}
+		.feed.bubbles .entry {
+			min-width: 180px;
+		}
+	}
+	@media (max-width: 480px) {
+		.feed.bubbles .entry {
+			min-width: 100%;
 		}
 	}
 </style>

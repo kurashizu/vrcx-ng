@@ -1003,4 +1003,36 @@
 		padding-top: 10px;
 		border-top: 1px solid var(--border);
 	}
+
+	/* 移动端：分类栏变横向滚动条，内容单列 */
+	@media (max-width: 720px) {
+		.layout {
+			display: flex;
+			flex-direction: column;
+		}
+		.sidebar {
+			flex-direction: row;
+			overflow-x: auto;
+			border-right: none;
+			border-bottom: 1px solid var(--border);
+			padding: 6px 8px;
+			flex: none;
+			gap: 4px;
+		}
+		.cat {
+			flex: none;
+			white-space: nowrap;
+			padding: 6px 12px;
+		}
+		.content {
+			overflow-y: auto;
+			padding: 14px 12px 40px;
+		}
+		.info-grid {
+			grid-template-columns: 1fr;
+		}
+		header {
+			padding: 10px 12px;
+		}
+	}
 </style>
