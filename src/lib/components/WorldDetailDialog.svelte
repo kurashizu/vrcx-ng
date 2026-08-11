@@ -128,8 +128,12 @@
 				}
 			);
 			const j = await r.json();
-			if (j.ok) toasts.success('已发送自我邀请 ✉️');
-			else toasts.error('self-invite 失败: ' + (j.error || '未知错误'));
+			if (j.ok) {
+				toasts.success('已发送自我邀请 ✉️，正在启动游戏…');
+				// VRCX 行为：邀请自己成功后立即拉起 VRChat 进入该实例
+				const u = vrcLaunchUrl(location);
+				if (u && browser) window.location.href = u;
+			} else toasts.error('self-invite 失败: ' + (j.error || '未知错误'));
 		} catch (err) {
 			toasts.error('self-invite 失败: ' + err.message);
 		} finally {

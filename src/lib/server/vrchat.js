@@ -448,9 +448,13 @@ export async function sendFriendRequest(accountId, userId) {
  * @returns {Promise<{ ok: boolean, status?: number, error?: string }>}
  */
 export async function sendInvite(accountId, userId, location, message = '') {
+	// VRChat rejects freeform invite messages from regular users — send the
+	// instance location only (matching VRCX's payload).
+	const body = { instanceId: location };
+	if (message) body.message = message;
 	const { status, data } = await api(accountId, `invite/${userId}`, {
 		method: 'POST',
-		body: { instanceId: location, message }
+		body
 	});
 	if (status === 200) return { ok: true, data };
 	return { ok: false, status, error: data?.error?.message || `HTTP ${status}` };

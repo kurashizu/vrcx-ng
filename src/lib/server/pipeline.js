@@ -511,27 +511,48 @@ async function handleMessage(state, msg) {
 			// V1 notification API (older). content has type/id/nonce etc.
 			const n = content;
 			const detail = n.details || {};
+			const t = normalizeNotificationType(n.type);
+			const senderUserId = detail.senderUserId || n.senderUserId || '';
+			const senderName = detail.senderDisplayName || n.senderDisplayName || n.senderUsername || '';
 			if (n.type === 'friendRequest') {
 				publishFeed(
 					feedEntry(state, {
 						type: 'FriendRequest',
-						userId: detail.senderUserId || n.senderUserId,
-						displayName: detail.senderDisplayName || n.senderUsername,
+						userId: senderUserId,
+						displayName: senderName,
 						raw: n
 					})
 				);
 			} else if (n.type === 'invite' || n.type === 'requestInvite' || n.type === 'message') {
+				const worldId = detail.worldId || '';
+				const worldName = worldId ? await resolveWorldName(state, worldId) : '';
 				publishFeed(
 					feedEntry(state, {
-						type: 'Invite',
-						userId: n.senderUserId,
-						displayName: n.senderDisplayName || n.senderUsername,
-						worldName: detail.worldId ? await resolveWorldName(state, detail.worldId) : '',
+						type: n.type === 'message' ? 'Notification' : 'Invite',
+						userId: senderUserId,
+						displayName: senderName,
+						location: worldId ? `${worldId}:${detail.instanceId || ''}` : '',
+						worldName,
 						detail: n.message || '',
 						raw: n
 					})
 				);
 			}
+			// Persist into the notification inbox (this is the type VRChat's
+			// websocket actually pushes — notification-v2 is rarely seen).
+			addNotification({
+				id: n.id,
+				accountId: state.accountId,
+				type: t,
+				senderUserId,
+				senderDisplayName: senderName,
+				senderUsername: n.senderUsername || '',
+				worldId: detail.worldId || '',
+				instanceId: detail.instanceId || '',
+				message: n.message || '',
+				raw: n
+			});
+			bus.emit('notifications');
 			break;
 		}
 		case 'group-joined': {
@@ -731,6 +752,9 @@ export async function connectPipeline(accountId) {
 		if (typeof msg.content === 'string') {
 			const inner = safeJsonParse(msg.content);
 			if (inner) msg.content = inner;
+		}
+		if (msg.type === 'notification-v2') {
+			console.log(`[pipeline ${accountId}] notification-v2 arrived`);
 		}
 		try {
 			await handleMessage(state, msg);

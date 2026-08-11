@@ -198,6 +198,23 @@
 					}
 				];
 
+		// 邀请自己：把自己拉进好友当前所在的实例（所有访问类型均可），然后启动游戏
+		const selfInviteItems = acctList.length > 1
+			? acctList.map((a) => ({
+					icon: '🎯',
+					label: `以 ${a.displayName} 邀请自己`,
+					disabled: !isOnline,
+					action: () => selfInviteToFriend(a.id, f)
+				}))
+			: [
+					{
+						icon: '🎯',
+						label: '邀请自己到 TA 的实例',
+						disabled: !isOnline,
+						action: () => selfInviteToFriend(defaultAccountId, f)
+					}
+				];
+
 		const muteItems = acctList.length > 1
 			? acctList.map((a) => ({
 					icon: '🔕',
@@ -240,6 +257,7 @@
 			{ icon: '👤', label: '查看详情', action: () => openUserDetailPanel(f.accountIds, f.id, f.displayName) },
 			{ divider: true },
 			...inviteItems,
+			...selfInviteItems,
 			{ icon: '🔗', label: '复制实例链接', disabled: !isOnline, action: () => copyInstanceLink(f) },
 			{ divider: true },
 			...muteItems,
@@ -255,6 +273,28 @@
 				action: () => browser && window.open(`https://vrchat.com/home/user/${f.id}`, '_blank')
 			}
 		];
+	}
+
+	async function selfInviteToFriend(accountId, f) {
+		const loc = f.location;
+		if (!loc || loc === 'offline' || loc === 'private') return;
+		try {
+			const r = await fetch(`/api/accounts/${accountId}/instance-action`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'selfInvite', location: loc })
+			});
+			const j = await r.json();
+			if (j.ok) {
+				toasts.success('已发送自我邀请 ✉️，正在启动游戏…');
+				const u = vrcLaunchUrl(loc);
+				if (u && browser) window.location.href = u;
+			} else {
+				toasts.error('self-invite 失败: ' + (j.error || '未知错误'));
+			}
+		} catch (err) {
+			toasts.error('self-invite 失败: ' + err.message);
+		}
 	}
 
 	async function doAction(accountId, act, userId) {

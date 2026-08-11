@@ -35,16 +35,22 @@ export async function POST({ params, request }) {
 	try {
 		switch (action) {
 			case 'createInstance': {
+				const sess = getSession(params.id);
+				// VRChat requires an explicit ownerId for non-public instances
+				// (group instances use the group id instead of a user id).
+				const ownerId = body.type === 'group' ? body.groupId || undefined : sess?.user?.id;
+				if (body.type !== 'public' && !ownerId) {
+					return json({ ok: false, error: 'ownerId required for this instance type' }, { status: 400 });
+				}
 				const r = await createInstance(params.id, {
 					worldId: body.worldId,
 					type: body.type || 'public',
 					canRequestInvite: !!body.canRequestInvite,
 					region: body.region || 'us',
+					ownerId,
 					groupId: body.groupId || undefined,
 					groupAccessType: body.groupAccessType || undefined,
-					queueEnabled: body.queueEnabled !== false,
-					displayName: body.displayName || undefined,
-					ageGate: !!body.ageGate
+					queueEnabled: body.queueEnabled !== false
 				});
 				return r.ok
 					? json({ ok: true, instance: r.data })

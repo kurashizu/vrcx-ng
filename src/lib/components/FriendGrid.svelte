@@ -64,7 +64,7 @@
 	}
 
 	function openUser(f) {
-		closeFriendGrid();
+		// Keep the full-screen grid open underneath — dialogs layer on top of it.
 		openUserDetail(f.accountIds || null, f.id, f.displayName);
 	}
 
