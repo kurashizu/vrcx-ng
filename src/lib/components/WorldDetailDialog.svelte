@@ -121,8 +121,17 @@ import { vrImage } from '$lib/shared/format.js';
 			return;
 		}
 		location = String(location || '');
-		if (!location) {
-			toasts.error('self-invite 失败: 无效的实例位置');
+		// Reject obviously bad shapes — fullLoc always looks like
+		// 'wrld_<uuid>:<inst>'. Anything missing either half means we got
+		// a malformed instance row from the aggregator.
+		if (
+			!location ||
+			location.includes('undefined') ||
+			location.endsWith(':') ||
+			!location.startsWith('wrld_') ||
+			location.split(':').length < 2
+		) {
+			toasts.error('self-invite 失败: 无效的实例位置 (location: ' + (location || '空') + ')');
 			return;
 		}
 		selfInviteBusy = location;

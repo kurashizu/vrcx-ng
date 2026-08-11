@@ -601,8 +601,13 @@ export async function createInstance(accountId, params = {}) {
  * @param {string} location  e.g. "wrld_xxx:12345"
  */
 export async function selfInvite(accountId, location) {
+	// Match VRCX: VRChat's invite/myself/to endpoint expects an (optionally
+	// empty) JSON body. Without one, some instances / WAF rules reject the
+	// request as malformed even though the path looks fine.
 	const { status, data } = await api(accountId, `invite/myself/to/${location}`, {
-		method: 'POST'
+		method: 'POST',
+		body: {},
+		headers: { 'Content-Type': 'application/json' }
 	});
 	return { ok: status === 200 || status === 201, status, data };
 }
