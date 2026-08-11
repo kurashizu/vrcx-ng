@@ -9,6 +9,7 @@
 	import { accounts } from '$lib/stores/accounts.js';
 	import { timeAgo } from '$lib/shared/format.js';
 	import { showContextMenu } from '$lib/stores/contextMenu.js';
+	import { openFriendGrid } from '$lib/stores/friendGrid.js';
 	import { openUserDetail as openUserDetailPanel } from '$lib/stores/userDetail.js';
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { toasts } from '$lib/stores/toast.js';
@@ -722,6 +723,9 @@
 			</select>
 			<button class="dir" onclick={() => (sortDir = sortDir === 'asc' ? 'desc' : 'asc')} title="方向">
 				{sortDir === 'asc' ? '↑' : '↓'}
+			</button>
+			<button class="view-tab grid-btn" title="全屏网格" onclick={openFriendGrid}>
+				<span class="ico">⛶</span>
 			</button>
 		</div>
 

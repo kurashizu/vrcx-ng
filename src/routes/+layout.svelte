@@ -5,6 +5,7 @@
 	import UserDetailDialog from '$lib/components/UserDetailDialog.svelte';
 	import WorldDetailDialog from '$lib/components/WorldDetailDialog.svelte';
 	import AvatarDetailDialog from '$lib/components/AvatarDetailDialog.svelte';
+	import FriendGrid from '$lib/components/FriendGrid.svelte';
 	import NotificationPanel from '$lib/components/NotificationPanel.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
@@ -57,4 +58,5 @@
 <UserDetailDialog />
 <WorldDetailDialog />
 <AvatarDetailDialog />
+<FriendGrid />
 <NotificationPanel />
