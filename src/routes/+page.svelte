@@ -80,6 +80,7 @@
 				🔔 通知
 				{#if notifUnseen > 0}<span class="badge">{notifUnseen}</span>{/if}
 			</button>
+			<a href="/search" class="nav-link">🔍 搜索</a>
 			<a href="/chatbox" class="nav-link">💬 Chatbox</a>
 			<a href="/settings" class="nav-link">⚙️ 设置</a>
 		</div>
