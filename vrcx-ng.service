@@ -1,0 +1,22 @@
+[Unit]
+Description=vrcx-ng — multi-account VRChat feed
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/krsz/Documents/vrc-activity
+ExecStart=/usr/bin/env node build
+Restart=on-failure
+RestartSec=5
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/krsz/Documents/vrc-activity/data
+PrivateTmp=true
+RestrictRealtime=true
+LockPersonality=true
+EnvironmentFile=/home/krsz/Documents/vrc-activity/.env
+
+[Install]
+WantedBy=default.target
