@@ -11,6 +11,7 @@
 	import { toasts } from '$lib/stores/toast.js';
 	import { onMount, onDestroy } from 'svelte';
 	import { timeAgo } from '$lib/shared/format.js';
+	import { openAvatarDetail } from '$lib/stores/avatarDetail.js';
 
 	let data = $state(null);
 	let loading = $state(false);
@@ -285,7 +286,7 @@
 					{:else if tab === 'avatars'}
 						<div class="thumbs">
 							{#each data.avatars || [] as a (a.id)}
-								<div class="thumb">
+								<button class="thumb btn" onclick={() => openAvatarDetail(a.id, $userDetailRequest.accountId)} title={a.name}>
 									{#if a.thumbnailImageUrl}
 										<img src={a.thumbnailImageUrl} alt={a.name} loading="lazy" />
 									{:else}
@@ -295,7 +296,7 @@
 									{#if a.releaseStatus && a.releaseStatus !== 'public'}
 										<span class="tbadge">{a.releaseStatus}</span>
 									{/if}
-								</div>
+								</button>
 							{/each}
 							{#if !data.avatars?.length}
 								<div class="empty">这个用户没有公开模型</div>

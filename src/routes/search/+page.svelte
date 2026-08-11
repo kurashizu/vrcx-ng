@@ -2,6 +2,7 @@
 	import { accounts } from '$lib/stores/accounts.js';
 	import { openUserDetail } from '$lib/stores/userDetail.js';
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
+	import { openAvatarDetail } from '$lib/stores/avatarDetail.js';
 	import { timeAgo } from '$lib/shared/format.js';
 
 	function comma(n) {
@@ -275,7 +276,7 @@
 				<ul class="list avatars">
 					{#each results as r (r.id)}
 						<li>
-							<button class="row">
+							<button class="row" onclick={() => openAvatarDetail(r.id, $accounts.find((a) => a.loggedIn)?.id || '')}>
 								{#if r.thumbnailImageUrl || r.imageUrl}
 									<img class="thumb" src={r.thumbnailImageUrl || r.imageUrl} alt="" loading="lazy" />
 								{:else}

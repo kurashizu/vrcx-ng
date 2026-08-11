@@ -329,6 +329,21 @@ export async function getAvatar(accountId, avatarId) {
 }
 
 /**
+ * Set the account's current avatar (换装).
+ * @param {string} accountId
+ * @param {string} avatarId
+ * @returns {Promise<{ ok: boolean, error?: string }>}
+ */
+export async function selectAvatar(accountId, avatarId) {
+	const { status, data } = await api(accountId, `avatars/${avatarId}/select`, {
+		method: 'PUT'
+	});
+	if (status === 200) return { ok: true };
+	const msg = data?.error?.message || data?.error || `HTTP ${status}`;
+	return { ok: false, error: typeof msg === 'string' ? msg : JSON.stringify(msg) };
+}
+
+/**
  * Full user details
  * @param {string} accountId
  * @param {string} userId
@@ -467,6 +482,8 @@ export async function searchWorlds(accountId, params = {}) {
 export async function searchAvatars(accountId, params = {}) {
 	const q = new URLSearchParams();
 	if (params.search) q.set('search', params.search);
+	// VRChat now rejects text searches without an explicit marketplace.
+	q.set('marketplace', params.marketplace || 'all');
 	q.set('n', String(params.n ?? 20));
 	q.set('offset', String(params.offset ?? 0));
 	if (params.sort) q.set('sort', params.sort);

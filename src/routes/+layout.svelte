@@ -4,6 +4,7 @@
 	import ContextMenu from '$lib/components/ContextMenu.svelte';
 	import UserDetailDialog from '$lib/components/UserDetailDialog.svelte';
 	import WorldDetailDialog from '$lib/components/WorldDetailDialog.svelte';
+	import AvatarDetailDialog from '$lib/components/AvatarDetailDialog.svelte';
 	import NotificationPanel from '$lib/components/NotificationPanel.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
@@ -55,4 +56,5 @@
 <ContextMenu />
 <UserDetailDialog />
 <WorldDetailDialog />
+<AvatarDetailDialog />
 <NotificationPanel />
