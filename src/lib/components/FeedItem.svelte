@@ -9,18 +9,27 @@
 	import { toasts } from '$lib/stores/toast.js';
 	import { browser } from '$app/environment';
 	import { settings } from '$lib/stores/settings.js';
+	import { friendNameById } from '$lib/stores/friends.js';
 
 	/** @type {{ entry: import('$lib/shared/feed.js').FeedEntry }} */
 	let { entry } = $props();
 
 	const account = $derived($accounts.find((a) => a.id === entry.accountId));
+	// Some events arrive with only a bare usr_id (no user object). Resolve the
+	// display name from the cross-account friend snapshot as a client-side
+	// fallback on top of the server-side backfill.
+	const displayName = $derived(
+		entry.displayName && entry.displayName !== entry.userId
+			? entry.displayName
+			: $friendNameById.get(entry.userId) || entry.displayName || entry.userId || '?'
+	);
 	const accColor = $derived(stringHue(account?.displayName || entry.accountId));
-	const userHue = $derived(stringHue(entry.displayName || entry.userId || entry.accountId));
+	const userHue = $derived(stringHue(displayName));
 
 	// Friend (subject of the event)
 	const friend = $derived({
 		id: entry.userId,
-		displayName: entry.displayName || entry.userId,
+		displayName,
 		location: entry.location,
 		accountIds: entry.accountId ? [entry.accountId] : []
 	});
@@ -103,7 +112,7 @@
 			{
 				icon: '📋',
 				label: '复制显示名',
-				action: () => copyText(entry.displayName || entry.userId)
+				action: () => copyText(displayName)
 			},
 			{
 				icon: '🆔',
@@ -142,7 +151,7 @@
 	}
 
 	async function muteBlock(type) {
-		if (type === 'block' && !confirm(`确定屏蔽 ${entry.displayName || entry.userId}?`)) return;
+		if (type === 'block' && !confirm(`确定屏蔽 ${displayName}?`)) return;
 		const r = await fetch(`/api/accounts/${entry.accountId}/actions`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -201,13 +210,13 @@
 	<button
 		class="avatar"
 		style:--hue={userHue}
-		title={entry.displayName || entry.userId}
+		title={displayName}
 		onclick={(e) => { e.stopPropagation(); clickUser(e); }}
 	>
 		{#if entry.userThumbnailUrl}
 			<img src={entry.userThumbnailUrl} alt="" loading="lazy" />
 		{:else}
-			<span>{(entry.displayName || '?').slice(0, 1).toUpperCase()}</span>
+			<span>{displayName.slice(0, 1).toUpperCase()}</span>
 		{/if}
 		<span
 			class="account-pip"
@@ -223,10 +232,10 @@
 			<EventIcon type={entry.type} />
 			{#if entry.userId}
 				<button class="user-name" onclick={clickUser} title={entry.userId}>
-					{entry.displayName || entry.userId}
+					{displayName}
 				</button>
 			{:else}
-				<span class="head">{entry.displayName || 'Someone'}</span>
+				<span class="head">{displayName}</span>
 			{/if}
 
 			{#if entry.type === 'Online'}

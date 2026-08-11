@@ -73,7 +73,9 @@
 				<div class="lbl">Live</div>
 			</div>
 		</div>
-		<AccountList onAdd={() => (addOpen = true)} />
+		<div class="account-scroll">
+			<AccountList onAdd={() => (addOpen = true)} />
+		</div>
 
 		<div class="bottom-nav">
 			<button class="nav-link nav-btn" onclick={() => (notifOpen = true)}>
@@ -135,6 +137,11 @@
 	}
 	.sidebar {
 		background: var(--bg-1);
+	}
+	.account-scroll {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
 	}
 	.bottom-nav {
 		margin-top: auto;

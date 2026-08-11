@@ -104,6 +104,7 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
+		min-height: 0;
 		background: var(--bg-1);
 		border-right: 1px solid var(--border);
 	}

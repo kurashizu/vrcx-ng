@@ -484,6 +484,17 @@ export async function searchAvatars(accountId, params = {}) {
  * @param {string} accountId
  * @param {string} [type]  one of 'mute' | 'block' | 'unmute' | 'unblock'
  */
+export async function getNotifications(accountId, params = {}) {
+	const q = new URLSearchParams();
+	if (params.n) q.set('n', String(params.n));
+	if (params.offset !== undefined) q.set('offset', String(params.offset));
+	if (params.type) q.set('type', String(params.type));
+	const qs = q.toString();
+	const { status, data } = await api(accountId, 'notifications' + (qs ? `?${qs}` : ''));
+	if (status === 200 && Array.isArray(data)) return data;
+	return [];
+}
+
 export async function getPlayerModerations(accountId, type) {
 	const q = type ? `?type=${encodeURIComponent(type)}` : '';
 	const { status, data } = await api(accountId, `auth/user/playermoderations${q}`);

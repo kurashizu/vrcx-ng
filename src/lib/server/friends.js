@@ -31,6 +31,45 @@ import { getGroupsForUsers } from './friendGroups.js';
 /** @type {Map<string, Map<string, Friend>>} */
 const cache = new Map();
 
+/**
+ * Cross-account displayName cache: userId -> displayName.
+ *
+ * Some websocket events (friend-online / friend-active) arrive without the
+ * full user object, which made feed entries fall back to a bare usr_xxx.
+ * We seed this map from every account's friend syncs and from any event
+ * carrying a real name, then resolve names at feed-entry creation time.
+ * @type {Map<string, string>}
+ */
+const globalNameCache = new Map();
+
+function seedGlobalName(userId, name) {
+	if (!userId || !name || name === userId) return;
+	if (globalNameCache.get(userId) === name) return;
+	globalNameCache.set(userId, name);
+	// Patch already-buffered feed entries that still show the bare id.
+	import('./bus.js').then((m) => m.backfillFeedNames(userId, name)).catch(() => {});
+}
+
+/**
+ * Resolve a display name for a userId from any account's friend cache.
+ * Returns '' if unknown so callers can fall back to the raw id.
+ * @param {string} userId
+ * @returns {string}
+ */
+export function lookupDisplayName(userId) {
+	if (!userId) return '';
+	const direct = globalNameCache.get(userId);
+	if (direct) return direct;
+	for (const map of cache.values()) {
+		const f = map.get(userId);
+		if (f?.displayName && f.displayName !== userId) {
+			seedGlobalName(userId, f.displayName);
+			return f.displayName;
+		}
+	}
+	return '';
+}
+
 /** @type {Map<string, boolean>} */
 const fetching = new Map();
 
@@ -44,9 +83,24 @@ export async function loadFriends(accountId) {
 	try {
 		// VRChat's /auth/user/friends API quirk: with offline=true it returns ONLY
 		// the offline subset; without it, it returns online+active. We need both.
+		// VRChat caps each request at 100 friends, so we must page through with
+		// `offset` to get the full list (a 500+ friend list otherwise loses
+		// everyone past the first page, which also silently breaks their
+		// online/active state on the next merge).
+		const fetchAll = async (params) => {
+			const out = [];
+			let offset = 0;
+			for (;;) {
+				const page = await getFriends(accountId, { ...params, n: 100, offset });
+				out.push(...page);
+				if (!Array.isArray(page) || page.length < 100) break;
+				offset += page.length;
+			}
+			return out;
+		};
 		const [onlineList, offlineList, friendLists] = await Promise.all([
-			getFriends(accountId, { n: 100 }),
-			getFriends(accountId, { n: 100, offline: true }),
+			fetchAll({}),
+			fetchAll({ offline: true }),
 			getFriendLists(accountId)
 		]);
 
@@ -58,6 +112,7 @@ export async function loadFriends(accountId) {
 		const ingest = (arr) => {
 			for (const f of arr) {
 				if (!f?.id || !f.displayName) continue;
+				seedGlobalName(f.id, f.displayName);
 				if (map.has(f.id)) continue; // already added from the other list
 				map.set(f.id, f);
 			}
@@ -102,7 +157,12 @@ export async function loadFriends(accountId) {
 		if (existing) {
 			for (const [uid, prev] of existing) {
 				if (!map.has(uid)) {
-					map.set(uid, { ...prev, state: 'offline', lastSeen: Date.now() });
+					// Friend missing from the fresh page(s). Keep the pipeline's
+					// known state instead of forcing offline — friends in private
+					// instances or beyond the API page must not be demoted. The
+					// websocket's friend-offline events are the authoritative
+					// source for going offline.
+					map.set(uid, prev);
 				} else if (prev.state === 'online' || prev.state === 'active') {
 					const cur = map.get(uid);
 					map.set(uid, {
@@ -177,6 +237,9 @@ export function dropFriends(accountId) {
  * @param {Partial<Friend>} patch
  */
 export function patchFriend(accountId, userId, patch) {
+	if (patch?.displayName) {
+		seedGlobalName(userId, patch.displayName);
+	}
 	const map = cache.get(accountId);
 	if (!map) return;
 	const existing = map.get(userId);
@@ -217,6 +280,7 @@ export function setFriendWorldName(accountId, userId, worldName) {
  */
 export function upsertFriend(accountId, friend) {
 	if (!friend?.id) return;
+	seedGlobalName(friend.id, friend.displayName);
 	const map = cache.get(accountId);
 	if (!map) return;
 	const existing = map.get(friend.id);
@@ -459,15 +523,20 @@ export function aggregate() {
  * @returns {Friend}
  */
 function normalizeFriend(f, activeSet, onlineSet) {
-	// Determine state from activeFriends/onlineFriends lists, falling back to
-	// the friend record's `location` field (if non-empty/non-offline, the
-	// friend is online somewhere). The API's per-friend `state` field is
-	// unreliable.
-	const state = activeSet.has(f.id)
-		? 'active'
-		: onlineSet.has(f.id) || (f.location && f.location !== 'offline')
-			? 'online'
-			: 'offline';
+	// Prefer an explicit, valid state from the caller (e.g. the pipeline's
+	// friend-active events carry state:'active' even though the location is
+	// 'offline'). Only fall back to the activeFriends/onlineFriends lists and
+	// the location field when no explicit state was given — those lists miss
+	// friends beyond the API page size, and private-instance friends would
+	// otherwise be misclassified as offline.
+	const explicit = ['online', 'active', 'offline'].includes(f.state);
+	const state = explicit
+		? f.state
+		: activeSet.has(f.id)
+			? 'active'
+			: onlineSet.has(f.id) || (f.location && f.location !== 'offline')
+				? 'online'
+				: 'offline';
 
 	const loc = f.location && f.location !== 'offline' ? f.location : '';
 	const worldId = loc ? loc.split(':')[0] : '';

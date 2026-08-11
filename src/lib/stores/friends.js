@@ -33,6 +33,23 @@ export const friendGroupFilter = writable('all');
 /** which account to filter friends by (null = all) */
 export const friendAccountFilter = writable(/** @type {string|null} */ (null));
 
+/**
+ * userId -> displayName, built from the current snapshot. Lets feed items
+ * (and anything else) resolve a name when an entry only carries a raw usr_id.
+ * @type {import('svelte/store').Readable<Map<string, string>>}
+ */
+export const friendNameById = derived(friendsData, ($data) => {
+	const m = new Map();
+	for (const list of [$data.online, $data.active, $data.offline]) {
+		for (const f of list) {
+			if (f?.displayName && f.displayName !== f.id && !m.has(f.id)) {
+				m.set(f.id, f.displayName);
+			}
+		}
+	}
+	return m;
+});
+
 export const filteredFriends = derived(
 	[friendsData, friendSearch, friendGroupFilter, friendAccountFilter],
 	([$data, $search, $group, $account]) => {

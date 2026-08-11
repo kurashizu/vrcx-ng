@@ -32,3 +32,18 @@ export function publishFeed(entry) {
 export function getBufferedFeed() {
 	return feedBuffer.slice();
 }
+
+/**
+ * Replace bare usr_xxx display names in already-buffered feed entries once
+ * the real name is learned (via friend sync or a later event).
+ * @param {string} userId
+ * @param {string} displayName
+ */
+export function backfillFeedNames(userId, displayName) {
+	if (!userId || !displayName || userId === displayName) return;
+	for (const e of feedBuffer) {
+		if (e.userId === userId && (!e.displayName || e.displayName === userId)) {
+			e.displayName = displayName;
+		}
+	}
+}

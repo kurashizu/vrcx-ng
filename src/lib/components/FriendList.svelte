@@ -13,7 +13,13 @@
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { toasts } from '$lib/stores/toast.js';
 	import { trustColor, vrcLaunchUrl } from '$lib/shared/trust.js';
-	import { parseLocation as parseFullLocation, accessTypeLabel, accessTypeColor, regionOf } from '$lib/shared/location.js';
+	import {
+		parseLocation as parseFullLocation,
+		accessTypeLabel,
+		accessTypeColor,
+		regionOf,
+		shortInstanceLabel
+	} from '$lib/shared/location.js';
 	import { settings } from '$lib/stores/settings.js';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
@@ -542,7 +548,6 @@
 	const VIEW_TABS = [
 		{ id: 'smart', label: '智能', icon: '✨' },
 		{ id: 'flat', label: '平铺', icon: '☰' },
-		{ id: 'instance', label: '实例', icon: '🧩' },
 		{ id: 'world', label: '世界', icon: '🌍' },
 		{ id: 'group', label: '分组', icon: '👥' }
 	];
@@ -687,13 +692,6 @@
 	</header>
 
 	<div class="filters">
-		<input
-			type="search"
-			placeholder="搜索好友、世界、ID…"
-			bind:value={$friendSearch}
-			class="search"
-		/>
-
 		<div class="status-row">
 			{#each STATUS_FILTERS as sf}
 				<button

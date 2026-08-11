@@ -31,25 +31,72 @@ import { getDb } from './db.js';
 export function addNotification(n) {
 	if (!n?.accountId || !n?.type) return null;
 	const db = getDb();
-	const stmt = db.prepare(`INSERT INTO notifications
-		(account_id, sender_user_id, sender_display_name, sender_username, type,
-		 category, world_id, world_name, instance_id, group_id, message, raw_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+	// The VRChat notification id doubles as the PK so the REST poller and the
+	// websocket handler can both insert safely (INSERT OR IGNORE dedupes).
+	const stmt = db.prepare(`INSERT OR IGNORE INTO notifications
+		(id, account_id, sender_user_id, sender_display_name, sender_username, type,
+		 category, world_id, world_name, instance_id, group_id, message, raw_json, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+	const type = normalizeNotificationType(n.type);
+	const ts =
+		typeof n.createdAt === 'number'
+			? n.createdAt
+			: typeof n.created_at === 'number'
+				? n.created_at
+				: Date.now();
 	const info = stmt.run(
+		n.id || `${n.accountId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 		n.accountId,
 		n.senderUserId || '',
 		n.senderDisplayName || '',
 		n.senderUsername || '',
-		n.type,
-		categoryFor(n.type),
+		type,
+		categoryFor(type),
 		n.worldId || '',
 		n.worldName || '',
 		n.instanceId || '',
 		n.groupId || '',
 		n.message || '',
-		n.raw ? JSON.stringify(n.raw) : ''
+		n.raw ? JSON.stringify(n.raw) : '',
+		ts
 	);
 	return info.lastInsertRowid;
+}
+
+/**
+ * Check whether a notification id is already stored (for the REST poller).
+ * @param {string} id
+ * @param {string} accountId
+ * @returns {boolean}
+ */
+export function hasNotification(id, accountId) {
+	if (!id) return false;
+	const row = getDb()
+		.prepare('SELECT 1 FROM notifications WHERE id = ? AND account_id = ?')
+		.get(id, accountId);
+	return !!row;
+}
+
+/**
+ * Normalize a VRChat notification type to our canonical set:
+ *   friendRequest | invite | requestInvite | message | groupAnnouncement | moderation
+ * The REST `notifications` endpoint and the websocket use slightly different
+ * spellings (e.g. 'group.announcement' vs 'groupAnnouncement').
+ * @param {string} t
+ * @returns {string}
+ */
+export function normalizeNotificationType(t) {
+	if (!t) return t;
+	const s = String(t).toLowerCase().replace(/[^a-z]/g, '');
+	if (s === 'groupannouncement' || s === 'groupannouncements') return 'groupAnnouncement';
+	if (s === 'friendrequest' || s === 'ignoredfriendrequest') return 'friendRequest';
+	if (s === 'invite') return 'invite';
+	if (s === 'requestinvite') return 'requestInvite';
+	if (s === 'message') return 'message';
+	if (s.startsWith('moderation') || s === 'groupinvite' || s === 'groupjoinrequest' || s === 'inviteresponse' || s === 'requestinviteresponse' || s === 'boop') {
+		return 'moderation';
+	}
+	return t;
 }
 
 /**

@@ -1,10 +1,10 @@
 import { WebSocket } from 'ws';
-import { getWebsocketUrl, getPipelineToken, getCurrentUser, getWorld } from './vrchat.js';
+import { getWebsocketUrl, getPipelineToken, getCurrentUser, getWorld, getNotifications } from './vrchat.js';
 import { listAccounts, getSession, setSession } from './accounts.js';
 import { publishFeed, bus } from './bus.js';
-import { patchFriend, reconcileStates, loadFriends, removeFriend } from './friends.js';
+import { patchFriend, reconcileStates, loadFriends, removeFriend, lookupDisplayName } from './friends.js';
 import { getWorldMeta } from './worldCache.js';
-import { addNotification } from './notifications.js';
+import { addNotification, hasNotification, normalizeNotificationType } from './notifications.js';
 
 /**
  * @typedef {Object} PipelineState
@@ -75,13 +75,21 @@ function cacheUser(state, user) {
 }
 
 function feedEntry(state, partial) {
-	return {
+	const entry = {
 		id: crypto.randomUUID(),
 		accountId: state.accountId,
 		accountDisplayName: getSession(state.accountId)?.user?.displayName || state.accountId,
 		created_at: new Date().toISOString(),
 		...partial
 	};
+	// Events sometimes carry only a userId (no user object); fill the display
+	// name from the cross-account friend name cache so the feed never shows a
+	// bare usr_xxx when the name is known.
+	if (entry.userId && (!entry.displayName || entry.displayName === entry.userId)) {
+		const name = lookupDisplayName(entry.userId);
+		if (name) entry.displayName = name;
+	}
+	return entry;
 }
 
 /* ---------------------- pipeline message handler ---------------------- */
@@ -90,6 +98,54 @@ function feedEntry(state, partial) {
  * @param {PipelineState} state
  * @param {{ type: string, content: any }} msg
  */
+/**
+ * REST fallback: pull unseen notifications for one account and surface any
+ * not already stored. The websocket usually delivers these as
+ * notification-v2, but it can miss some (or the pipeline may have been down).
+ * @param {import('./pipeline.js').PipelineState} state
+ */
+async function syncNotifications(state) {
+	const list = await getNotifications(state.accountId, { n: 25 });
+	if (!Array.isArray(list)) return;
+	for (const n of list) {
+		if (!n?.id || n.seen || hasNotification(n.id, state.accountId)) continue;
+		const t = normalizeNotificationType(n.type);
+		const supported =
+			t === 'friendRequest' ||
+			t === 'invite' ||
+			t === 'requestInvite' ||
+			t === 'message' ||
+			t === 'groupAnnouncement';
+		if (!supported) continue;
+		const worldId = n.details?.worldId || '';
+		const worldName = worldId ? await resolveWorldName(state, worldId) : '';
+		addNotification({
+			id: n.id,
+			accountId: state.accountId,
+			type: t,
+			senderUserId: n.senderUserId || '',
+			senderDisplayName: n.senderDisplayName || n.senderUsername || '',
+			senderUsername: n.senderUsername || '',
+			worldId,
+			worldName,
+			instanceId: n.details?.instanceId || '',
+			message: n.message || '',
+			raw: n
+		});
+		publishFeed(
+			feedEntry(state, {
+				type: t === 'friendRequest' ? 'FriendRequest' : t === 'invite' || t === 'requestInvite' ? 'Invite' : 'Notification',
+				userId: n.senderUserId || '',
+				displayName: n.senderDisplayName || n.senderUsername || n.senderUserId || '',
+				location: worldId ? `${worldId}:${n.details?.instanceId || ''}` : '',
+				worldName,
+				raw: n
+			})
+		);
+		bus.emit('notifications');
+	}
+}
+
 async function handleMessage(state, msg) {
 	if (!msg || typeof msg !== 'object') return;
 	const { type, content } = msg;
@@ -291,7 +347,7 @@ async function handleMessage(state, msg) {
 		}
 		case 'notification-v2': {
 			const n = content;
-			const t = n.type;
+			const t = normalizeNotificationType(n.type);
 			if (t === 'friendRequest' && n.senderUserId) {
 				publishFeed(
 					feedEntry(state, {
@@ -629,11 +685,23 @@ export async function connectPipeline(accountId) {
 	ws.on('open', () => {
 		state.connected = true;
 		console.log(`[pipeline ${accountId}] connected`);
+		// websocket ping every 30s + REST notification sync every ~90s (the
+		// websocket can silently drop notification-v2 events; polling the
+		// `notifications` endpoint is VRCX's belt-and-braces approach too).
+		let tick = 0;
 		state.refreshTimer = setInterval(() => {
 			try {
 				ws.ping();
 			} catch {}
+			tick++;
+			if (tick % 3 === 0) {
+				syncNotifications(state).catch(() => {});
+			}
 		}, 30000);
+		// initial sync right after connecting
+		syncNotifications(state).catch((err) =>
+			console.error(`[pipeline ${accountId}] notification sync failed`, err.message)
+		);
 		bus.emit('accounts');
 	});
 
