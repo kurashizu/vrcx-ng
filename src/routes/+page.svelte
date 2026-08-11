@@ -82,6 +82,7 @@
 			</button>
 			<a href="/search" class="nav-link">🔍 搜索</a>
 			<a href="/chatbox" class="nav-link">💬 Chatbox</a>
+			<a href="/moderation" class="nav-link">🚫 屏蔽</a>
 			<a href="/settings" class="nav-link">⚙️ 设置</a>
 		</div>
 	</aside>

@@ -475,3 +475,17 @@ export async function searchAvatars(accountId, params = {}) {
 	const { status, data } = await api(accountId, `avatars?${q.toString()}`);
 	return { ok: status === 200, data: data || [] };
 }
+
+/**
+ * Fetch the per-account player moderation lists (mute / block / unmute / unblock).
+ * Returns an array of { id, type, created: ISO, sourceUserId, targetDisplayName,
+ * targetUserId, targetThumbnailImageUrl }.
+ *
+ * @param {string} accountId
+ * @param {string} [type]  one of 'mute' | 'block' | 'unmute' | 'unblock'
+ */
+export async function getPlayerModerations(accountId, type) {
+	const q = type ? `?type=${encodeURIComponent(type)}` : '';
+	const { status, data } = await api(accountId, `auth/user/playermoderations${q}`);
+	return { ok: status === 200, data: data || [] };
+}
