@@ -386,38 +386,48 @@
 						<section class="block invite-self">
 							<h3>✉️ 邀请自己加入</h3>
 							<p class="muted small">
-								选择一个左边的账号作为邀请来源（必须是已登录的账号）。目标 instance 必须
-								是 invite / invite+ 类型才会成功。
+								选择一个左边的账号作为邀请来源（必须是已登录的账号）。目标 instance
+								必须是 invite / invite+ 类型才会成功。
 							</p>
 							{#if eligibleAccounts.length === 0}
 								<div class="muted small">暂无已登录账号</div>
 							{:else}
 								<div class="invite-form">
-									<select bind:value={inviterAccountId}>
-										{#each eligibleAccounts as a (a.id)}
-											<option value={a.id}>{a.displayName} ({a.username})</option>
-										{/each}
-									</select>
-									<input
-										type="text"
-										placeholder="邀请消息"
-										bind:value={inviterMessage}
-										maxlength="64"
-									/>
-									<button class="primary small" onclick={() => {
-										// Try to find a friend who owns any invite instance of this world
-										if (instances.length === 0) {
-											toasts.error('该世界没有公开实例');
-											return;
-										}
-										// Use the first instance with a userId we can invite to
-										const inviteable = instances.find((i) => i.userId || i.ownerId);
-										if (!inviteable) {
-											toasts.error('没有可邀请的实例');
-											return;
-										}
-										requestInvite(inviteable.userId || inviteable.ownerId);
-									}}>发送邀请请求</button>
+									<label class="row">
+										<span class="lbl">账号</span>
+										<select bind:value={inviterAccountId} class="ipt">
+											{#each eligibleAccounts as a (a.id)}
+												<option value={a.id}>{a.displayName} ({a.username})</option>
+											{/each}
+										</select>
+									</label>
+									<label class="row">
+										<span class="lbl">消息</span>
+										<input
+											type="text"
+											class="ipt"
+											placeholder="邀请消息"
+											bind:value={inviterMessage}
+											maxlength="64"
+										/>
+									</label>
+									<div class="row submit-row">
+										<button
+											class="primary small"
+											onclick={() => {
+												if (instances.length === 0) {
+													toasts.error('该世界没有公开实例');
+													return;
+												}
+												const inviteable = instances.find((i) => i.userId || i.ownerId);
+												if (!inviteable) {
+													toasts.error('没有可邀请的实例');
+													return;
+												}
+												requestInvite(inviteable.userId || inviteable.ownerId);
+											}}
+										>发送邀请请求</button>
+									</div>
 								</div>
 							{/if}
 						</section>
@@ -597,20 +607,16 @@
 		background: var(--bg-2);
 		flex-shrink: 0;
 		flex-wrap: wrap;
-	}
-	.actions a {
-		display: inline-flex;
 		align-items: center;
-		padding: 6px 10px;
-		background: var(--bg-3);
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		text-decoration: none;
-		color: var(--text);
+	}
+	.actions button,
+	.actions a {
 		font-size: 12px;
+		min-height: 30px;
+		line-height: 1.2;
+		text-decoration: none;
 	}
 	.actions a:hover {
-		background: #2a2f4a;
 		text-decoration: none;
 	}
 	.tabs {
@@ -772,24 +778,47 @@
 	}
 	.invite-self {
 		background: var(--bg-2);
-		padding: 12px;
+		padding: 12px 14px;
 		border-radius: 10px;
 		border: 1px solid var(--border);
 	}
+	.invite-self h3 {
+		margin: 0 0 6px;
+	}
+	.invite-self > p {
+		margin: 0 0 10px;
+		line-height: 1.5;
+	}
 	.invite-form {
 		display: flex;
-		gap: 6px;
-		margin-top: 8px;
+		flex-direction: column;
+		gap: 8px;
 	}
-	.invite-form select {
-		flex: 0 0 auto;
-		font-size: 12px;
-		padding: 6px 8px;
+	.invite-form .row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
 	}
-	.invite-form input {
-		flex: 1;
+	.invite-form .row .lbl {
+		flex: 0 0 44px;
 		font-size: 12px;
+		color: var(--text-dim);
+		text-align: right;
+	}
+	.invite-form .ipt {
+		flex: 1 1 auto;
+		min-width: 0;
+		font-size: 13px;
 		padding: 6px 8px;
+		background: var(--bg-1);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		color: var(--text);
+		font: inherit;
+	}
+	.invite-form .submit-row {
+		justify-content: flex-end;
 	}
 	.invite-form button {
 		font-size: 12px;

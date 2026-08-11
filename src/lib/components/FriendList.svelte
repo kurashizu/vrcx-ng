@@ -91,6 +91,7 @@
 
 	const STATUS_ICON = {
 		active: '🔵',
+		online: '🟢',
 		'join me': '🟢',
 		busy: '🔴',
 		'ask me': '🟡',
@@ -542,10 +543,12 @@
 		{ id: 'group', label: '分组', icon: '👥' }
 	];
 
+	// Status filter chips. 🟢=在线 (no special status, just online) and 🔵=加入我 (join me).
 	const STATUS_FILTERS = [
 		{ id: '', label: '全部' },
-		{ id: 'join me', label: '🟢 加入我' },
-		{ id: 'active', label: '🔵 在线' },
+		{ id: 'online', label: '🟢 在线' },
+		{ id: 'join me', label: '🔵 加入我' },
+		{ id: 'active', label: '🟣 活跃' },
 		{ id: 'ask me', label: '🟡 询问我' },
 		{ id: 'busy', label: '🔴 忙碌' }
 	];
@@ -665,9 +668,12 @@
 		<div class="title">
 			<span>好友 ({$friendsData.total})</span>
 			<span class="counts">
-				<span class="dot online" title="在线 {$friendsData.online.length}"></span>
-				<span class="dot active" title="Active {$friendsData.active.length}"></span>
-				<span class="dot offline" title="离线 {$friendsData.offline.length}"></span>
+				{#if true}
+					{@const joinMeCount = [...$friendsData.online, ...$friendsData.active].filter((f) => f.status === 'join me').length}
+					<span class="dot online" title="在线 {$friendsData.online.length}"></span>
+					<span class="dot joinme" title="加入我 {joinMeCount}"></span>
+					<span class="dot offline" title="离线 {$friendsData.offline.length}"></span>
+				{/if}
 			</span>
 		</div>
 	</header>
@@ -951,6 +957,9 @@
 	}
 	.dot.active {
 		background: var(--active);
+	}
+	.dot.joinme {
+		background: var(--joinme, #6cb6ff);
 	}
 	.dot.small {
 		width: 6px;
