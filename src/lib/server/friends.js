@@ -214,6 +214,17 @@ export function upsertFriend(accountId, friend) {
 	scheduleFriendsEmit();
 }
 
+/**
+ * Remove a friend from the cache (e.g. friend-delete event).
+ * @param {string} accountId
+ * @param {string} userId
+ */
+export function removeFriend(accountId, userId) {
+	const map = cache.get(accountId);
+	if (!map) return;
+	if (map.delete(userId)) scheduleFriendsEmit();
+}
+
 let emitTimer = null;
 function scheduleFriendsEmit() {
 	if (emitTimer) return;

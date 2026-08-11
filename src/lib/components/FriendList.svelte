@@ -11,6 +11,24 @@
 	import { showContextMenu } from '$lib/stores/contextMenu.js';
 	import { openUserDetail } from '$lib/stores/userDetail.js';
 	import { toasts } from '$lib/stores/toast.js';
+	import { trustColor, vrcLaunchUrl } from '$lib/shared/trust.js';
+	import { settings } from '$lib/stores/settings.js';
+	import { browser } from '$app/environment';
+
+	// view modes
+	let viewMode = $state('flat'); // 'flat' | 'instance' | 'world'
+
+	const VIEW_MODES = [
+		{ id: 'flat', label: '列表', icon: '☰' },
+		{ id: 'instance', label: '实例', icon: '🧩' },
+		{ id: 'world', label: '世界', icon: '🌍' }
+	];
+
+	// Trust rank → CSS class (when ui.trustColors is on)
+	function trustClass(f) {
+		if (!$settings['ui.trustColors']) return '';
+		return trustColor(f) || '';
+	}
 
 	function onContextMenu(e, f) {
 		e.preventDefault();
@@ -134,15 +152,152 @@
 		return a?.displayName || id.slice(0, 6);
 	}
 
-	function worldName(loc) {
-		if (!loc) return '';
-		if (loc === 'private') return 'Private World';
-		if (loc === 'offline') return '';
+	function parseLocation(loc) {
+		if (!loc || loc === 'offline' || loc === 'private') return null;
 		const [worldId, instanceId] = loc.split(':');
-		if (!instanceId || instanceId === '0') return worldId;
-		return `${worldId} · ${instanceId}`;
+		return { worldId, instanceId: instanceId || '0' };
 	}
+
+	/**
+	 * Display label for a friend's current location.
+	 * Priority: cached worldName > truncated worldId.
+	 * @param {{ worldName?: string, worldId?: string, location?: string }} f
+	 * @param {boolean} [showInstance]  include instance id in label
+	 */
+	function displayWorld(f, showInstance = false) {
+		if (!f) return '未知世界';
+		const loc = f.location || '';
+		if (loc === 'private') return 'Private World';
+		if (!loc || loc === 'offline') return '';
+		const parsed = parseLocation(loc);
+		if (!parsed) return '未知世界';
+		const name = f.worldName || parsed.worldId;
+		const shortId = parsed.worldId.length > 16
+			? parsed.worldId.slice(0, 8) + '…' + parsed.worldId.slice(-4)
+			: parsed.worldId;
+		const label = f.worldName ? name : shortId;
+		if (!showInstance) return label;
+		if (!parsed.instanceId || parsed.instanceId === '0') return label;
+		return `${label} · ${parsed.instanceId}`;
+	}
+
+	/**
+	 * Group online friends by location according to current viewMode.
+	 * Returns an array of { key, label, location, friends } sorted by size desc.
+	 */
+	function groupOnline(list) {
+		if (viewMode === 'flat') return null;
+		const groups = new Map();
+		for (const f of list) {
+			const loc = f.location || '';
+			if (!loc || loc === 'offline' || loc === 'private') {
+				const key = 'private';
+				if (!groups.has(key)) groups.set(key, { key, label: 'Private / Unknown', friends: [] });
+				groups.get(key).friends.push(f);
+				continue;
+			}
+			const parsed = parseLocation(loc);
+			if (!parsed) continue;
+			let key;
+			if (viewMode === 'instance') {
+				key = loc; // full location
+			} else {
+				key = parsed.worldId; // world only
+			}
+			if (!groups.has(key)) {
+				const shortId = parsed.worldId.length > 16
+					? parsed.worldId.slice(0, 8) + '…' + parsed.worldId.slice(-4)
+					: parsed.worldId;
+				groups.set(key, {
+					key,
+					label: viewMode === 'instance' ? loc : (f.worldName || shortId),
+					location: loc,
+					worldName: f.worldName,
+					worldId: parsed.worldId,
+					friends: []
+				});
+			} else {
+				// First friend had no worldName cached yet — keep the better label
+				const g = groups.get(key);
+				if (!g.worldName && f.worldName) {
+					g.worldName = f.worldName;
+					g.label = f.worldName;
+				}
+			}
+			groups.get(key).friends.push(f);
+		}
+		return [...groups.values()].sort((a, b) => b.friends.length - a.friends.length);
+	}
+
+	function launchVrc(location) {
+		const u = vrcLaunchUrl(location);
+		if (!u) {
+			toasts.error('无法生成启动链接');
+			return;
+		}
+		if (browser) window.location.href = u;
+	}
+
+	// Reusable friend row snippet
 </script>
+
+{#snippet friendRow(f)}
+	<div
+		class="friend {f.state}"
+		class:trust-color={!!trustClass(f)}
+		oncontextmenu={(e) => onContextMenu(e, f)}
+		role="button"
+		tabindex="0"
+		onkeydown={(e) => {
+			if (e.key === 'Enter') openUserDetail(f.accountIds[0], f.id);
+		}}
+	>
+		<div class="avatar">
+			{#if f.currentAvatarThumbnailImageUrl}
+				<img src={f.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
+			{:else}
+				<span>{f.displayName.slice(0, 1).toUpperCase()}</span>
+			{/if}
+			<span class="state {f.state}" title={f.state === 'online' ? '在线' : f.state === 'active' ? 'Active' : '离线'}></span>
+		</div>
+		<div class="info">
+			<div class="name-row">
+				<span class="name {trustClass(f)}">{f.displayName}</span>
+				<span class="platform" title={f.platform}>
+					{platformIcon[f.platform?.toLowerCase()] || ''}
+				</span>
+				{#if f.state === 'online' && f.location && f.location !== 'offline' && f.location !== 'private'}
+					<button
+						class="launch"
+						title="在 VRChat 中打开该实例"
+						onclick={(e) => { e.stopPropagation(); launchVrc(f.location); }}
+					>↗</button>
+				{/if}
+			</div>
+			<div class="sub" title={f.location}>
+				{#if f.state === 'online'}
+					{displayWorld(f, $settings['ui.showInstanceId'])}
+				{:else if f.state === 'active'}
+					<span class="muted">在 VRChat 桌面客户端中</span>
+				{:else}
+					<span class="muted">{f.lastSeen ? `${timeAgo(new Date(f.lastSeen).toISOString())} 离线` : '离线'}</span>
+				{/if}
+			</div>
+			<div class="meta">
+				{#if f.state === 'online' && f.status && statusIcon[f.status]}
+					<span class="status-pill" data-s={f.status}>
+						{statusIcon[f.status]} {f.status}
+					</span>
+				{/if}
+				{#if f.accountIds.length > 0}
+					<span class="via" title={f.accountIds.map(accountLabel).join(', ')}>
+						via {f.accountIds.map(accountLabel).join(', ')}
+					</span>
+				{/if}
+			</div>
+		</div>
+	</div>
+{/snippet}
 
 <aside class="friend-list">
 	<header>
@@ -179,6 +334,22 @@
 			{/each}
 		</div>
 
+		{#if $friendGroupFilter !== 'offline'}
+			<div class="view-tabs">
+				{#each VIEW_MODES as v}
+					<button
+						class="view-tab"
+						class:on={viewMode === v.id}
+						title={v.label}
+						onclick={() => (viewMode = v.id)}
+					>
+						<span class="ico">{v.icon}</span>
+						<span>{v.label}</span>
+					</button>
+				{/each}
+			</div>
+		{/if}
+
 		{#if $accounts.length > 1}
 			<select bind:value={$friendAccountFilter} class="account-select">
 				<option value={null}>所有账号</option>
@@ -192,52 +363,34 @@
 	<div class="groups">
 		{#if $friendGroupFilter === 'all' || $friendGroupFilter === 'online'}
 			{#if $filteredFriends.online.length > 0}
-				<section class="group">
-					<header><span class="dot online"></span> 在线 ({$filteredFriends.online.length})</header>
-					{#each $filteredFriends.online as f (f.id)}
-						<div
-							class="friend online"
-							oncontextmenu={(e) => onContextMenu(e, f)}
-							role="button"
-							tabindex="0"
-							onkeydown={(e) => {
-								if (e.key === 'Enter') openUserDetail(f.accountIds[0], f.id);
-							}}
-						>
-							<div class="avatar">
-								{#if f.currentAvatarThumbnailImageUrl}
-									<img src={f.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
-								{:else}
-									<span>{f.displayName.slice(0, 1).toUpperCase()}</span>
+				{#if groupOnline($filteredFriends.online)}
+					{#each groupOnline($filteredFriends.online) as g (g.key)}
+						<section class="group">
+							<header>
+								<span class="dot online"></span>
+								<span class="group-label" title={g.label}>{g.label}</span>
+								<span class="group-count">{g.friends.length}</span>
+								{#if viewMode === 'instance' && g.location && g.location !== 'private'}
+									<button
+										class="launch-mini"
+										title="加入该实例"
+										onclick={() => launchVrc(g.location)}
+									>↗</button>
 								{/if}
-								<span class="state online" title="在线"></span>
-							</div>
-							<div class="info">
-								<div class="name-row">
-									<span class="name">{f.displayName}</span>
-									<span class="platform" title={f.platform}>
-										{platformIcon[f.platform?.toLowerCase()] || ''}
-									</span>
-								</div>
-								<div class="sub" title={f.location}>
-									{worldName(f.location) || '未知世界'}
-								</div>
-								<div class="meta">
-									{#if f.status && statusIcon[f.status]}
-										<span class="status-pill" data-s={f.status}>
-											{statusIcon[f.status]} {f.status}
-										</span>
-									{/if}
-									{#if f.accountIds.length > 0}
-										<span class="via" title={f.accountIds.map(accountLabel).join(', ')}>
-											via {f.accountIds.map(accountLabel).join(', ')}
-										</span>
-									{/if}
-								</div>
-							</div>
-						</div>
+							</header>
+							{#each g.friends as f (f.id)}
+								{@render friendRow(f)}
+							{/each}
+						</section>
 					{/each}
-				</section>
+				{:else}
+					<section class="group">
+						<header><span class="dot online"></span> 在线 ({$filteredFriends.online.length})</header>
+						{#each $filteredFriends.online as f (f.id)}
+							{@render friendRow(f)}
+						{/each}
+					</section>
+				{/if}
 			{/if}
 		{/if}
 
@@ -246,36 +399,7 @@
 				<section class="group">
 					<header><span class="dot active"></span> Active ({$filteredFriends.active.length})</header>
 					{#each $filteredFriends.active as f (f.id)}
-						<div
-							class="friend active"
-							oncontextmenu={(e) => onContextMenu(e, f)}
-							role="button"
-							tabindex="0"
-							onkeydown={(e) => {
-								if (e.key === 'Enter') openUserDetail(f.accountIds[0], f.id);
-							}}
-						>
-							<div class="avatar">
-								{#if f.currentAvatarThumbnailImageUrl}
-									<img src={f.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
-								{:else}
-									<span>{f.displayName.slice(0, 1).toUpperCase()}</span>
-								{/if}
-								<span class="state active" title="Active"></span>
-							</div>
-							<div class="info">
-								<div class="name-row">
-									<span class="name">{f.displayName}</span>
-									<span class="platform">{platformIcon[f.platform?.toLowerCase()] || ''}</span>
-								</div>
-								<div class="sub muted">在 VRChat 桌面客户端中</div>
-								{#if f.accountIds.length > 0}
-									<div class="meta">
-										<span class="via">via {f.accountIds.map(accountLabel).join(', ')}</span>
-									</div>
-								{/if}
-							</div>
-						</div>
+						{@render friendRow(f)}
 					{/each}
 				</section>
 			{/if}
@@ -287,38 +411,9 @@
 					<header>
 						<span class="dot offline"></span> 离线 ({$filteredFriends.offline.length})
 					</header>
-					{#each $filteredFriends.offline.slice(0, 100) as f (f.id)}
-						<div
-							class="friend offline"
-							oncontextmenu={(e) => onContextMenu(e, f)}
-							role="button"
-							tabindex="0"
-							onkeydown={(e) => {
-								if (e.key === 'Enter') openUserDetail(f.accountIds[0], f.id);
-							}}
-						>
-							<div class="avatar">
-								{#if f.currentAvatarThumbnailImageUrl}
-									<img src={f.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
-								{:else}
-									<span>{f.displayName.slice(0, 1).toUpperCase()}</span>
-								{/if}
-								<span class="state offline"></span>
-							</div>
-							<div class="info">
-								<div class="name-row">
-									<span class="name">{f.displayName}</span>
-									<span class="platform">{platformIcon[f.last_platform?.toLowerCase()] || ''}</span>
-								</div>
-								<div class="sub muted">
-									{f.lastSeen ? `${timeAgo(new Date(f.lastSeen).toISOString())}离线` : '离线'}
-								</div>
-							</div>
-						</div>
+					{#each $filteredFriends.offline as f (f.id)}
+						{@render friendRow(f)}
 					{/each}
-					{#if $filteredFriends.offline.length > 100}
-						<div class="more">… 还有 {$filteredFriends.offline.length - 100} 个离线好友</div>
-					{/if}
 				</section>
 			{/if}
 		{/if}
@@ -425,6 +520,34 @@
 		color: var(--text);
 		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 	}
+	.view-tabs {
+		display: flex;
+		gap: 2px;
+		padding: 2px;
+		background: var(--bg-2);
+		border-radius: 8px;
+	}
+	.view-tab {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		padding: 4px 6px;
+		font-size: 11px;
+		background: transparent;
+		border: none;
+		color: var(--text-dim);
+		border-radius: 6px;
+	}
+	.view-tab:hover {
+		background: var(--bg-3);
+		color: var(--text);
+	}
+	.view-tab.on {
+		background: var(--accent);
+		color: white;
+	}
 	.account-select {
 		font-size: 12px;
 		padding: 4px 8px;
@@ -447,6 +570,53 @@
 		align-items: center;
 		gap: 6px;
 		border-bottom: none;
+	}
+	.group > header .group-label {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		text-transform: none;
+		letter-spacing: 0;
+		font-size: 12px;
+		color: var(--text-dim);
+		font-weight: 500;
+	}
+	.group > header .group-count {
+		font-size: 10px;
+		background: var(--bg-3);
+		padding: 1px 6px;
+		border-radius: 8px;
+		color: var(--text-faint);
+	}
+	.launch,
+	.launch-mini {
+		background: transparent;
+		border: 1px solid var(--border);
+		color: var(--text-dim);
+		padding: 0;
+		cursor: pointer;
+		border-radius: 6px;
+		font-size: 12px;
+		transition: background 0.12s, color 0.12s, border-color 0.12s;
+	}
+	.launch {
+		width: 22px;
+		height: 22px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.launch-mini {
+		width: 22px;
+		height: 22px;
+		font-size: 11px;
+	}
+	.launch:hover,
+	.launch-mini:hover {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: white;
 	}
 	.friend {
 		display: flex;

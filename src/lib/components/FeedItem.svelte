@@ -2,6 +2,12 @@
 	import EventIcon from './EventIcon.svelte';
 	import { timeAgo, formatTime, locationLabel } from '$lib/shared/format.js';
 	import { accounts } from '$lib/stores/accounts.js';
+	import { showContextMenu } from '$lib/stores/contextMenu.js';
+	import { openUserDetail } from '$lib/stores/userDetail.js';
+	import { vrcLaunchUrl } from '$lib/shared/trust.js';
+	import { toasts } from '$lib/stores/toast.js';
+	import { browser } from '$app/environment';
+	import { settings } from '$lib/stores/settings.js';
 
 	/** @type {{ entry: import('$lib/shared/feed.js').FeedEntry }} */
 	let { entry } = $props();
@@ -9,10 +15,14 @@
 	const account = $derived($accounts.find((a) => a.id === entry.accountId));
 	const accColor = $derived(stringHue(account?.displayName || entry.accountId));
 
-	/**
-	 * @param {string|undefined} s
-	 * @returns {string}
-	 */
+	// Friend (subject of the event)
+	const friend = $derived({
+		id: entry.userId,
+		displayName: entry.displayName || entry.userId,
+		location: entry.location,
+		accountIds: entry.accountId ? [entry.accountId] : []
+	});
+
 	function stringHue(s) {
 		if (!s) return '0';
 		let h = 0;
@@ -20,55 +30,156 @@
 		return String(h % 360);
 	}
 
-	const head = $derived.by(() => {
-		const name = entry.displayName || entry.userId || 'Someone';
-		const acc = entry.accountDisplayName || account?.displayName;
-		switch (entry.type) {
-			case 'Online':
-				return `${name} 上线了${entry.worldName ? ` → ${entry.worldName}` : ''}`;
-			case 'Offline':
-				return `${name} 离线了`;
-			case 'Active':
-				return `${name} 变成了 Active`;
-			case 'GPS':
-				return `${name} 移动到了 ${entry.worldName || locationLabel(entry.location) || '新世界'}`;
-			case 'Status':
-				return `${name} 状态变更: ${entry.previousStatus} → ${entry.status}`;
-			case 'Bio':
-				return `${name} 更新了 Bio`;
-			case 'Avatar':
-				return `${name} 切换了模型`;
-			case 'FriendRequest':
-				return `${name} 发送了好友请求`;
-			case 'Invite':
-				return `${name} 发送了邀请${entry.worldName ? ` (${entry.worldName})` : ''}`;
-			case 'Instance.Closed':
-				return `实例已关闭: ${entry.location || ''}`;
-			default:
-				return `${name} ${entry.type}`;
+	// Build a labeled description + clickable chips
+	const chips = $derived.by(() => {
+		const out = [];
+		// World chip (Online, GPS, Invite)
+		if (entry.worldName || entry.worldId) {
+			out.push({
+				key: 'world',
+				label: entry.worldName || entry.worldId,
+				title: entry.worldId || entry.worldName,
+				location: entry.location
+			});
+		} else if (entry.location && entry.location !== 'offline' && entry.location !== 'private') {
+			out.push({ key: 'loc', label: locationLabel(entry.location), location: entry.location });
 		}
+		// Avatar change: before → after (both clickable)
+		if (entry.type === 'Avatar') {
+			if (entry.previousCurrentAvatarThumbnailImageUrl) {
+				out.push({
+					key: 'avatar-prev',
+					label: 'Before',
+					image: entry.previousCurrentAvatarThumbnailImageUrl,
+					avatarId: extractAvatarId(entry.previousCurrentAvatarImageUrl)
+				});
+			}
+			if (entry.currentAvatarThumbnailImageUrl) {
+				out.push({
+					key: 'avatar-next',
+					label: 'After',
+					image: entry.currentAvatarThumbnailImageUrl,
+					avatarId: extractAvatarId(entry.currentAvatarImageUrl)
+				});
+			}
+		}
+		return out;
 	});
 
-	const detail = $derived.by(() => {
-		if (entry.type === 'Status') {
-			return [entry.statusDescription, entry.previousStatusDescription].filter(Boolean).join(' · ');
+	function extractAvatarId(url) {
+		if (!url) return null;
+		const m = String(url).match(/avtr_[a-f0-9-]+/i);
+		return m ? m[0] : null;
+	}
+
+	function clickUser(e) {
+		if (!entry.userId || !entry.accountId) return;
+		e?.stopPropagation();
+		openUserDetail(entry.accountId, entry.userId);
+	}
+
+	function clickChip(chip) {
+		if (chip.key === 'world' || chip.key === 'loc') {
+			if (!chip.location) return;
+			const u = vrcLaunchUrl(chip.location);
+			if (u && browser) window.location.href = u;
+		} else if (chip.key === 'avatar-prev' || chip.key === 'avatar-next') {
+			if (chip.avatarId) {
+				toasts.push(`正在搜索 ${chip.avatarId}…`, 'info');
+				// Future: open a search dialog or new tab
+				if (browser) window.open(`https://vrchat.com/home/avatar/${chip.avatarId}`, '_blank');
+			}
 		}
-		if (entry.type === 'Bio') {
-			const b = entry.bio || '';
-			return b.length > 200 ? b.slice(0, 200) + '…' : b;
+	}
+
+	function onContextMenu(e) {
+		if (!entry.userId || !entry.accountId) return;
+		e.preventDefault();
+		const items = [
+			{ icon: '👤', label: '查看详情', action: () => openUserDetail(entry.accountId, entry.userId) },
+			{ divider: true },
+			{
+				icon: '📋',
+				label: '复制显示名',
+				action: () => copyText(entry.displayName || entry.userId)
+			},
+			{
+				icon: '🆔',
+				label: '复制用户 ID',
+				action: () => copyText(entry.userId)
+			},
+			{ divider: true },
+			{
+				icon: '✉️',
+				label: '请求加入 TA 的实例',
+				disabled: !entry.location || entry.location === 'offline' || entry.location === 'private',
+				action: async () => {
+					const r = await fetch(`/api/accounts/${entry.accountId}/actions`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ action: 'requestInvite', userId: entry.userId })
+					});
+					const j = await r.json();
+					j.ok ? toasts.success('请求已发送') : toasts.error(j.error || '失败');
+				}
+			},
+			{ divider: true },
+			{
+				icon: '🔕',
+				label: '静音',
+				action: async () => muteBlock('mute')
+			},
+			{
+				icon: '🚫',
+				label: '屏蔽',
+				danger: true,
+				action: async () => muteBlock('block')
+			}
+		];
+		showContextMenu({ x: e.clientX, y: e.clientY, data: { friend, _accountId: entry.accountId }, items });
+	}
+
+	async function muteBlock(type) {
+		if (type === 'block' && !confirm(`确定屏蔽 ${entry.displayName || entry.userId}?`)) return;
+		const r = await fetch(`/api/accounts/${entry.accountId}/actions`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ action: type, userId: entry.userId })
+		});
+		const j = await r.json();
+		j.ok ? toasts.success(type === 'mute' ? '已静音' : '已屏蔽') : toasts.error(j.error || '失败');
+	}
+
+	async function copyText(s) {
+		if (!s || !browser) return;
+		navigator.clipboard.writeText(s).then(
+			() => toasts.success('已复制'),
+			() => toasts.error('复制失败')
+		);
+	}
+
+	function clickWorldHead() {
+		if (entry.location && entry.location !== 'offline' && entry.location !== 'private') {
+			const u = vrcLaunchUrl(entry.location);
+			if (u && browser) window.location.href = u;
 		}
-		if (entry.type === 'GPS' && entry.previousLocation) {
-			return `from ${locationLabel(entry.previousLocation)}`;
-		}
-		if (entry.type === 'Instance.Closed') {
-			return '';
-		}
-		return '';
-	});
+	}
 </script>
 
-<div class="entry">
-	<div class="avatar" style:--hue={accColor}>
+<div
+	class="entry"
+	role="button"
+	tabindex="0"
+	onclick={clickUser}
+	oncontextmenu={onContextMenu}
+	onkeydown={(e) => { if (e.key === 'Enter') clickUser(); }}
+>
+	<button
+		class="avatar"
+		style:--hue={accColor}
+		title={account?.displayName || entry.accountDisplayName || '账号'}
+		onclick={(e) => { e.stopPropagation(); /* future: open account detail */ }}
+	>
 		{#if account?.currentUser?.currentAvatarThumbnailImageUrl}
 			<img src={account.currentUser.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
 		{:else}
@@ -77,38 +188,118 @@
 		<span class="account-pip" title={account?.displayName || entry.accountDisplayName}>
 			{account?.displayName?.slice(0, 1).toUpperCase() || '?'}
 		</span>
-	</div>
+	</button>
 
 	<div class="body">
 		<div class="head-row">
 			<EventIcon type={entry.type} />
-			<span class="head">{head}</span>
+			{#if entry.userId}
+				<button class="user-name" onclick={clickUser} title={entry.userId}>
+					{entry.displayName || entry.userId}
+				</button>
+			{:else}
+				<span class="head">{entry.displayName || 'Someone'}</span>
+			{/if}
+
+			{#if entry.type === 'Online'}
+				<span class="sep">上线</span>
+				{#if entry.location && entry.location !== 'offline' && entry.location !== 'private'}
+					<button class="chip world-chip" title={entry.location} onclick={clickWorldHead}>
+						→ {entry.worldName || entry.worldId || locationLabel(entry.location)}
+					</button>
+				{/if}
+			{:else if entry.type === 'Offline'}
+				<span class="sep">离线了</span>
+			{:else if entry.type === 'Active'}
+				<span class="sep">变成了 Active</span>
+			{:else if entry.type === 'GPS'}
+				<span class="sep">移动到了</span>
+				{#if entry.location && entry.location !== 'offline' && entry.location !== 'private'}
+					<button class="chip world-chip" title={entry.location} onclick={clickWorldHead}>
+						{entry.worldName || entry.worldId || locationLabel(entry.location)}
+					</button>
+				{/if}
+				{#if entry.previousLocation}
+					<span class="faint small">(从 {locationLabel(entry.previousLocation)})</span>
+				{/if}
+			{:else if entry.type === 'Status'}
+				<span class="sep">状态变更</span>
+				<span class="status-flow">
+					{entry.previousStatus} → {entry.status}
+				</span>
+			{:else if entry.type === 'Bio'}
+				<span class="sep">更新了 Bio</span>
+			{:else if entry.type === 'Avatar'}
+				<span class="sep">切换了模型</span>
+				{#if entry.avatarName}
+					<span class="muted">→ {entry.avatarName}</span>
+				{/if}
+			{:else if entry.type === 'FriendRequest'}
+				<span class="sep">发送了好友请求</span>
+				{#if entry.detail}
+					<span class="muted">{entry.detail}</span>
+				{/if}
+			{:else if entry.type === 'Invite'}
+				<span class="sep">发送了邀请</span>
+				{#if entry.worldName}
+					<button class="chip world-chip" title={entry.location} onclick={clickWorldHead}>
+						({entry.worldName})
+					</button>
+				{/if}
+				{#if entry.detail}
+					<span class="muted">{entry.detail}</span>
+				{/if}
+			{:else if entry.type === 'Instance.Closed'}
+				<span class="sep">实例已关闭</span>
+				{#if entry.location}
+					<span class="muted">{entry.location}</span>
+				{/if}
+			{:else}
+				<span class="sep">{entry.type}</span>
+				{#if entry.detail}
+					<span class="muted">{entry.detail}</span>
+				{/if}
+			{/if}
 		</div>
 
 		{#if entry.type === 'Avatar'}
 			<div class="avatar-change">
 				{#if entry.previousCurrentAvatarThumbnailImageUrl}
-					<div class="avi prev">
+					<button
+						class="avi prev"
+						title="查看旧模型"
+						onclick={(e) => { e.stopPropagation(); clickChip({ key: 'avatar-prev', avatarId: extractAvatarId(entry.previousCurrentAvatarImageUrl) }); }}
+					>
 						<img src={entry.previousCurrentAvatarThumbnailImageUrl} alt="" loading="lazy" />
 						<span class="lbl">Before</span>
-					</div>
+					</button>
 				{/if}
 				<div class="arrow">→</div>
 				{#if entry.currentAvatarThumbnailImageUrl}
-					<div class="avi next">
+					<button
+						class="avi next"
+						title="查看新模型"
+						onclick={(e) => { e.stopPropagation(); clickChip({ key: 'avatar-next', avatarId: extractAvatarId(entry.currentAvatarImageUrl) }); }}
+					>
 						<img src={entry.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
 						<span class="lbl">After</span>
-					</div>
+					</button>
 				{/if}
 			</div>
 		{/if}
 
-		{#if detail}
-			<div class="detail">{detail}</div>
+		{#if entry.type === 'Status' && (entry.statusDescription || entry.previousStatusDescription)}
+			<div class="detail">
+				{entry.previousStatusDescription || ''} → {entry.statusDescription || ''}
+			</div>
+		{:else if entry.type === 'Bio' && entry.bio}
+			<div class="detail">{entry.bio.length > 200 ? entry.bio.slice(0, 200) + '…' : entry.bio}</div>
 		{/if}
 
 		<div class="meta">
-			<span class="acc" title="via account">via {entry.accountDisplayName || account?.displayName || entry.accountId.slice(0, 8)}</span>
+			<span class="acc" title={account?.username || ''}>
+				via {entry.accountDisplayName || account?.displayName || entry.accountId.slice(0, 8)}
+			</span>
 			<span class="dot">·</span>
 			<span class="ago" title={entry.created_at}>{timeAgo(entry.created_at)}</span>
 			<span class="faint">({formatTime(entry.created_at)})</span>
@@ -123,9 +314,14 @@
 		padding: 12px 14px;
 		border-bottom: 1px solid var(--border);
 		transition: background 0.12s;
+		cursor: pointer;
 	}
 	.entry:hover {
 		background: rgba(255, 255, 255, 0.02);
+	}
+	.entry:focus-visible {
+		background: rgba(124, 92, 255, 0.08);
+		outline: none;
 	}
 	.avatar {
 		position: relative;
@@ -140,6 +336,9 @@
 		font-weight: 600;
 		flex-shrink: 0;
 		overflow: visible;
+		border: none;
+		padding: 0;
+		cursor: pointer;
 	}
 	.avatar img {
 		width: 100%;
@@ -169,12 +368,58 @@
 	}
 	.head-row {
 		display: flex;
-		gap: 8px;
+		gap: 6px;
 		align-items: center;
+		flex-wrap: wrap;
+		font-size: 13px;
 	}
 	.head {
 		font-weight: 500;
 		color: var(--text);
+	}
+	.user-name {
+		font: inherit;
+		font-weight: 600;
+		color: var(--text);
+		background: transparent;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+	}
+	.user-name:hover {
+		color: var(--accent);
+		text-decoration: underline;
+	}
+	.sep {
+		color: var(--text-dim);
+	}
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 1px 8px;
+		background: var(--bg-3);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		color: var(--text);
+		font-size: 12px;
+		cursor: pointer;
+		max-width: 280px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.chip:hover {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: white;
+	}
+	.world-chip {
+		max-width: 240px;
+	}
+	.status-flow {
+		color: var(--text);
+		font-weight: 500;
 	}
 	.detail {
 		margin-top: 4px;
@@ -205,13 +450,21 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 2px;
+		padding: 4px;
+		background: transparent;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		cursor: pointer;
+	}
+	.avi:hover {
+		background: var(--bg-3);
+		border-color: var(--border-strong);
 	}
 	.avi img {
 		width: 72px;
 		height: 72px;
-		border-radius: 8px;
+		border-radius: 6px;
 		object-fit: cover;
-		border: 1px solid var(--border-strong);
 	}
 	.avi .lbl {
 		font-size: 10px;
@@ -223,5 +476,14 @@
 	}
 	.dot {
 		opacity: 0.4;
+	}
+	.muted {
+		color: var(--text-dim);
+	}
+	.faint {
+		color: var(--text-faint);
+	}
+	.small {
+		font-size: 11px;
 	}
 </style>

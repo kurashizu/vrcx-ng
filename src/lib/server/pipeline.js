@@ -2,7 +2,7 @@ import { WebSocket } from 'ws';
 import { getWebsocketUrl, getPipelineToken, getCurrentUser, getWorld } from './vrchat.js';
 import { listAccounts, getSession, setSession } from './accounts.js';
 import { publishFeed, bus } from './bus.js';
-import { patchFriend, reconcileStates, loadFriends } from './friends.js';
+import { patchFriend, reconcileStates, loadFriends, removeFriend } from './friends.js';
 import { getWorldMeta } from './worldCache.js';
 
 /**
@@ -314,6 +314,205 @@ async function handleMessage(state, msg) {
 					raw: content
 				})
 			);
+			break;
+		}
+		case 'friend-add': {
+			// Someone added us as a friend. content.user is the new friend.
+			const u = content.user;
+			if (!u?.id) break;
+			cacheUser(state, u);
+			upsertFriend(state.accountId, {
+				id: u.id,
+				displayName: u.displayName,
+				currentAvatarThumbnailImageUrl: u.currentAvatarThumbnailImageUrl,
+				status: u.status,
+				state: 'offline',
+				location: 'offline',
+				platform: u.platform
+			});
+			publishFeed(
+				feedEntry(state, {
+					type: 'FriendRequest',
+					userId: u.id,
+					displayName: u.displayName || u.id,
+					raw: { subtype: 'friend-add' }
+				})
+			);
+			break;
+		}
+		case 'friend-delete': {
+			// Someone removed us as a friend.
+			const u = content.user;
+			if (!u?.id) break;
+			removeFriend(state.accountId, u.id);
+			publishFeed(
+				feedEntry(state, {
+					type: 'Notification',
+					userId: u.id,
+					displayName: u.displayName || u.id,
+					detail: 'Removed from friends',
+					raw: { subtype: 'friend-delete' }
+				})
+			);
+			break;
+		}
+		case 'notification-v2-delete': {
+			// A notification was deleted (e.g. friend accepted invite).
+			// We don't track notifications in DB yet, but we surface it.
+			publishFeed(
+				feedEntry(state, {
+					type: 'Notification',
+					detail: 'Notification dismissed',
+					raw: content
+				})
+			);
+			break;
+		}
+		case 'notification-v2-update': {
+			// A notification updated (e.g. requestInvite → invite → accepted).
+			const n = content.notification || content;
+			if (n?.type === 'invite' || n?.type === 'requestInvite') {
+				publishFeed(
+					feedEntry(state, {
+						type: 'Invite',
+						userId: n.senderUserId,
+						displayName: n.senderDisplayName || n.senderUsername,
+						worldName: n.details?.worldId ? await resolveWorldName(state, n.details.worldId) : '',
+						detail: n.message || '',
+						raw: n
+					})
+				);
+			} else if (n?.type === 'friendRequest') {
+				publishFeed(
+					feedEntry(state, {
+						type: 'FriendRequest',
+						userId: n.senderUserId,
+						displayName: n.senderDisplayName || n.senderUsername,
+						raw: n
+					})
+				);
+			}
+			break;
+		}
+		case 'notification': {
+			// V1 notification API (older). content has type/id/nonce etc.
+			const n = content;
+			const detail = n.details || {};
+			if (n.type === 'friendRequest') {
+				publishFeed(
+					feedEntry(state, {
+						type: 'FriendRequest',
+						userId: detail.senderUserId || n.senderUserId,
+						displayName: detail.senderDisplayName || n.senderUsername,
+						raw: n
+					})
+				);
+			} else if (n.type === 'invite' || n.type === 'requestInvite' || n.type === 'message') {
+				publishFeed(
+					feedEntry(state, {
+						type: 'Invite',
+						userId: n.senderUserId,
+						displayName: n.senderDisplayName || n.senderUsername,
+						worldName: detail.worldId ? await resolveWorldName(state, detail.worldId) : '',
+						detail: n.message || '',
+						raw: n
+					})
+				);
+			}
+			break;
+		}
+		case 'group-joined': {
+			const g = content.group;
+			if (g?.id) {
+				state.groupCache.set(g.id, g.name || g.id);
+				publishFeed(
+					feedEntry(state, {
+						type: 'Group',
+						detail: `Joined group ${g.name || g.id}`,
+						groupName: g.name,
+						raw: content
+					})
+				);
+			}
+			break;
+		}
+		case 'group-left': {
+			const g = content.group;
+			if (g?.id) state.groupCache.delete(g.id);
+			publishFeed(
+				feedEntry(state, {
+					type: 'Group',
+					detail: `Left group ${g?.name || g?.id || '?'}`,
+					raw: content
+				})
+			);
+			break;
+		}
+		case 'group-role-updated': {
+			publishFeed(
+				feedEntry(state, {
+					type: 'Group',
+					detail: 'Role updated in a group',
+					raw: content
+				})
+			);
+			break;
+		}
+		case 'group-member-updated': {
+			// Don't spam — a friend got added/removed/role-changed in a group
+			const u = content.user;
+			if (u?.id) {
+				publishFeed(
+					feedEntry(state, {
+						type: 'Group',
+						userId: u.id,
+						displayName: u.displayName,
+						detail: 'Group membership changed',
+						raw: content
+					})
+				);
+			}
+			break;
+		}
+		case 'instance-queue-joined': {
+			publishFeed(
+				feedEntry(state, {
+					type: 'Notification',
+					detail: `Joined instance queue at ${content.instanceLocation || '?'}`,
+					raw: content
+				})
+			);
+			break;
+		}
+		case 'instance-queue-position': {
+			// Periodic position update — only emit if position changes a lot
+			// (VRC sends these often). For now, just log.
+			break;
+		}
+		case 'instance-queue-ready': {
+			publishFeed(
+				feedEntry(state, {
+					type: 'Notification',
+					detail: `Instance queue ready: ${content.instanceLocation || '?'}`,
+					raw: content
+				})
+			);
+			break;
+		}
+		case 'instance-queue-left': {
+			publishFeed(
+				feedEntry(state, {
+					type: 'Notification',
+					detail: `Left instance queue`,
+					raw: content
+				})
+			);
+			break;
+		}
+		case 'content-refresh': {
+			// VRC asks us to refresh worlds/avatars cache. Trigger async refresh.
+			console.log(`[pipeline ${state.accountId}] content-refresh requested`);
+			import('./worldCache.js').then((m) => m.warmMemoryCache(state.accountId)).catch(() => {});
 			break;
 		}
 		default:

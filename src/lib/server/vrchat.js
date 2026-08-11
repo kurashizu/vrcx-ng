@@ -1,4 +1,4 @@
-import { setSession, getSession } from './accounts.js';
+import { setSession, getSession, getAccount } from './accounts.js';
 
 const API_BASE = 'https://api.vrchat.cloud/api/1';
 const WS_BASE = 'wss://pipeline.vrchat.cloud';
@@ -27,6 +27,50 @@ function extractCookieFromSetCookie(setCookieArr, name) {
 		if (m) return `${name}=${m[1]}`;
 	}
 	return null;
+}
+
+/**
+ * Set of accountIds currently being re-logged-in. Prevents infinite loops when
+ * the relogin itself returns 401 (e.g. needs 2FA).
+ */
+const _reloginInFlight = new Set();
+
+/**
+ * Try to silently re-authenticate using the stored password. Only succeeds if
+ * the account doesn't have 2FA required. If 2FA is required, we surface an
+ * error to the client via lastError so they can re-login manually.
+ * @param {string} accountId
+ * @returns {Promise<boolean>} true if re-auth succeeded
+ */
+async function attemptRelogin(accountId) {
+	if (_reloginInFlight.has(accountId)) return false;
+	_reloginInFlight.add(accountId);
+	try {
+		const acct = getAccount(accountId);
+		if (!acct?.username || !acct?.password) {
+			console.log(`[vrchat] cannot relogin ${accountId}: no stored credentials`);
+			return false;
+		}
+		console.log(`[vrchat] attempting silent relogin for ${accountId}`);
+		// Clear stale cookies first to avoid confusion
+		setSession(accountId, { cookie: '', lastError: null });
+		const result = await login(accountId, acct.username, acct.password);
+		if (result.ok) {
+			console.log(`[vrchat] relogin ${accountId} ok`);
+			return true;
+		}
+		if (result.requires2fa) {
+			console.log(`[vrchat] relogin ${accountId} requires 2FA — manual action needed`);
+			setSession(accountId, { lastError: 'Cookie expired; needs 2FA to re-login' });
+			return false;
+		}
+		console.log(`[vrchat] relogin ${accountId} failed: ${result.error}`);
+		setSession(accountId, { lastError: `Re-login failed: ${result.error}` });
+		return false;
+	} finally {
+		// Don't release immediately — give the retry some time. Small delay.
+		setTimeout(() => _reloginInFlight.delete(accountId), 10000);
+	}
 }
 
 function cookieHeaderFromJar(jar) {
@@ -78,46 +122,73 @@ function persistCookie(accountId, jar) {
  * @param {string} accountId
  * @param {string} path
  * @param {object} [opts]
+ * @param {boolean} [opts._retried] internal: marks a request as already-retried
  * @returns {Promise<{ status: number, data: any }>}
  */
 export async function api(accountId, path, opts = {}) {
-	const url = path.startsWith('http') ? path : `${API_BASE}/${path.replace(/^\//, '')}`;
-	const headers = {
-		'User-Agent': USER_AGENT,
-		Accept: 'application/json',
-		...opts.headers
+	const doFetch = async () => {
+		const url = path.startsWith('http') ? path : `${API_BASE}/${path.replace(/^\//, '')}`;
+		const headers = {
+			'User-Agent': USER_AGENT,
+			Accept: 'application/json',
+			...opts.headers
+		};
+		if (opts.body && !headers['Content-Type']) {
+			headers['Content-Type'] = 'application/json';
+		}
+		if (!opts.skipAuth) {
+			const jar = getJar(accountId);
+			if (jar) headers.Cookie = cookieHeaderFromJar(jar);
+		}
+		const res = await fetch(url, {
+			method: opts.method || 'GET',
+			headers,
+			body: opts.body
+				? typeof opts.body === 'string'
+					? opts.body
+					: JSON.stringify(opts.body)
+				: undefined
+		});
+
+		// update cookie jar from response
+		const setCookie = res.headers.getSetCookie?.() ?? parseSetCookie(res.headers.get('set-cookie'));
+		if (setCookie.length) {
+			const jar = updateJar(getJar(accountId), setCookie);
+			persistCookie(accountId, jar);
+		}
+
+		let data = null;
+		const text = await res.text();
+		if (text) {
+			try {
+				data = JSON.parse(text);
+			} catch {
+				data = text;
+			}
+		}
+
+		return { status: res.status, data };
 	};
-	if (opts.body && !headers['Content-Type']) {
-		headers['Content-Type'] = 'application/json';
-	}
-	if (!opts.skipAuth) {
-		const jar = getJar(accountId);
-		if (jar) headers.Cookie = cookieHeaderFromJar(jar);
-	}
-	const res = await fetch(url, {
-		method: opts.method || 'GET',
-		headers,
-		body: opts.body ? (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)) : undefined
-	});
 
-	// update cookie jar from response
-	const setCookie = res.headers.getSetCookie?.() ?? parseSetCookie(res.headers.get('set-cookie'));
-	if (setCookie.length) {
-		const jar = updateJar(getJar(accountId), setCookie);
-		persistCookie(accountId, jar);
-	}
+	const res = await doFetch();
 
-	let data = null;
-	const text = await res.text();
-	if (text) {
-		try {
-			data = JSON.parse(text);
-		} catch {
-			data = text;
+	// Auto-relogin on 401 (auth cookie expired / VRC rotated it).
+	// - Skip if the caller opted out (e.g. login itself)
+	// - Skip if already retried (avoid loop)
+	// - Only attempt if a stored password exists
+	if (
+		res.status === 401 &&
+		!opts.skipAuth &&
+		!opts._retried &&
+		!_reloginInFlight.has(accountId)
+	) {
+		const ok = await attemptRelogin(accountId);
+		if (ok) {
+			return await doFetch().then((r) => r); // re-fetch with new cookie
 		}
 	}
 
-	return { status: res.status, data };
+	return res;
 }
 
 /* ---------------------------- public API ---------------------------- */
