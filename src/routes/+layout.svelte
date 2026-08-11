@@ -9,6 +9,7 @@
 	import { browser } from '$app/environment';
 	import { refreshAccounts } from '$lib/stores/accounts.js';
 	import { connectSSE } from '$lib/stores/sse.js';
+	import { fetchFriendsSnapshot } from '$lib/stores/friends.js';
 	import { loadSettings, applyTheme } from '$lib/stores/settings.js';
 
 	let { children } = $props();
@@ -17,6 +18,12 @@
 		if (!browser) return;
 		refreshAccounts().catch(console.error);
 		connectSSE();
+		// Initial friend snapshot fetch as a fallback so the sidebar shows
+		// data even before the SSE `hello` event arrives (e.g. right after
+		// a server restart that killed all open EventSources).
+		fetchFriendsSnapshot().catch((err) =>
+			console.warn('Initial friends fetch failed:', err.message)
+		);
 		loadSettings();
 		// 跟随系统主题变化
 		const mq = matchMedia('(prefers-color-scheme: dark)');

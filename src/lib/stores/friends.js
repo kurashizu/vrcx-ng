@@ -60,3 +60,18 @@ export function setFriendsSnapshot(data) {
 		data || { online: [], active: [], offline: [], total: 0, byAccount: {} }
 	);
 }
+
+/**
+ * One-shot HTTP fetch of the current friend snapshot. Useful as a fallback
+ * when SSE has not delivered any data yet (e.g. after a server restart
+ * killed the prior EventSource and the page just mounted).
+ *
+ * Returns the data on success, throws on failure.
+ */
+export async function fetchFriendsSnapshot() {
+	const r = await fetch('/api/friends');
+	if (!r.ok) throw new Error(`HTTP ${r.status}`);
+	const j = await r.json();
+	setFriendsSnapshot(j);
+	return j;
+}
