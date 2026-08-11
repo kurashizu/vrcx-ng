@@ -9,7 +9,7 @@
 	import { browser } from '$app/environment';
 	import { refreshAccounts } from '$lib/stores/accounts.js';
 	import { connectSSE } from '$lib/stores/sse.js';
-	import { fetchFriendsSnapshot } from '$lib/stores/friends.js';
+	import { fetchFriendsSnapshot, startEmptyFriendsWatchdog } from '$lib/stores/friends.js';
 	import { loadSettings, applyTheme } from '$lib/stores/settings.js';
 
 	let { children } = $props();
@@ -24,6 +24,17 @@
 		fetchFriendsSnapshot().catch((err) =>
 			console.warn('Initial friends fetch failed:', err.message)
 		);
+		// If the store stays empty after the initial fetch (e.g. the API
+		// returned nothing yet because pipelines were still starting),
+		// keep retrying every 3 s until it has data.
+		const stopWatchdog = startEmptyFriendsWatchdog();
+		// Re-fetch when the tab regains focus (covers laptop sleep, etc.)
+		const onVisibility = () => {
+			if (document.visibilityState === 'visible') {
+				fetchFriendsSnapshot().catch(() => {});
+			}
+		};
+		document.addEventListener('visibilitychange', onVisibility);
 		loadSettings();
 		// 跟随系统主题变化
 		const mq = matchMedia('(prefers-color-scheme: dark)');
@@ -32,6 +43,10 @@
 			const cur = document.documentElement.dataset.theme;
 			applyTheme(cur === 'light' || cur === 'dark' ? cur : 'system');
 		});
+		return () => {
+			stopWatchdog();
+			document.removeEventListener('visibilitychange', onVisibility);
+		};
 	});
 </script>
 

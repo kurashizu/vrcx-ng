@@ -59,6 +59,10 @@ export function connectSSE() {
 			reconnectTimer = setTimeout(connectSSE, 3000);
 		}
 	});
+
+	// EventSource has a built-in auto-reconnect on transient drops, but
+	// it doesn't emit a fresh event when it does — we still get a
+	// subsequent 'hello' on the new socket. No extra work needed here.
 }
 
 function applyAccountState(stateMap) {

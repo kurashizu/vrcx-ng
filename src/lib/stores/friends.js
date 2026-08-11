@@ -75,3 +75,33 @@ export async function fetchFriendsSnapshot() {
 	setFriendsSnapshot(j);
 	return j;
 }
+
+/**
+ * Start a watchdog that periodically refetches the friend snapshot when
+ * the store is still empty. Runs at most once every 3 s and stops as soon
+ * as the store contains data.
+ *
+ * Returns a stop() function to cancel the watchdog.
+ */
+export function startEmptyFriendsWatchdog() {
+	let cancelled = false;
+	const tick = async () => {
+		if (cancelled) return;
+		let empty = true;
+		const unsub = friendsData.subscribe((d) => {
+			empty = !(d?.total > 0);
+		});
+		unsub();
+		if (!empty) return;
+		try {
+			await fetchFriendsSnapshot();
+		} catch {
+			/* keep trying */
+		}
+		if (!cancelled) setTimeout(tick, 3000);
+	};
+	setTimeout(tick, 500);
+	return () => {
+		cancelled = true;
+	};
+}
