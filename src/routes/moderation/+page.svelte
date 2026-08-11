@@ -78,8 +78,11 @@
 
 <main class="page">
 	<header>
-		<h1>🚫 屏蔽管理</h1>
-		<p class="muted">查看和管理各个账号的静音 / 拉黑名单</p>
+		<a href="/" class="back">← 返回</a>
+		<div class="head-txt">
+			<h1>🚫 屏蔽管理</h1>
+			<p class="muted">查看和管理各个账号的静音 / 拉黑名单</p>
+		</div>
 	</header>
 
 	<div class="toolbar">

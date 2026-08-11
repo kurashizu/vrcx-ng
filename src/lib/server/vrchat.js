@@ -543,8 +543,9 @@ export async function createInstance(accountId, params = {}) {
 }
 
 /**
- * Send a self-invite to an instance. Requires the instance to allow
- * canRequestInvite.
+ * Send a self-invite to an instance. Works for every access type
+ * (public / friends / group / invite / invite+); only entering the
+ * instance is gated by access rules on the client side.
  * @param {string} accountId
  * @param {string} location  e.g. "wrld_xxx:12345"
  */

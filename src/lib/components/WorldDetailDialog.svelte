@@ -566,14 +566,12 @@
 																{/if}
 															</div>
 															<div class="inst-actions">
-																{#if parsed.canRequestInvite || parsed.accessType === 'invite' || parsed.accessType === 'invite+'}
-																	<button
-																		class="inst-self"
-																		disabled={selfInviteBusy === fullLoc}
-																		title="发送自我邀请"
-																		onclick={() => selfInviteTo(fullLoc)}
-																	>{selfInviteBusy === fullLoc ? '…' : '✉️'}</button>
-																{/if}
+																<button
+																class="inst-self"
+																disabled={selfInviteBusy === fullLoc}
+																title="发送自我邀请（所有访问类型均可用）"
+																onclick={() => selfInviteTo(fullLoc)}
+															>{selfInviteBusy === fullLoc ? '…' : '✉️'}</button>
 																<button
 																	class="inst-launch"
 																	title="启动"
@@ -624,7 +622,7 @@
 										{#if newInstResult?.location}
 											<p class="muted small mono">{newInstResult.location}</p>
 											<p class="muted small">
-												创建后可用「✉️ 邀请自己」发送自我邀请（仅邀请 / 邀请+ 类型），或直接启动。
+												创建后可用「✉️ 邀请自己」发送自我邀请（所有访问类型均可用），或直接启动。
 											</p>
 										{/if}
 									</div>

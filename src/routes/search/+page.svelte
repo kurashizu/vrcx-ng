@@ -118,7 +118,10 @@
 
 <main class="search-page">
 	<header class="search-header">
-		<h1>🔍 搜索</h1>
+		<div class="search-top">
+			<a href="/" class="back">← 返回</a>
+			<h1>🔍 搜索</h1>
+		</div>
 		<div class="search-bar">
 			<input
 				bind:this={inputEl}
@@ -317,6 +320,25 @@
 	.search-header h1 {
 		margin: 0;
 		font-size: 22px;
+	}
+	.search-top {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.back {
+		color: var(--text-dim);
+		font-size: 13px;
+		text-decoration: none;
+		padding: 4px 10px;
+		border-radius: 6px;
+		background: var(--bg-2);
+		border: 1px solid var(--border);
+	}
+	.back:hover {
+		background: var(--bg-3);
+		color: var(--text);
+		text-decoration: none;
 	}
 	.search-bar {
 		display: flex;
