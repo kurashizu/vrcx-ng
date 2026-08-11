@@ -271,6 +271,7 @@
 		flex: 1;
 		overflow-y: auto;
 		background: var(--bg-0);
+		position: relative;
 	}
 	.feed.bubbles {
 		display: flex;
@@ -279,13 +280,13 @@
 		gap: 10px;
 		padding: 12px;
 	}
-	.feed.bubbles .placeholder {
-		height: auto;
-		margin: auto;
-		align-self: center;
-	}
 	.placeholder {
-		height: 100%;
+		position: absolute;
+		inset: 0;
+		margin: auto;
+		width: fit-content;
+		height: fit-content;
+		max-width: 92%;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
