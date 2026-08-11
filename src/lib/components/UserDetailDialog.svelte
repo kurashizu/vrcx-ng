@@ -12,6 +12,8 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { timeAgo } from '$lib/shared/format.js';
 	import { openAvatarDetail } from '$lib/stores/avatarDetail.js';
+	import { openWorldDetail } from '$lib/stores/worldDetail.js';
+	import { parseLocation, accessTypeLabel, shortInstanceLabel } from '$lib/shared/location.js';
 
 	let data = $state(null);
 	let loading = $state(false);
@@ -102,10 +104,26 @@
 		if (!loc) return '';
 		if (loc === 'offline') return '离线';
 		if (loc === 'private') return 'Private World';
-		const [worldId, instanceId] = loc.split(':');
-		if (!instanceId || instanceId === '0') return worldId;
-		return `${worldId}\n${instanceId}`;
+		const parsed = parseLocation(loc);
+		if (!parsed?.worldId) return loc;
+		const short = shortInstanceLabel(parsed);
+		const type = accessTypeLabel(parsed) ? ` · ${accessTypeLabel(parsed)}` : '';
+		return (short || parsed.worldId) + type;
 	});
+
+	const currentLocationWorldId = $derived.by(() => {
+		const loc = data?.user?.location;
+		if (!loc || loc === 'offline' || loc === 'private') return '';
+		const wid = String(loc).split(':')[0];
+		return wid?.startsWith('wrld_') ? wid : '';
+	});
+
+	function openCurrentInstance() {
+		const wid = currentLocationWorldId;
+		if (!wid) return;
+		closeUserDetail();
+		openWorldDetail(wid, $userDetailRequest.accountId || undefined);
+	}
 </script>
 
 {#if $userDetailRequest?.userId}
@@ -196,11 +214,18 @@
 								<div class="cell-lbl">所在位置</div>
 								<div class="cell-val">
 									{#if data.currentWorld}
-										<strong>{data.currentWorld.name}</strong>
-										<div class="muted small">{instanceLabel}</div>
-										{#if data.currentWorld.occupants != null}
-											<div class="muted small">👥 {data.currentWorld.occupants} 人</div>
-										{/if}
+										<button class="loc-btn" onclick={openCurrentInstance} title="打开实例详情">
+											<strong>{data.currentWorld.name}</strong>
+											<div class="muted small">{instanceLabel} ↗</div>
+											{#if data.currentWorld.occupants != null}
+												<div class="muted small">👥 {data.currentWorld.occupants} 人</div>
+											{/if}
+										</button>
+									{:else if currentLocationWorldId}
+										<button class="loc-btn" onclick={openCurrentInstance} title="打开实例详情">
+											<strong>{instanceLabel || '未知世界'}</strong>
+											<span class="muted small">点击查看实例详情 ↗</span>
+										</button>
 									{:else if data.user?.location === 'private'}
 										Private World
 									{:else if data.user?.location === 'offline'}
@@ -544,6 +569,22 @@
 	.cell-val {
 		font-size: 13px;
 		word-break: break-word;
+	}
+	.loc-btn {
+		background: none;
+		border: none;
+		padding: 0;
+		margin: 0;
+		text-align: left;
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
+		display: block;
+		width: 100%;
+	}
+	.loc-btn:hover strong {
+		color: var(--accent);
+		text-decoration: underline;
 	}
 	.muted {
 		color: var(--text-faint);

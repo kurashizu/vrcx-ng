@@ -64,7 +64,8 @@
 	}
 
 	function openUser(f) {
-		openUserDetail(f.accountIds?.[0] || null, f.id);
+		closeFriendGrid();
+		openUserDetail(f.accountIds || null, f.id, f.displayName);
 	}
 
 	let gridEl;
@@ -180,7 +181,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		z-index: 300;
+		z-index: 40;
 		background: var(--bg-0);
 		display: flex;
 		flex-direction: column;

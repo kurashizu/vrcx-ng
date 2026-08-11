@@ -133,15 +133,21 @@ export function dismiss(id) {
 }
 
 /**
- * Dismiss all visible notifications for an account.
- * @param {string} accountId
+ * Dismiss all visible notifications, optionally scoped to one account.
+ * @param {string|null} accountId  pass null to clear across every account
  */
-export function dismissAll(accountId) {
-	getDb()
-		.prepare(
-			"UPDATE notifications SET dismissed_at = ? WHERE account_id = ? AND dismissed_at IS NULL"
-		)
-		.run(Date.now(), accountId);
+export function dismissAll(accountId = null) {
+	if (accountId) {
+		getDb()
+			.prepare(
+				"UPDATE notifications SET dismissed_at = ? WHERE account_id = ? AND dismissed_at IS NULL"
+			)
+			.run(Date.now(), accountId);
+	} else {
+		getDb()
+			.prepare("UPDATE notifications SET dismissed_at = ? WHERE dismissed_at IS NULL")
+			.run(Date.now());
+	}
 }
 
 /**

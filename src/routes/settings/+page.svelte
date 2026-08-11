@@ -9,8 +9,51 @@
 		resetSettings
 	} from '$lib/stores/settings.js';
 	import { toasts } from '$lib/stores/toast.js';
+	import {
+		accounts,
+		refreshAccounts,
+		loginAccount,
+		logoutAccount,
+		reconnectAccount,
+		removeAccount
+	} from '$lib/stores/accounts.js';
+	import AddAccountDialog from '$lib/components/AddAccountDialog.svelte';
+	import TwoFactorDialog from '$lib/components/TwoFactorDialog.svelte';
 
 	let activeCategory = $state('general');
+	let addOpen = $state(false);
+	let twofaOpen = $state(false);
+	let twofaAccountId = $state('');
+	let twofaMethods = $state([]);
+
+	function on2faEvent(e) {
+		twofaAccountId = e.detail.accountId;
+		twofaMethods = e.detail.methods;
+		twofaOpen = true;
+	}
+
+	async function doLogin(id) {
+		const r = await loginAccount(id);
+		if (r.requires2fa) {
+			window.dispatchEvent(
+				new CustomEvent('vrc-2fa-required', { detail: { accountId: id, methods: r.requires2fa } })
+			);
+		}
+	}
+
+	async function doRemove(id) {
+		if (!confirm('删除该账号？本地保存的密码也会被移除。')) return;
+		await removeAccount(id);
+	}
+
+	onMount(() => {
+		if (browser) {
+			loadSettings();
+			refreshAccounts();
+			window.addEventListener('vrc-2fa-required', on2faEvent);
+		}
+		return () => window.removeEventListener('vrc-2fa-required', on2faEvent);
+	});
 
 	onMount(() => {
 		if (browser) loadSettings();
@@ -25,6 +68,7 @@
 	}
 
 	const CATEGORIES = [
+		{ id: 'accounts', icon: '👤', label: '账号' },
 		{ id: 'general', icon: '⚙️', label: '常规' },
 		{ id: 'feed', icon: '📡', label: '动态' },
 		{ id: 'notification', icon: '🔔', label: '通知' },
@@ -144,7 +188,68 @@
 
 			<!-- 主内容 -->
 			<main class="content">
-				{#if activeCategory === 'general'}
+				{#if activeCategory === 'accounts'}
+					<h2>账号管理</h2>
+
+					<div class="acct-toolbar">
+						<button class="btn primary" onclick={() => (addOpen = true)}>＋ 添加账号</button>
+						<button class="btn ghost" onclick={refreshAccounts}>↻ 刷新</button>
+					</div>
+
+					{#if $accounts.length === 0}
+						<div class="empty">还没有账号。点击「添加账号」登录你的 VRChat 账号。</div>
+					{:else}
+						<div class="acct-list">
+							{#each $accounts as a (a.id)}
+								<div class="acct-card">
+									<div class="acct-head">
+										<div class="acct-avatar">
+											{#if a.currentUser?.currentAvatarThumbnailImageUrl}
+												<img
+													src={a.currentUser.currentAvatarThumbnailImageUrl}
+													alt=""
+													loading="lazy"
+												/>
+											{:else}
+												<span>{(a.displayName || a.username || '?').slice(0, 1).toUpperCase()}</span>
+											{/if}
+										</div>
+										<div class="acct-id">
+											<div class="acct-name">
+												{a.displayName || a.username}
+												<span class="dot" class:online={a.connected} class:logged={a.loggedIn && !a.connected}></span>
+											</div>
+											<div class="acct-username">{a.username}{a.currentUser?.id ? ` · ${a.currentUser.id}` : ''}</div>
+											<div class="acct-meta">
+												{#if a.connected}
+													<span class="pill ok">已连接</span>
+												{:else if a.loggedIn}
+													<span class="pill warn">已登录 / 未连接</span>
+												{:else}
+													<span class="pill">未登录</span>
+												{/if}
+												{#if a.lastLoginAt}
+													<span class="meta">登录于 {new Date(a.lastLoginAt).toLocaleString()}</span>
+												{/if}
+												{#if a.lastError}
+													<span class="meta err">⚠ {a.lastError}</span>
+												{/if}
+											</div>
+										</div>
+									</div>
+									<div class="acct-actions">
+										<button class="btn xs" disabled={a.connected} onclick={() => reconnectAccount(a.id)} title="重新建立 websocket 连接">重连</button>
+										{#if !a.loggedIn}
+											<button class="btn xs" onclick={() => doLogin(a.id)}>重新登录</button>
+										{/if}
+										<button class="btn xs" disabled={!a.loggedIn} onclick={() => logoutAccount(a.id)}>登出</button>
+										<button class="btn xs danger" onclick={() => doRemove(a.id)}>删除</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				{:else if activeCategory === 'general'}
 					<h2>常规</h2>
 
 					<div class="setting-row">
@@ -555,6 +660,14 @@
 	{/if}
 </div>
 
+<AddAccountDialog bind:open={addOpen} onClose={() => (addOpen = false)} />
+<TwoFactorDialog
+	bind:open={twofaOpen}
+	accountId={twofaAccountId}
+	methods={twofaMethods}
+	onClose={() => (twofaOpen = false)}
+/>
+
 <style>
 	.settings-page {
 		display: flex;
@@ -735,5 +848,159 @@
 		display: inline-block;
 		width: 80px;
 		color: var(--text-faint);
+	}
+
+	/* ---- 账号管理 ---- */
+	.acct-toolbar {
+		display: flex;
+		gap: 8px;
+		margin-bottom: 14px;
+	}
+	.btn {
+		background: var(--bg-2);
+		border: 1px solid var(--border);
+		color: var(--text);
+		border-radius: 8px;
+		padding: 7px 14px;
+		font-size: 13px;
+		cursor: pointer;
+	}
+	.btn:hover {
+		background: var(--bg-3);
+	}
+	.btn.primary {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: #fff;
+	}
+	.btn.primary:hover {
+		opacity: 0.9;
+	}
+	.btn.xs {
+		padding: 4px 10px;
+		font-size: 12px;
+	}
+	.btn.danger {
+		color: var(--danger);
+		border-color: rgba(255, 93, 108, 0.4);
+	}
+	.btn:disabled {
+		opacity: 0.45;
+		cursor: default;
+	}
+	.empty {
+		padding: 30px;
+		text-align: center;
+		color: var(--text-faint);
+		background: var(--bg-2);
+		border: 1px dashed var(--border);
+		border-radius: 10px;
+	}
+	.acct-list {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.acct-card {
+		background: var(--bg-2);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		padding: 12px 14px;
+	}
+	.acct-head {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+	.acct-avatar {
+		width: 46px;
+		height: 46px;
+		border-radius: 10px;
+		overflow: hidden;
+		flex: none;
+		background: var(--bg-3);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 20px;
+		font-weight: 800;
+		color: var(--text-dim);
+		border: 1px solid var(--border);
+	}
+	.acct-avatar img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+	.acct-id {
+		min-width: 0;
+		flex: 1;
+	}
+	.acct-name {
+		font-size: 14px;
+		font-weight: 700;
+		display: flex;
+		align-items: center;
+		gap: 7px;
+	}
+	.dot {
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--text-faint);
+		flex: none;
+	}
+	.dot.online {
+		background: var(--online);
+		box-shadow: 0 0 6px var(--online);
+	}
+	.dot.logged {
+		background: var(--warn);
+	}
+	.acct-username {
+		font-size: 12px;
+		color: var(--text-dim);
+		margin-top: 1px;
+		word-break: break-all;
+	}
+	.acct-meta {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+		margin-top: 4px;
+	}
+	.pill {
+		font-size: 10px;
+		font-weight: 700;
+		padding: 1px 8px;
+		border-radius: 999px;
+		background: var(--bg-3);
+		border: 1px solid var(--border);
+		color: var(--text-faint);
+	}
+	.pill.ok {
+		background: rgba(61, 220, 151, 0.12);
+		color: var(--online);
+		border-color: rgba(61, 220, 151, 0.3);
+	}
+	.pill.warn {
+		background: rgba(255, 180, 84, 0.12);
+		color: var(--warn);
+		border-color: rgba(255, 180, 84, 0.3);
+	}
+	.meta {
+		font-size: 11px;
+		color: var(--text-faint);
+	}
+	.meta.err {
+		color: var(--danger);
+	}
+	.acct-actions {
+		display: flex;
+		gap: 6px;
+		margin-top: 10px;
+		padding-top: 10px;
+		border-top: 1px solid var(--border);
 	}
 </style>

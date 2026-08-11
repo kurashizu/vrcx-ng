@@ -50,6 +50,28 @@ export const friendNameById = derived(friendsData, ($data) => {
 	return m;
 });
 
+/**
+ * userId → { displayName, thumbnail, platform, location, worldName } resolved
+ * from the aggregated friend snapshot (used as client-side fallbacks).
+ * @type {import('svelte/store').Readable<Map<string, {displayName:string, thumbnail:string, platform:string, location:string, worldName:string}>>}
+ */
+export const friendInfoById = derived(friendsData, ($data) => {
+	const m = new Map();
+	for (const list of [$data.online, $data.active, $data.offline]) {
+		for (const f of list) {
+			if (m.has(f.id)) continue;
+			m.set(f.id, {
+				displayName: f.displayName || '',
+				thumbnail: f.currentAvatarThumbnailImageUrl || '',
+				platform: f.platform || '',
+				location: f.location || '',
+				worldName: f.worldName || ''
+			});
+		}
+	}
+	return m;
+});
+
 export const filteredFriends = derived(
 	[friendsData, friendSearch, friendGroupFilter, friendAccountFilter],
 	([$data, $search, $group, $account]) => {

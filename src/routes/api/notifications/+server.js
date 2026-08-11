@@ -22,7 +22,7 @@ export async function POST({ request }) {
 	}
 	if (action === 'dismiss') {
 		if (body.id) dismiss(body.id);
-		else if (body.accountId) dismissAll(body.accountId);
+		else dismissAll(body.accountId || null);
 		return json({ ok: true });
 	}
 	return json({ error: 'unknown action' }, { status: 400 });

@@ -9,7 +9,7 @@
 	import { toasts } from '$lib/stores/toast.js';
 	import { browser } from '$app/environment';
 	import { settings } from '$lib/stores/settings.js';
-	import { friendNameById } from '$lib/stores/friends.js';
+	import { friendNameById, friendInfoById } from '$lib/stores/friends.js';
 
 	/** @type {{ entry: import('$lib/shared/feed.js').FeedEntry }} */
 	let { entry } = $props();
@@ -23,6 +23,10 @@
 			? entry.displayName
 			: $friendNameById.get(entry.userId) || entry.displayName || entry.userId || '?'
 	);
+	// Private avatars often come back without a thumbnail in the event payload;
+	// fall back to the friend snapshot (which the server backfills via getAvatar).
+	const friendInfo = $derived($friendInfoById.get(entry.userId));
+	const userThumb = $derived(entry.userThumbnailUrl || friendInfo?.thumbnail || '');
 	const accColor = $derived(stringHue(account?.displayName || entry.accountId));
 	const userHue = $derived(stringHue(displayName));
 
@@ -213,8 +217,8 @@
 		title={displayName}
 		onclick={(e) => { e.stopPropagation(); clickUser(e); }}
 	>
-		{#if entry.userThumbnailUrl}
-			<img src={entry.userThumbnailUrl} alt="" loading="lazy" />
+		{#if userThumb}
+			<img src={userThumb} alt="" loading="lazy" />
 		{:else}
 			<span>{displayName.slice(0, 1).toUpperCase()}</span>
 		{/if}
