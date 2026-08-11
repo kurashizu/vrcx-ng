@@ -67,6 +67,17 @@ export async function POST({ params, request }) {
 					{ status: 400 }
 				);
 			}
+			case 'unfriend': {
+				const r = await unfriend(params.id, userId);
+				if (r.ok) {
+					removeFriend(params.id, userId);
+					return json({ ok: true });
+				}
+				return json(
+					{ ok: false, error: r.data?.error?.message || r.data?.error || `HTTP ${r.status}` },
+					{ status: 400 }
+				);
+			}
 			default:
 				return json({ error: `Unknown action: ${action}` }, { status: 400 });
 		}

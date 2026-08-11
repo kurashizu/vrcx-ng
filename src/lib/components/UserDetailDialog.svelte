@@ -23,6 +23,18 @@ import { vrImage } from '$lib/shared/format.js';
 	let tab = $state('about'); // 'about' | 'avatars' | 'worlds' | 'badges'
 	let inflight = null;
 
+	// ---- Operation account: every action (friend request, unfriend,
+	// mute/block/invite...) runs as this account, chosen explicitly.
+	let opAccountId = $state('');
+	const loggedInAccounts = $derived($accounts.filter((a) => a.loggedIn));
+	$effect(() => {
+		const want = $userDetailRequest?.accountId;
+		if (want && loggedInAccounts.some((a) => a.id === want)) opAccountId = want;
+		if (!loggedInAccounts.some((a) => a.id === opAccountId)) {
+			opAccountId = want || loggedInAccounts[0]?.id || '';
+		}
+	});
+
 	$effect(() => {
 		const req = $userDetailRequest;
 		if (!req?.userId) {
@@ -74,6 +86,23 @@ import { vrImage } from '$lib/shared/format.js';
 				toasts.success('操作成功');
 			}
 		};
+	}
+
+	async function unfriendUser(userId) {
+		if (!confirm('确定删除好友？该操作会解除好友关系。')) return;
+		const r = await fetch(`/api/accounts/${opAccountId}/actions`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ action: 'unfriend', userId })
+		});
+		const j = await r.json().catch(() => ({}));
+		if (j.ok) {
+			toasts.success('已删除好友');
+			// refresh so isFriend reflects the new state
+			loadUser($userDetailRequest.accountId, $userDetailRequest.userId);
+		} else {
+			toasts.error(j.error || '删除好友失败');
+		}
 	}
 
 	function copyId() {
@@ -293,20 +322,31 @@ import { vrImage } from '$lib/shared/format.js';
 
 						<section class="block">
 							<h3>操作</h3>
+							{#if loggedInAccounts.length > 0}
+								<label class="op-account">
+									<span class="lbl">操作账号</span>
+									<select bind:value={opAccountId} class="ipt small">
+										{#each loggedInAccounts as a (a.id)}
+											<option value={a.id}>{a.displayName}</option>
+										{/each}
+									</select>
+								</label>
+							{/if}
 							<div class="actions">
 								{#if data.user?.isFriend}
 									{#if data.user?.location && data.user.location !== 'offline' && data.user.location !== 'private'}
-										<button class="primary" onclick={action($userDetailRequest.accountId, 'requestInvite', data.user.id)}>
+										<button class="primary" onclick={action(opAccountId, 'requestInvite', data.user.id)}>
 											✉️ 请求加入 TA 的实例
 										</button>
 									{/if}
-									<button class="ghost" onclick={action($userDetailRequest.accountId, 'invite', data.user.id)} title="邀请 TA 加入你当前所在的实例">
+									<button class="ghost" onclick={action(opAccountId, 'invite', data.user.id)} title="邀请 TA 加入你当前所在的实例">
 										📨 邀请 TA 加入我的实例
 									</button>
-									<button class="ghost" onclick={action($userDetailRequest.accountId, 'mute', data.user.id)}>🔕 静音</button>
-									<button class="ghost danger" onclick={action($userDetailRequest.accountId, 'block', data.user.id)}>🚫 屏蔽</button>
+									<button class="ghost" onclick={action(opAccountId, 'mute', data.user.id)}>🔕 静音</button>
+									<button class="ghost danger" onclick={action(opAccountId, 'block', data.user.id)}>🚫 屏蔽</button>
+									<button class="ghost danger" onclick={unfriendUser(data.user.id)}>🗑 删除好友</button>
 								{:else}
-									<button class="primary" onclick={action($userDetailRequest.accountId, 'friendRequest', data.user.id)}>🤝 发送好友请求</button>
+									<button class="primary" onclick={action(opAccountId, 'friendRequest', data.user.id)}>🤝 发送好友请求</button>
 								{/if}
 								<button class="ghost" onclick={copyId}>📋 复制 ID</button>
 								<button class="ghost" onclick={copyName}>📋 复制显示名</button>
@@ -622,6 +662,21 @@ import { vrImage } from '$lib/shared/format.js';
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
+	}
+	.op-account {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-bottom: 10px;
+	}
+	.op-account .lbl {
+		font-size: 12px;
+		color: var(--text-dim);
+		white-space: nowrap;
+	}
+	.op-account select {
+		flex: 1;
+		min-width: 0;
 	}
 	.actions {
 		display: flex;

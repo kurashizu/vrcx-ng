@@ -432,6 +432,16 @@ export async function sendRequestInvite(accountId, userId, message) {
  * @param {string} accountId
  * @param {string} userId
  */
+/**
+ * Remove a friend relationship (DELETE /auth/user/friends/:userId).
+ * @param {string} accountId
+ * @param {string} userId
+ */
+export async function unfriend(accountId, userId) {
+	const { status, data } = await api(accountId, `auth/user/friends/${userId}`, { method: 'DELETE' });
+	return { ok: status === 200 || status === 204, status, data };
+}
+
 export async function sendFriendRequest(accountId, userId) {
 	const { status, data } = await api(accountId, `user/${userId}/friendRequest`, {
 		method: 'POST'
