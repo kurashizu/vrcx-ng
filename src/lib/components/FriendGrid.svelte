@@ -77,14 +77,38 @@ import { vrImage } from '$lib/shared/format.js';
 			.filter(match)
 			.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
 
+		// Flatten all world-bucketed + traveling friends into a single list of
+		// cards so we can render one bubble-flow grid instead of one grid
+		// per world (most friends are alone in their own instance, so the
+		// per-world header just wasted a row).
+		const onlineCards = [];
+		for (const wg of worlds) {
+			for (const ig of wg.instances) for (const f of ig.friends) {
+				onlineCards.push({
+					f,
+					worldName: wg.worldName,
+					chipLabel: ig.label,
+					chipColor: accessTypeColor(parseLocation(f.location)?.accessTypeLabel)
+				});
+			}
+		}
+		for (const f of lone) {
+			onlineCards.push({ f, worldName: f.worldName || '', chipLabel: '旅行中', chipColor: '' });
+		}
+		// Sort by world name, then friend name — keeps people in the same
+		// world adjacent without dedicating a whole row to it.
+		onlineCards.sort((a, b) => {
+			const w = String(a.worldName).localeCompare(String(b.worldName));
+			return w !== 0 ? w : byName(a.f, b.f);
+		});
+
 		const secs = [];
-		if (worlds.length || lone.length) {
+		if (onlineCards.length) {
 			secs.push({
 				key: 'worlds',
-				label: '🌍 在线 · 按世界',
-				count: worlds.reduce((sum, w) => sum + w.count, 0) + lone.length,
-				worlds,
-				lone
+				label: '🌍 在线',
+				count: onlineCards.length,
+				cards: onlineCards
 			});
 		}
 		if (incognito.length) {
@@ -175,180 +199,61 @@ import { vrImage } from '$lib/shared/format.js';
 
 					{#if sec.key === 'offline' && collapsed.offline}
 						<div class="collapsed-hint">已折叠 {sec.count} 个离线好友</div>
-					{:else if sec.worlds}
-						{#each sec.worlds as wg (wg.worldId)}
-							<div class="world-head">
-								<span class="ww">🌍</span>
-								<span class="wname">{wg.worldName}</span>
-								<span class="n">{wg.count}</span>
-							</div>
-							{#if wg.instances.length > 1}
-								{#each wg.instances as ig (ig.label)}
-									<div class="inst-head">↳ {ig.label}</div>
-									<div class="grid">
-										{#each ig.friends as f (f.id)}
-											{@const chip = instChip(f)}
-											{@const hue = trustColor(f) || '0'}
+					{:else if sec.cards}
+						<div class="bubbles">
+							{#each sec.cards as c (c.f.id)}
+								{@const f = c.f}
+								{@const hue = trustColor(f) || '0'}
+								<button
+									class="card"
+									class:bucket={sec.key}
+									onclick={() => openUser(f)}
+									title={f.displayName}
+								>
+									<div class="avatar">
+										{#if f.currentAvatarThumbnailImageUrl}
+											<img src={vrImage(f.currentAvatarThumbnailImageUrl, f.accountIds?.[0] || '')} alt="" loading="lazy" />
+										{:else}
+											<div class="noimg" style:background={`hsl(${hue} 60% 30%)`}>
+												{String(f.displayName || '?').slice(0, 1).toUpperCase()}
+											</div>
+										{/if}
+										<span class="status-dot" class:bucket={sec.key}></span>
+										{#if f.accountIds?.length > 1}
+											<span class="multi" title={`${f.accountIds.length} 个账号看到`}>×{f.accountIds.length}</span>
+										{/if}
+										{#if f.currentAvatar}
 											<button
-												class="card"
-												class:bucket={sec.key}
-												onclick={() => openUser(f)}
-												title={f.displayName}
-											>
-												<div class="avatar">
-													{#if f.currentAvatarThumbnailImageUrl}
-														<img src={vrImage(f.currentAvatarThumbnailImageUrl, f.accountIds?.[0] || '')} alt="" loading="lazy" />
-													{:else}
-														<div class="noimg" style:background={`hsl(${hue} 60% 30%)`}>
-															{String(f.displayName || '?').slice(0, 1).toUpperCase()}
-														</div>
-													{/if}
-													<span class="status-dot" class:bucket={sec.key}></span>
-													{#if f.accountIds?.length > 1}
-														<span class="multi" title={`${f.accountIds.length} 个账号看到`}>×{f.accountIds.length}</span>
-													{/if}
-													{#if f.currentAvatar}
-														<button
-															class="av-open"
-															title="查看模型"
-															onclick={(e) => { e.stopPropagation(); openAvatarDetail(f.currentAvatar, f.accountIds?.[0] || ''); }}
-														>🧍</button>
-													{/if}
-												</div>
-												<div class="meta">
-													<div class="name {trustColor(f)}" style:--trust-hue={hue}>{f.displayName}{#if f.vrcPlus}<span class="vrcplus" title="VRC+">◈+</span>{/if}</div>
-													{#if f.statusDescription}
-														<div class="sub">{f.statusDescription}</div>
-													{/if}
-													<div class="world" title={f.worldName || f.location}>
-														{#if f.worldName}
-															<span class="wname">🌍 {f.worldName}</span>
-														{:else if f.location && f.location !== 'offline' && f.location !== 'private'}
-															<span class="wname">🌍 未知世界</span>
-														{/if}
-														{#if chip}
-															<span class="chip {chip.color}">{chip.label}</span>
-														{/if}
-													</div>
-													{#if f.platform}
-														<div class="plat">{f.platform === 'standalonewindows' ? '🖥 PC' : f.platform === 'android' ? '📱 Quest' : f.platform}</div>
-													{/if}
-												</div>
-											</button>
-										{/each}
+												class="av-open"
+												title="查看模型"
+												onclick={(e) => { e.stopPropagation(); openAvatarDetail(f.currentAvatar, f.accountIds?.[0] || ''); }}
+											>🧍</button>
+										{/if}
 									</div>
-								{/each}
-							{:else}
-								<div class="grid">
-									{#each wg.instances[0].friends as f (f.id)}
-										{@const chip = instChip(f)}
-										{@const hue = trustColor(f) || '0'}
-										<button
-											class="card"
-											class:bucket={sec.key}
-											onclick={() => openUser(f)}
-											title={f.displayName}
-										>
-											<div class="avatar">
-												{#if f.currentAvatarThumbnailImageUrl}
-													<img src={vrImage(f.currentAvatarThumbnailImageUrl, f.accountIds?.[0] || '')} alt="" loading="lazy" />
-												{:else}
-													<div class="noimg" style:background={`hsl(${hue} 60% 30%)`}>
-														{String(f.displayName || '?').slice(0, 1).toUpperCase()}
-													</div>
-												{/if}
-												<span class="status-dot" class:bucket={sec.key}></span>
-												{#if f.accountIds?.length > 1}
-													<span class="multi" title={`${f.accountIds.length} 个账号看到`}>×{f.accountIds.length}</span>
-												{/if}
-												{#if f.currentAvatar}
-													<button
-														class="av-open"
-														title="查看模型"
-														onclick={(e) => { e.stopPropagation(); openAvatarDetail(f.currentAvatar, f.accountIds?.[0] || ''); }}
-													>🧍</button>
-												{/if}
-											</div>
-											<div class="meta">
-												<div class="name {trustColor(f)}" style:--trust-hue={hue}>{f.displayName}{#if f.vrcPlus}<span class="vrcplus" title="VRC+">◈+</span>{/if}</div>
-												{#if f.statusDescription}
-													<div class="sub">{f.statusDescription}</div>
-												{/if}
-												<div class="world" title={f.worldName || f.location}>
-													{#if f.worldName}
-														<span class="wname">🌍 {f.worldName}</span>
-													{:else if f.location && f.location !== 'offline' && f.location !== 'private'}
-														<span class="wname">🌍 未知世界</span>
-													{/if}
-													{#if chip}
-														<span class="chip {chip.color}">{chip.label}</span>
-													{/if}
-												</div>
-												{#if f.platform}
-													<div class="plat">{f.platform === 'standalonewindows' ? '🖥 PC' : f.platform === 'android' ? '📱 Quest' : f.platform}</div>
-												{/if}
-											</div>
-										</button>
-									{/each}
-								</div>
-							{/if}
-						{/each}
-						{#if sec.lone.length > 0}
-							<div class="grid">
-								{#each sec.lone as f (f.id)}
-									{@const chip = instChip(f)}
-									{@const hue = trustColor(f) || '0'}
-									<button
-										class="card"
-										class:bucket={sec.key}
-										onclick={() => openUser(f)}
-										title={f.displayName}
-									>
-										<div class="avatar">
-											{#if f.currentAvatarThumbnailImageUrl}
-												<img src={vrImage(f.currentAvatarThumbnailImageUrl, f.accountIds?.[0] || '')} alt="" loading="lazy" />
-											{:else}
-												<div class="noimg" style:background={`hsl(${hue} 60% 30%)`}>
-													{String(f.displayName || '?').slice(0, 1).toUpperCase()}
-												</div>
+									<div class="meta">
+										<div class="name {trustColor(f)}" style:--trust-hue={hue}>{f.displayName}{#if f.vrcPlus}<span class="vrcplus" title="VRC+">◈+</span>{/if}</div>
+										{#if f.statusDescription}
+											<div class="sub">{f.statusDescription}</div>
+										{/if}
+										<div class="world" title={(c.worldName || f.location || '') + (f.location && f.location !== 'offline' ? ' (' + f.location + ')' : '')}>
+											{#if c.worldName}
+												<span class="wname">🌍 {c.worldName}</span>
+											{:else if f.location && f.location !== 'offline' && f.location !== 'private'}
+												<span class="wname">🌍 未知世界</span>
 											{/if}
-											<span class="status-dot" class:bucket={sec.key}></span>
-											{#if f.accountIds?.length > 1}
-												<span class="multi" title={`${f.accountIds.length} 个账号看到`}>×{f.accountIds.length}</span>
-											{/if}
-											{#if f.currentAvatar}
-												<button
-													class="av-open"
-													title="查看模型"
-													onclick={(e) => { e.stopPropagation(); openAvatarDetail(f.currentAvatar, f.accountIds?.[0] || ''); }}
-												>🧍</button>
+											{#if c.chipLabel}
+												<span class="chip {c.chipColor}">{c.chipLabel}</span>
 											{/if}
 										</div>
-										<div class="meta">
-											<div class="name {trustColor(f)}" style:--trust-hue={hue}>{f.displayName}{#if f.vrcPlus}<span class="vrcplus" title="VRC+">◈+</span>{/if}</div>
-											{#if f.statusDescription}
-												<div class="sub">{f.statusDescription}</div>
-											{/if}
-											<div class="world" title={f.worldName || f.location}>
-												{#if f.worldName}
-													<span class="wname">🌍 {f.worldName}</span>
-												{:else if f.location && f.location !== 'offline' && f.location !== 'private'}
-													<span class="wname">🌍 未知世界</span>
-												{/if}
-												{#if chip}
-													<span class="chip {chip.color}">{chip.label}</span>
-												{/if}
-											</div>
-											{#if f.platform}
-												<div class="plat">{f.platform === 'standalonewindows' ? '🖥 PC' : f.platform === 'android' ? '📱 Quest' : f.platform}</div>
-											{/if}
-										</div>
-									</button>
-								{/each}
-							</div>
-						{/if}
+										{#if f.platform}
+											<div class="plat">{f.platform === 'standalonewindows' ? '🖥 PC' : f.platform === 'android' ? '📱 Quest' : f.platform}</div>
+										{/if}
+									</div>
+								</button>
+							{/each}
+						</div>
 					{:else}
-						<div class="grid">
+						<div class="bubbles">
 							{#each sec.friends as f (f.id)}
 								{@const chip = instChip(f)}
 								{@const hue = trustColor(f) || '0'}
@@ -507,38 +412,7 @@ import { vrImage } from '$lib/shared/format.js';
 		align-items: center;
 		gap: 8px;
 	}
-	.world-head {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		margin: 4px 2px 10px;
-		font-size: 13px;
-		font-weight: 700;
-		color: var(--text);
-		background: var(--bg-1);
-		border: 1px solid var(--border);
-		border-left: 3px solid var(--accent);
-		border-radius: 8px;
-		padding: 6px 10px;
-	}
-	.world-head .ww {
-		flex: none;
-	}
-	.world-head .wname {
-		flex: 1;
-		min-width: 0;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.inst-head {
-		font-size: 11px;
-		font-weight: 600;
-		color: var(--text-dim);
-		padding: 6px 2px 4px;
-		letter-spacing: 0.02em;
-	}
-	.n {
+.n {
 		flex: none;
 		font-size: 11px;
 		font-weight: 700;
@@ -557,10 +431,11 @@ import { vrImage } from '$lib/shared/format.js';
 		color: var(--text-faint);
 		padding: 8px 2px 0;
 	}
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+	.bubbles {
+		display: flex;
+		flex-wrap: wrap;
 		gap: 10px;
+		align-items: stretch;
 	}
 	.card {
 		display: flex;
@@ -574,6 +449,8 @@ import { vrImage } from '$lib/shared/format.js';
 		cursor: pointer;
 		color: inherit;
 		transition: transform 0.12s ease, border-color 0.12s ease;
+		flex: 0 0 158px;
+		width: 158px;
 	}
 	.card:hover {
 		transform: translateY(-2px);
@@ -678,9 +555,8 @@ import { vrImage } from '$lib/shared/format.js';
 		margin-top: 3px;
 	}
 	@media (max-width: 720px) {
-		.grid {
-			grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-		}
+		.bubbles { gap: 8px; }
+		.card { flex-basis: 130px; width: 130px; }
 		.search {
 			display: none;
 		}

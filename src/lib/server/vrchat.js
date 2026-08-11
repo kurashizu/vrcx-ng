@@ -371,7 +371,9 @@ export async function getProfile(accountId, userId) {
  * @param {string} userId
  */
 export async function getUserAvatars(accountId, userId) {
-	const { status, data } = await api(accountId, `users/${userId}/avatars`, { params: { n: 50 } });
+	const { status, data } = await api(accountId, 'avatars', {
+		params: { userId, n: 50, sort: 'updated', order: 'descending' }
+	});
 	if (status === 200) return data;
 	return [];
 }
@@ -382,19 +384,20 @@ export async function getUserAvatars(accountId, userId) {
  * @param {string} userId
  */
 export async function getUserWorlds(accountId, userId) {
-	const { status, data } = await api(accountId, `users/${userId}/worlds`, { params: { n: 50 } });
+	const { status, data } = await api(accountId, 'worlds', {
+		params: { userId, n: 50, sort: 'updated', order: 'descending' }
+	});
 	if (status === 200) return data;
 	return [];
 }
 
 /**
- * User badges
- * @param {string} accountId
- * @param {string} userId
+ * VRChat doesn't expose a per-user badges endpoint; the current user
+ * object carries its own `badges` array, so we read it from there.
  */
 export async function getUserBadges(accountId, userId) {
-	const { status, data } = await api(accountId, `users/${userId}/badges`);
-	if (status === 200) return data;
+	const { status, data } = await api(accountId, `users/${userId}`);
+	if (status === 200 && Array.isArray(data?.badges)) return data.badges;
 	return [];
 }
 

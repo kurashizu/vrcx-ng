@@ -15,7 +15,14 @@ import { vrImage } from '$lib/shared/format.js';
 	// location (world + instance chip). 'private' means incognito.
 	function accLoc(acc) {
 		const loc = (acc.currentUser?.location || '').trim();
-		if (!loc || loc === 'offline') return { text: '离线', cls: 'off', loc: '' };
+		const st = acc.currentUser?.status || '';
+		// An account whose session user has a non-offline status but no
+		// location is logged in to the VRChat desktop client without
+		// having joined a world — that is NOT the same as being offline.
+		if (!loc || loc === 'offline') {
+			if (st && st !== 'offline') return { text: '在线 · 未加入世界', cls: 'online-idle', loc: '' };
+			return { text: '离线', cls: 'off', loc: '' };
+		}
 		if (loc === 'private') return { text: '隐身中', cls: 'invis', loc: '' };
 		const p = parseLocation(loc);
 		if (!p?.worldId) return { text: loc, cls: '', loc };
@@ -319,6 +326,9 @@ import { vrImage } from '$lib/shared/format.js';
 	}
 	.loc-txt.invis {
 		color: var(--text-dim);
+	}
+	.loc-txt.online-idle {
+		color: var(--online);
 	}
 	.inst-chip {
 		font-size: 9px;

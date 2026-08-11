@@ -611,19 +611,31 @@ function normalizeFriend(f, activeSet, onlineSet) {
 /**
  * Try to derive a trust rank label from the user's tags (VRC adds tags like
  * 'system_trust_veteran' etc.) when `trustRank` isn't returned directly.
+ * VRChat returns CUMULATIVE tags (a veteran carries basic/known/trusted/
+ * veteran at once), so we pick the HIGHEST level present.
+ * @param {string[]} tags
+ * @returns {string}
  */
 function deriveTrustRankFromTags(tags) {
 	if (!Array.isArray(tags)) return '';
+	const order = ['visitor', 'new_user', 'user', 'known', 'trusted', 'veteran', 'legend'];
+	let best = -1;
+	let rank = '';
 	for (const t of tags) {
 		const m = String(t).match(/system_trust_(.+)/);
-		if (m) {
-			const raw = m[1].replace(/_/g, ' ').trim();
-			// normalize aliases to canonical rank names
-			if (raw === 'basic') return 'user';
-			return raw;
+		if (!m) continue;
+		const raw = m[1].replace(/_/g, ' ').trim();
+		// map raw to canonical order index
+		let key = raw === 'basic' ? 'user' : raw.replace(/\s+/g, '_');
+		if (key === 'new_user') key = 'new_user';
+		const i = order.indexOf(key);
+		if (i === -1) continue;
+		if (i > best) {
+			best = i;
+			rank = key.replace(/_/g, ' '); // canonical display label e.g. 'trusted', 'veteran'
 		}
 	}
-	return '';
+	return rank;
 }
 
 /**
