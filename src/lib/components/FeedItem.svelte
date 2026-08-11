@@ -4,7 +4,7 @@
 	import { accounts } from '$lib/stores/accounts.js';
 	import { showContextMenu } from '$lib/stores/contextMenu.js';
 	import { openUserDetail } from '$lib/stores/userDetail.js';
-	import { vrcLaunchUrl } from '$lib/shared/trust.js';
+	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { toasts } from '$lib/stores/toast.js';
 	import { browser } from '$app/environment';
 	import { settings } from '$lib/stores/settings.js';
@@ -80,9 +80,9 @@
 
 	function clickChip(chip) {
 		if (chip.key === 'world' || chip.key === 'loc') {
-			if (!chip.location) return;
-			const u = vrcLaunchUrl(chip.location);
-			if (u && browser) window.location.href = u;
+			if (chip.worldId || chip.location) {
+				openWorldDetail(chip.worldId || chip.location.split(':')[0], entry.accountId);
+			}
 		} else if (chip.key === 'avatar-prev' || chip.key === 'avatar-next') {
 			if (chip.avatarId) {
 				toasts.push(`正在搜索 ${chip.avatarId}…`, 'info');
@@ -160,8 +160,8 @@
 
 	function clickWorldHead() {
 		if (entry.location && entry.location !== 'offline' && entry.location !== 'private') {
-			const u = vrcLaunchUrl(entry.location);
-			if (u && browser) window.location.href = u;
+			const worldId = entry.worldId || entry.location.split(':')[0];
+			if (worldId) openWorldDetail(worldId, entry.accountId);
 		}
 	}
 </script>

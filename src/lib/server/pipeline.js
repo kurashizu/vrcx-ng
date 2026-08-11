@@ -4,6 +4,7 @@ import { listAccounts, getSession, setSession } from './accounts.js';
 import { publishFeed, bus } from './bus.js';
 import { patchFriend, reconcileStates, loadFriends, removeFriend } from './friends.js';
 import { getWorldMeta } from './worldCache.js';
+import { addNotification } from './notifications.js';
 
 /**
  * @typedef {Object} PipelineState
@@ -292,17 +293,58 @@ async function handleMessage(state, msg) {
 						raw: n
 					})
 				);
+				addNotification({
+					accountId: state.accountId,
+					type: t,
+					senderUserId: n.senderUserId,
+					senderDisplayName: n.senderDisplayName,
+					senderUsername: n.senderUsername,
+					raw: n
+				});
 			} else if ((t === 'invite' || t === 'requestInvite') && n.senderUserId) {
+				const worldId = n.details?.worldId || '';
+				const worldName = worldId ? await resolveWorldName(state, worldId) : '';
 				publishFeed(
 					feedEntry(state, {
 						type: 'Invite',
 						userId: n.senderUserId,
 						displayName: n.senderDisplayName || n.senderUsername,
-						location: n.details?.worldId ? `${n.details.worldId}:${n.details.instanceId || ''}` : '',
-						worldName: n.details?.worldId ? await resolveWorldName(state, n.details.worldId) : '',
+						location: worldId ? `${worldId}:${n.details?.instanceId || ''}` : '',
+						worldName,
 						raw: n
 					})
 				);
+				addNotification({
+					accountId: state.accountId,
+					type: t,
+					senderUserId: n.senderUserId,
+					senderDisplayName: n.senderDisplayName,
+					senderUsername: n.senderUsername,
+					worldId,
+					worldName,
+					instanceId: n.details?.instanceId || '',
+					message: n.message || '',
+					raw: n
+				});
+			} else if (t === 'message' || t === 'groupAnnouncement') {
+				publishFeed(
+					feedEntry(state, {
+						type: 'Notification',
+						userId: n.senderUserId,
+						displayName: n.senderDisplayName || n.senderUsername,
+						detail: n.message || t,
+						raw: n
+					})
+				);
+				addNotification({
+					accountId: state.accountId,
+					type: t,
+					senderUserId: n.senderUserId,
+					senderDisplayName: n.senderDisplayName,
+					senderUsername: n.senderUsername,
+					message: n.message || '',
+					raw: n
+				});
 			}
 			break;
 		}

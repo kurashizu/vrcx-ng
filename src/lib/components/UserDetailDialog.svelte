@@ -4,7 +4,8 @@
 		userDetailData,
 		userDetailLoading,
 		userDetailError,
-		closeUserDetail
+		closeUserDetail,
+		setActiveAccount
 	} from '$lib/stores/userDetail.js';
 	import { accounts } from '$lib/stores/accounts.js';
 	import { toasts } from '$lib/stores/toast.js';
@@ -29,13 +30,13 @@
 
 	async function loadUser(accountId, userId) {
 		// cancel previous (best-effort)
-		inflight = userId;
+		inflight = userId + ':' + accountId;
 		loading = true;
 		error = '';
 		try {
 			const r = await fetch(`/api/accounts/${accountId}/user/${userId}`);
 			const j = await r.json();
-			if (inflight !== userId) return; // stale
+			if (inflight !== userId + ':' + accountId) return; // stale
 			if (!r.ok) {
 				error = j.error || `HTTP ${r.status}`;
 				data = null;
@@ -46,8 +47,12 @@
 		} catch (err) {
 			error = err.message;
 		} finally {
-			if (inflight === userId) loading = false;
+			if (inflight === userId + ':' + accountId) loading = false;
 		}
+	}
+
+	function switchAccount(id) {
+		setActiveAccount(id);
 	}
 
 	function action(accountId, act, userId, extra = {}) {

@@ -5,15 +5,28 @@
 	import FriendList from '$lib/components/FriendList.svelte';
 	import AddAccountDialog from '$lib/components/AddAccountDialog.svelte';
 	import TwoFactorDialog from '$lib/components/TwoFactorDialog.svelte';
+	import NotificationPanel from '$lib/components/NotificationPanel.svelte';
 	import { filteredFeed } from '$lib/stores/feed.js';
 	import { accounts, loggedInCount, onlineCount } from '$lib/stores/accounts.js';
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 
 	let addOpen = $state(false);
 	let twofaOpen = $state(false);
 	let twofaAccountId = $state('');
 	let twofaMethods = $state(/** @type {string[]} */ ([]));
+	let notifOpen = $state(false);
+	let notifUnseen = $state(0);
 	let listEl;
+
+	async function refreshNotifCount() {
+		if (!browser) return;
+		try {
+			const r = await fetch('/api/notifications?onlyUnseen=true&limit=500');
+			const j = await r.json();
+			notifUnseen = (j.notifications || []).length;
+		} catch {}
+	}
 
 	function on2faEvent(e) {
 		const { accountId, methods } = e.detail;
@@ -24,7 +37,12 @@
 
 	onMount(() => {
 		window.addEventListener('vrc-2fa-required', on2faEvent);
-		return () => window.removeEventListener('vrc-2fa-required', on2faEvent);
+		refreshNotifCount();
+		const id = setInterval(refreshNotifCount, 15000);
+		return () => {
+			window.removeEventListener('vrc-2fa-required', on2faEvent);
+			clearInterval(id);
+		};
 	});
 </script>
 
@@ -58,6 +76,10 @@
 		<AccountList onAdd={() => (addOpen = true)} />
 
 		<div class="bottom-nav">
+			<button class="nav-link nav-btn" onclick={() => (notifOpen = true)}>
+				🔔 通知
+				{#if notifUnseen > 0}<span class="badge">{notifUnseen}</span>{/if}
+			</button>
 			<a href="/chatbox" class="nav-link">💬 Chatbox</a>
 			<a href="/settings" class="nav-link">⚙️ 设置</a>
 		</div>
@@ -94,6 +116,7 @@
 	methods={twofaMethods}
 	onClose={() => (twofaOpen = false)}
 />
+<NotificationPanel bind:open={notifOpen} />
 
 <style>
 	.app {
@@ -133,6 +156,24 @@
 		background: var(--bg-3);
 		color: var(--text);
 		text-decoration: none;
+	}
+	.nav-btn {
+		border: none;
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+		width: 100%;
+		font: inherit;
+		position: relative;
+	}
+	.nav-btn .badge {
+		margin-left: auto;
+		font-size: 10px;
+		background: var(--danger);
+		color: white;
+		padding: 1px 6px;
+		border-radius: 8px;
+		font-weight: 700;
 	}
 	.brand {
 		display: flex;

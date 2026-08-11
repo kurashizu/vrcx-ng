@@ -3,6 +3,8 @@
 	import Toasts from '$lib/components/Toasts.svelte';
 	import ContextMenu from '$lib/components/ContextMenu.svelte';
 	import UserDetailDialog from '$lib/components/UserDetailDialog.svelte';
+	import WorldDetailDialog from '$lib/components/WorldDetailDialog.svelte';
+	import NotificationPanel from '$lib/components/NotificationPanel.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { refreshAccounts } from '$lib/stores/accounts.js';
@@ -30,3 +32,5 @@
 <Toasts />
 <ContextMenu />
 <UserDetailDialog />
+<WorldDetailDialog />
+<NotificationPanel />

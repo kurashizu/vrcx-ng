@@ -7,132 +7,88 @@
 		friendAccountFilter
 	} from '$lib/stores/friends.js';
 	import { accounts } from '$lib/stores/accounts.js';
-	import { timeAgo, locationLabel } from '$lib/shared/format.js';
+	import { timeAgo } from '$lib/shared/format.js';
 	import { showContextMenu } from '$lib/stores/contextMenu.js';
-	import { openUserDetail } from '$lib/stores/userDetail.js';
+	import { openUserDetail as openUserDetailPanel } from '$lib/stores/userDetail.js';
+	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { toasts } from '$lib/stores/toast.js';
 	import { trustColor, vrcLaunchUrl } from '$lib/shared/trust.js';
 	import { settings } from '$lib/stores/settings.js';
 	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
 
-	// view modes
-	let viewMode = $state('flat'); // 'flat' | 'instance' | 'world'
+	// View options
+	let viewMode = $state('smart'); // 'smart' | 'flat' | 'instance' | 'world' | 'group'
+	let sortBy = $state('displayName'); // 'displayName' | 'lastSeen' | 'platform' | 'status'
+	let sortDir = $state('asc');
+	let statusFilter = $state(''); // '' | 'join me' | 'active' | 'busy' | 'ask me'
 
-	const VIEW_MODES = [
-		{ id: 'flat', label: '列表', icon: '☰' },
-		{ id: 'instance', label: '实例', icon: '🧩' },
-		{ id: 'world', label: '世界', icon: '🌍' }
-	];
+	// Collapsed sections
+	let collapsed = $state({
+		self: false,
+		sameInstance: false,
+		favGroups: {}, // groupName -> boolean
+		online: {},
+		active: {},
+		offline: {},
+		vrchatGroups: {}
+	});
 
-	// Trust rank → CSS class (when ui.trustColors is on)
+	// Friend group data (populated from /api/friend-groups)
+	let friendGroups = $state([]);
+	let friendGroupMembers = $state({}); // groupName -> [userIds]
+
+	async function loadFriendGroups() {
+		try {
+			const r = await fetch('/api/friend-groups');
+			const j = await r.json();
+			friendGroups = j.groups || [];
+			const members = {};
+			for (const g of friendGroups) {
+				members[g.name] = (j.members?.[g.name] || []).map((m) => m.userId);
+			}
+			friendGroupMembers = members;
+		} catch (err) {
+			console.error('load friend groups', err);
+		}
+	}
+
+	$effect(() => {
+		if (browser) loadFriendGroups();
+	});
+
+	function toggleSection(key, subKey) {
+		if (subKey !== undefined) {
+			collapsed[key][subKey] = !collapsed[key][subKey];
+			collapsed = { ...collapsed }; // trigger reactivity
+		} else {
+			collapsed[key] = !collapsed[key];
+			collapsed = { ...collapsed };
+		}
+	}
+
+	function isCollapsed(key, subKey) {
+		if (subKey !== undefined) return !!collapsed[key]?.[subKey];
+		return !!collapsed[key];
+	}
+
 	function trustClass(f) {
 		if (!$settings['ui.trustColors']) return '';
 		return trustColor(f) || '';
 	}
 
-	function onContextMenu(e, f) {
-		e.preventDefault();
-		const accountId = f.accountIds[0] || ($accounts[0]?.id);
-		const items = buildMenu(f, accountId);
-		showContextMenu({ x: e.clientX, y: e.clientY, data: { ...f, _accountId: accountId }, items });
+	function platformIcon(platform) {
+		const p = String(platform || '').toLowerCase();
+		const map = {
+			standalonewindows: '🖥️',
+			android: '📱',
+			ios: '📱',
+			web: '🌐'
+		};
+		return map[p] || '';
 	}
 
-	function buildMenu(f, accountId) {
-		const isOnline = f.state === 'online' && f.location && f.location !== 'offline' && f.location !== 'private';
-		return [
-			{ icon: '👤', label: '查看详情', action: () => openUserDetail(accountId, f.id) },
-			{ divider: true },
-			{
-				icon: '✉️',
-				label: '请求加入 TA 的实例',
-				disabled: !isOnline,
-				action: async () => {
-					const r = await fetch(`/api/accounts/${accountId}/actions`, {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ action: 'requestInvite', userId: f.id })
-					});
-					const j = await r.json();
-					j.ok ? toasts.success('请求已发送') : toasts.error(j.error || '失败');
-				}
-			},
-			{
-				icon: '🔗',
-				label: '复制实例链接',
-				disabled: !isOnline,
-				action: () => {
-					const url = `https://vrchat.com/home/launch?worldId=${encodeURIComponent(f.location.split(':')[0])}&instanceId=${encodeURIComponent(f.location.split(':')[1] || '')}`;
-					navigator.clipboard.writeText(url).then(
-						() => toasts.success('已复制实例链接'),
-						() => toasts.error('复制失败')
-					);
-				}
-			},
-			{ divider: true },
-			{
-				icon: '🔕',
-				label: '静音',
-				action: async () => {
-					const r = await fetch(`/api/accounts/${accountId}/actions`, {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ action: 'mute', userId: f.id })
-					});
-					const j = await r.json();
-					j.ok ? toasts.success('已静音') : toasts.error(j.error || '失败');
-				}
-			},
-			{
-				icon: '🚫',
-				label: '屏蔽',
-				danger: true,
-				action: async () => {
-					if (!confirm(`确定屏蔽 ${f.displayName}?`)) return;
-					const r = await fetch(`/api/accounts/${accountId}/actions`, {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ action: 'block', userId: f.id })
-					});
-					const j = await r.json();
-					j.ok ? toasts.success('已屏蔽') : toasts.error(j.error || '失败');
-				}
-			},
-			{ divider: true },
-			{
-				icon: '📋',
-				label: '复制显示名',
-				action: () => {
-					navigator.clipboard.writeText(f.displayName).then(
-						() => toasts.success('已复制'),
-						() => toasts.error('复制失败')
-					);
-				}
-			},
-			{
-				icon: '🆔',
-				label: '复制用户 ID',
-				action: () => {
-					navigator.clipboard.writeText(f.id).then(
-						() => toasts.success('已复制'),
-						() => toasts.error('复制失败')
-					);
-				}
-			},
-			{
-				icon: '🌐',
-				label: '在浏览器中打开主页',
-				action: () => window.open(`https://vrchat.com/home/user/${f.id}`, '_blank')
-			}
-		];
-	}
-
-	const platformIcon = {
-		standalonewindows: '🖥️',
-		android: '📱',
-		ios: '📱',
-		web: '🌐'
-	};
-	const statusIcon = {
+	const STATUS_ICON = {
 		active: '🔵',
 		'join me': '🟢',
 		busy: '🔴',
@@ -140,93 +96,38 @@
 		offline: '⚫'
 	};
 
-	const groupTabs = [
-		{ id: 'all', label: '全部' },
-		{ id: 'online', label: '在线' },
-		{ id: 'active', label: 'Active' },
-		{ id: 'offline', label: '离线' }
-	];
+	function statusPillClass(s) {
+		return `status-pill status-${(s || 'offline').replace(/\s+/g, '-')}`;
+	}
 
 	function accountLabel(id) {
 		const a = $accounts.find((x) => x.id === id);
 		return a?.displayName || id.slice(0, 6);
 	}
 
-	function parseLocation(loc) {
-		if (!loc || loc === 'offline' || loc === 'private') return null;
-		const [worldId, instanceId] = loc.split(':');
-		return { worldId, instanceId: instanceId || '0' };
-	}
-
 	/**
 	 * Display label for a friend's current location.
 	 * Priority: cached worldName > truncated worldId.
-	 * @param {{ worldName?: string, worldId?: string, location?: string }} f
-	 * @param {boolean} [showInstance]  include instance id in label
 	 */
 	function displayWorld(f, showInstance = false) {
 		if (!f) return '未知世界';
 		const loc = f.location || '';
 		if (loc === 'private') return 'Private World';
 		if (!loc || loc === 'offline') return '';
-		const parsed = parseLocation(loc);
-		if (!parsed) return '未知世界';
-		const name = f.worldName || parsed.worldId;
-		const shortId = parsed.worldId.length > 16
-			? parsed.worldId.slice(0, 8) + '…' + parsed.worldId.slice(-4)
-			: parsed.worldId;
-		const label = f.worldName ? name : shortId;
+		const [worldId, instanceId] = loc.split(':');
+		if (!worldId) return '未知世界';
+		const shortId =
+			worldId.length > 16 ? worldId.slice(0, 8) + '…' + worldId.slice(-4) : worldId;
+		const label = f.worldName || shortId;
 		if (!showInstance) return label;
-		if (!parsed.instanceId || parsed.instanceId === '0') return label;
-		return `${label} · ${parsed.instanceId}`;
+		if (!instanceId || instanceId === '0') return label;
+		return `${label} · ${instanceId}`;
 	}
 
-	/**
-	 * Group online friends by location according to current viewMode.
-	 * Returns an array of { key, label, location, friends } sorted by size desc.
-	 */
-	function groupOnline(list) {
-		if (viewMode === 'flat') return null;
-		const groups = new Map();
-		for (const f of list) {
-			const loc = f.location || '';
-			if (!loc || loc === 'offline' || loc === 'private') {
-				const key = 'private';
-				if (!groups.has(key)) groups.set(key, { key, label: 'Private / Unknown', friends: [] });
-				groups.get(key).friends.push(f);
-				continue;
-			}
-			const parsed = parseLocation(loc);
-			if (!parsed) continue;
-			let key;
-			if (viewMode === 'instance') {
-				key = loc; // full location
-			} else {
-				key = parsed.worldId; // world only
-			}
-			if (!groups.has(key)) {
-				const shortId = parsed.worldId.length > 16
-					? parsed.worldId.slice(0, 8) + '…' + parsed.worldId.slice(-4)
-					: parsed.worldId;
-				groups.set(key, {
-					key,
-					label: viewMode === 'instance' ? loc : (f.worldName || shortId),
-					location: loc,
-					worldName: f.worldName,
-					worldId: parsed.worldId,
-					friends: []
-				});
-			} else {
-				// First friend had no worldName cached yet — keep the better label
-				const g = groups.get(key);
-				if (!g.worldName && f.worldName) {
-					g.worldName = f.worldName;
-					g.label = f.worldName;
-				}
-			}
-			groups.get(key).friends.push(f);
-		}
-		return [...groups.values()].sort((a, b) => b.friends.length - a.friends.length);
+	function parseLocation(loc) {
+		if (!loc || loc === 'offline' || loc === 'private') return null;
+		const [worldId, instanceId] = loc.split(':');
+		return { worldId, instanceId: instanceId || '0' };
 	}
 
 	function launchVrc(location) {
@@ -238,19 +139,434 @@
 		if (browser) window.location.href = u;
 	}
 
-	// Reusable friend row snippet
+	function clickWorld(f, e) {
+		if (e) e.stopPropagation();
+		if (!f.location || f.location === 'offline' || f.location === 'private') return;
+		// Open world detail dialog (with vrc:// launch inside)
+		openWorldDetail(f.worldId || parseLocation(f.location)?.worldId, f.accountIds?.[0]);
+	}
+
+	/**
+	 * Build menu items for a friend (right-click or context menu).
+	 * @param {object} f
+	 * @param {string} defaultAccountId
+	 */
+	function buildMenu(f, defaultAccountId) {
+		const isOnline =
+			f.state === 'online' && f.location && f.location !== 'offline' && f.location !== 'private';
+		const acctList = $accounts.filter((a) => a.loggedIn && f.accountIds.includes(a.id));
+
+		// If friend is in multiple accounts, sub-menus let you pick which to act as
+		const inviteItems = acctList.length > 1
+			? acctList.map((a) => ({
+					icon: '✉️',
+					label: `以 ${a.displayName} 邀请`,
+					action: () => doAction(a.id, 'requestInvite', f.id)
+				}))
+			: [
+					{
+						icon: '✉️',
+						label: '请求加入 TA 的实例',
+						disabled: !isOnline,
+						action: () => doAction(defaultAccountId, 'requestInvite', f.id)
+					}
+				];
+
+		const muteItems = acctList.length > 1
+			? acctList.map((a) => ({
+					icon: '🔕',
+					label: `以 ${a.displayName} 静音`,
+					action: () => doAction(a.id, 'mute', f.id)
+				}))
+			: [
+					{
+						icon: '🔕',
+						label: '静音',
+						action: () => doAction(defaultAccountId, 'mute', f.id)
+					}
+				];
+
+		const blockItems = acctList.length > 1
+			? acctList.map((a) => ({
+					icon: '🚫',
+					label: `以 ${a.displayName} 屏蔽`,
+					danger: true,
+					action: () => doAction(a.id, 'block', f.id)
+				}))
+			: [
+					{
+						icon: '🚫',
+						label: '屏蔽',
+						danger: true,
+						action: () => doAction(defaultAccountId, 'block', f.id)
+					}
+				];
+
+		const groupItems = friendGroups.map((g) => ({
+			icon: '👥',
+			label: friendGroupMembers[g.name]?.includes(f.id)
+				? `移出 "${g.displayName}"`
+				: `加入 "${g.displayName}"`,
+			action: () => toggleGroup(g.name, f.id)
+		}));
+
+		return [
+			{ icon: '👤', label: '查看详情', action: () => openUserDetailPanel(f.accountIds, f.id, f.displayName) },
+			{ divider: true },
+			...inviteItems,
+			{ icon: '🔗', label: '复制实例链接', disabled: !isOnline, action: () => copyInstanceLink(f) },
+			{ divider: true },
+			...muteItems,
+			...blockItems,
+			{ divider: true },
+			{ icon: '👥', label: '分组…', sub: groupItems },
+			{ divider: true },
+			{ icon: '📋', label: '复制显示名', action: () => copyText(f.displayName || f.id) },
+			{ icon: '🆔', label: '复制用户 ID', action: () => copyText(f.id) },
+			{
+				icon: '🌐',
+				label: '在浏览器中打开主页',
+				action: () => browser && window.open(`https://vrchat.com/home/user/${f.id}`, '_blank')
+			}
+		];
+	}
+
+	async function doAction(accountId, act, userId) {
+		if (act === 'block' && !confirm(`确定屏蔽该用户?`)) return;
+		const r = await fetch(`/api/accounts/${accountId}/actions`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ action: act, userId })
+		});
+		const j = await r.json();
+		j.ok ? toasts.success('操作成功') : toasts.error(j.error || '失败');
+	}
+
+	async function toggleGroup(groupName, userId) {
+		const isMember = friendGroupMembers[groupName]?.includes(userId);
+		await fetch('/api/friend-groups', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				action: isMember ? 'removeMember' : 'addMember',
+				groupName,
+				userId
+			})
+		});
+		await loadFriendGroups();
+		toasts.success(isMember ? '已移出分组' : '已加入分组');
+	}
+
+	function copyInstanceLink(f) {
+		const [worldId, instanceId] = (f.location || '').split(':');
+		const url = `https://vrchat.com/home/launch?worldId=${encodeURIComponent(worldId || '')}&instanceId=${encodeURIComponent(instanceId || '')}`;
+		navigator.clipboard.writeText(url).then(() => toasts.success('已复制'), () => toasts.error('复制失败'));
+	}
+
+	function copyText(s) {
+		if (!s || !browser) return;
+		navigator.clipboard.writeText(s).then(() => toasts.success('已复制'), () => toasts.error('复制失败'));
+	}
+
+	function onContextMenu(e, f) {
+		e.preventDefault();
+		const defaultAccountId = f.accountIds[0] || $accounts[0]?.id;
+		const items = buildMenu(f, defaultAccountId);
+		showContextMenu({
+			x: e.clientX,
+			y: e.clientY,
+			data: { ...f, _accountId: defaultAccountId },
+			items
+		});
+	}
+
+	function openDetail(f) {
+		if (!f?.id) return;
+		openUserDetailPanel(f.accountIds, f.id, f.displayName);
+	}
+
+	/**
+	 * Sort comparator.
+	 */
+	function sortFn(a, b) {
+		const dir = sortDir === 'asc' ? 1 : -1;
+		const key = sortBy;
+		if (key === 'lastSeen') {
+			return ((a.lastSeen || 0) - (b.lastSeen || 0)) * dir;
+		}
+		if (key === 'platform') {
+			return String(a.platform || '').localeCompare(String(b.platform || '')) * dir;
+		}
+		if (key === 'status') {
+			const order = { active: 0, 'join me': 1, busy: 2, 'ask me': 3, offline: 4 };
+			return ((order[a.status] ?? 9) - (order[b.status] ?? 9)) * dir;
+		}
+		// default: displayName
+		return String(a.displayName || '').localeCompare(String(b.displayName || '')) * dir;
+	}
+
+	// Apply status + search + sort
+	function prepareList(list) {
+		let out = list.slice();
+		if (statusFilter) out = out.filter((f) => f.status === statusFilter);
+		if ($friendSearch) {
+			const q = $friendSearch.toLowerCase();
+			out = out.filter((f) =>
+				String(f.displayName || '').toLowerCase().includes(q) ||
+				String(f.location || '').toLowerCase().includes(q) ||
+				String(f.worldName || '').toLowerCase().includes(q) ||
+				String(f.id || '').toLowerCase().includes(q)
+			);
+		}
+		if ($friendAccountFilter) {
+			out = out.filter((f) => f.accountIds.includes($friendAccountFilter));
+		}
+		out.sort(sortFn);
+		return out;
+	}
+
+	/**
+	 * Group online friends per the current viewMode.
+	 *
+	 *  - 'smart':   group by instance (same instance as sub-group)
+	 *  - 'flat':    no grouping
+	 *  - 'instance': group by instance (wrld:inst)
+	 *  - 'world':   group by world, with instance as sub-group
+	 *  - 'group':   group by VRChat friend group
+	 *
+	 * Returns array of { key, label, worldName, worldId, location, count, friends, subGroups? }
+	 * sorted by friend count descending.
+	 */
+	function groupOnline(list) {
+		if (viewMode === 'flat') return null;
+
+		if (viewMode === 'group') {
+			// First group by friend group, then by status within
+			const buckets = new Map();
+			const ungrouped = [];
+			for (const f of list) {
+				const g = f.groupName;
+				if (g) {
+					if (!buckets.has(g)) buckets.set(g, []);
+					buckets.get(g).push(f);
+				} else {
+					ungrouped.push(f);
+				}
+			}
+			const out = [];
+			for (const [gName, friends] of buckets) {
+				const gMeta = friendGroups.find((g) => g.name === gName);
+				out.push({
+					key: `group:${gName}`,
+					label: gMeta?.displayName || gName,
+					color: gMeta?.color,
+					isGroup: true,
+					friends,
+					count: friends.length
+				});
+			}
+			if (ungrouped.length) {
+				out.push({
+					key: 'group:ungrouped',
+					label: '未分组',
+					isGroup: true,
+					friends: ungrouped,
+					count: ungrouped.length
+				});
+			}
+			return out.sort((a, b) => b.count - a.count);
+		}
+
+		// instance/world/smart grouping
+		const groups = new Map();
+		for (const f of list) {
+			const loc = f.location || '';
+			if (!loc || loc === 'offline' || loc === 'private') {
+				if (!groups.has('private')) {
+					groups.set('private', {
+						key: 'private',
+						label: 'Private / Unknown',
+						friends: [],
+						count: 0
+					});
+				}
+				groups.get('private').friends.push(f);
+				groups.get('private').count++;
+				continue;
+			}
+			const parsed = parseLocation(loc);
+			if (!parsed) continue;
+
+			let topKey, subKey = null;
+			if (viewMode === 'instance') {
+				topKey = loc; // full instance id
+			} else if (viewMode === 'world') {
+				topKey = parsed.worldId;
+				subKey = loc;
+			} else {
+				// 'smart': top-level = world; if 1 friend, no sub-header needed; if >1, sub-group by instance
+				topKey = parsed.worldId;
+				subKey = loc;
+			}
+
+			if (!groups.has(topKey)) {
+				groups.set(topKey, {
+					key: topKey,
+					label: f.worldName || shortWorldId(parsed.worldId),
+					worldId: parsed.worldId,
+					location: loc,
+					friends: [],
+					count: 0,
+					subGroups: new Map()
+				});
+			}
+			const g = groups.get(topKey);
+			g.friends.push(f);
+			g.count++;
+			if (subKey && subKey !== topKey) {
+				if (!g.subGroups.has(subKey)) {
+					g.subGroups.set(subKey, {
+						key: subKey,
+						label: `实例 ${parsed.instanceId}`,
+						location: subKey,
+						friends: [],
+						count: 0
+					});
+				}
+				g.subGroups.get(subKey).friends.push(f);
+				g.subGroups.get(subKey).count++;
+			}
+		}
+
+		const out = [];
+		for (const g of groups.values()) {
+			if (viewMode === 'world' || viewMode === 'smart') {
+				// Convert subGroups Map to sorted array
+				const subs = g.subGroups && g.subGroups.size > 1
+					? Array.from(g.subGroups.values()).sort((a, b) => b.count - a.count)
+					: null;
+				out.push({
+					key: g.key,
+					label: g.label,
+					worldId: g.worldId,
+					location: g.location,
+					friends: viewMode === 'world' ? null : g.friends,
+					subGroups: subs,
+					count: g.count
+				});
+			} else {
+				out.push({
+					key: g.key,
+					label: g.label,
+					worldId: g.worldId,
+					location: g.location,
+					friends: g.friends,
+					subGroups: null,
+					count: g.count
+				});
+			}
+		}
+		return out.sort((a, b) => b.count - a.count);
+	}
+
+	function shortWorldId(wid) {
+		if (!wid) return '';
+		return wid.length > 16 ? wid.slice(0, 8) + '…' + wid.slice(-4) : wid;
+	}
+
+	// "Same instance" section: friends in the same world/instance as one of our accounts
+	const sameInstanceFriends = $derived.by(() => {
+		const self = $friendsData.self || [];
+		if (!self.length) return [];
+		const locSet = new Set(self.map((s) => s.location).filter(Boolean));
+		if (!locSet.size) return [];
+		const out = [];
+		for (const f of [...$friendsData.online, ...$friendsData.active]) {
+			if (f.location && locSet.has(f.location)) {
+				out.push(f);
+			}
+		}
+		return out;
+	});
+
+	// VIPs = friends in any visible friend group
+	const vipFriends = $derived.by(() => {
+		const inAnyGroup = new Set();
+		for (const g of friendGroups) {
+			if (!g.visible) continue;
+			for (const uid of friendGroupMembers[g.name] || []) inAnyGroup.add(uid);
+		}
+		return [...$friendsData.online].filter((f) => inAnyGroup.has(f.id));
+	});
+
+	// Friendly tabs
+	const VIEW_TABS = [
+		{ id: 'smart', label: '智能', icon: '✨' },
+		{ id: 'flat', label: '平铺', icon: '☰' },
+		{ id: 'instance', label: '实例', icon: '🧩' },
+		{ id: 'world', label: '世界', icon: '🌍' },
+		{ id: 'group', label: '分组', icon: '👥' }
+	];
+
+	const STATUS_FILTERS = [
+		{ id: '', label: '全部' },
+		{ id: 'join me', label: '🟢 加入我' },
+		{ id: 'active', label: '🔵 在线' },
+		{ id: 'ask me', label: '🟡 询问我' },
+		{ id: 'busy', label: '🔴 忙碌' }
+	];
+
+	const SORT_OPTIONS = [
+		{ id: 'displayName', label: '名字' },
+		{ id: 'lastSeen', label: '最后在线' },
+		{ id: 'platform', label: '平台' },
+		{ id: 'status', label: '状态' }
+	];
+
+	// Prepared lists
+	const onlineList = $derived(prepareList($filteredFriends.online));
+	const activeList = $derived(prepareList($filteredFriends.active));
+	const offlineList = $derived(prepareList($filteredFriends.offline));
+	const onlineGroups = $derived(groupOnline(onlineList));
+	const vipGroups = $derived(
+		viewMode === 'group'
+			? null
+			: (() => {
+					// group VIPs by their friend group
+					const buckets = new Map();
+					for (const f of vipFriends) {
+						const g = f.groupName;
+						if (!g) continue;
+						if (!buckets.has(g)) buckets.set(g, []);
+						buckets.get(g).push(f);
+					}
+					const out = [];
+					for (const [gn, fs] of buckets) {
+						const g = friendGroups.find((x) => x.name === gn);
+						if (!g) continue;
+						out.push({
+							key: `vip:${gn}`,
+							label: `⭐ ${g.displayName}`,
+							color: g.color,
+							isVip: true,
+							friends: fs,
+							count: fs.length
+						});
+					}
+					return out.sort((a, b) => b.count - a.count);
+				})()
+	);
 </script>
 
-{#snippet friendRow(f)}
+{#snippet friendRow(f, groupLabel)}
 	<div
 		class="friend {f.state}"
-		class:trust-color={!!trustClass(f)}
+		class:has-group={!!groupLabel}
 		oncontextmenu={(e) => onContextMenu(e, f)}
+		onclick={() => openDetail(f)}
 		role="button"
 		tabindex="0"
-		onkeydown={(e) => {
-			if (e.key === 'Enter') openUserDetail(f.accountIds[0], f.id);
-		}}
+		onkeydown={(e) => { if (e.key === 'Enter') openDetail(f); }}
 	>
 		<div class="avatar">
 			{#if f.currentAvatarThumbnailImageUrl}
@@ -258,25 +574,28 @@
 			{:else}
 				<span>{f.displayName.slice(0, 1).toUpperCase()}</span>
 			{/if}
-			<span class="state {f.state}" title={f.state === 'online' ? '在线' : f.state === 'active' ? 'Active' : '离线'}></span>
+			<span class="state {f.state}" title={f.state}></span>
 		</div>
 		<div class="info">
 			<div class="name-row">
 				<span class="name {trustClass(f)}">{f.displayName}</span>
-				<span class="platform" title={f.platform}>
-					{platformIcon[f.platform?.toLowerCase()] || ''}
-				</span>
+				<span class="platform" title={f.platform}>{platformIcon(f.platform)}</span>
+				{#if f.status && STATUS_ICON[f.status]}
+					<span class={statusPillClass(f.status)}>{STATUS_ICON[f.status]} {f.status}</span>
+				{/if}
 				{#if f.state === 'online' && f.location && f.location !== 'offline' && f.location !== 'private'}
 					<button
 						class="launch"
-						title="在 VRChat 中打开该实例"
+						title="在 VRChat 中打开实例"
 						onclick={(e) => { e.stopPropagation(); launchVrc(f.location); }}
 					>↗</button>
 				{/if}
 			</div>
-			<div class="sub" title={f.location}>
-				{#if f.state === 'online'}
-					{displayWorld(f, $settings['ui.showInstanceId'])}
+			<div class="sub" title={f.location || ''}>
+				{#if f.state === 'online' && f.location && f.location !== 'offline' && f.location !== 'private'}
+					<button class="world-link" onclick={(e) => clickWorld(f, e)}>
+						{displayWorld(f, $settings['ui.showInstanceId'])}
+					</button>
 				{:else if f.state === 'active'}
 					<span class="muted">在 VRChat 桌面客户端中</span>
 				{:else}
@@ -284,15 +603,16 @@
 				{/if}
 			</div>
 			<div class="meta">
-				{#if f.state === 'online' && f.status && statusIcon[f.status]}
-					<span class="status-pill" data-s={f.status}>
-						{statusIcon[f.status]} {f.status}
-					</span>
-				{/if}
 				{#if f.accountIds.length > 0}
 					<span class="via" title={f.accountIds.map(accountLabel).join(', ')}>
 						via {f.accountIds.map(accountLabel).join(', ')}
 					</span>
+				{/if}
+				{#if f.groupName}
+					{@const gMeta = friendGroups.find((g) => g.name === f.groupName)}
+					{#if gMeta}
+						<span class="grp" style:--g-color={gMeta.color}>{gMeta.displayName}</span>
+					{/if}
 				{/if}
 			</div>
 		</div>
@@ -304,12 +624,9 @@
 		<div class="title">
 			<span>好友 ({$friendsData.total})</span>
 			<span class="counts">
-				<span class="dot online" title="在线"></span>
-				{$friendsData.online.length}
-				<span class="dot active" title="Active"></span>
-				{$friendsData.active.length}
-				<span class="dot offline" title="离线"></span>
-				{$friendsData.offline.length}
+				<span class="dot online" title="在线 {$friendsData.online.length}"></span>
+				<span class="dot active" title="Active {$friendsData.active.length}"></span>
+				<span class="dot offline" title="离线 {$friendsData.offline.length}"></span>
 			</span>
 		</div>
 	</header>
@@ -317,38 +634,43 @@
 	<div class="filters">
 		<input
 			type="search"
-			placeholder="搜索好友、世界…"
+			placeholder="搜索好友、世界、ID…"
 			bind:value={$friendSearch}
 			class="search"
 		/>
 
-		<div class="tabs">
-			{#each groupTabs as t}
+		<div class="status-row">
+			{#each STATUS_FILTERS as sf}
 				<button
-					class="tab"
-					class:on={$friendGroupFilter === t.id}
-					onclick={() => friendGroupFilter.set(t.id)}
+					class="chip"
+					class:on={statusFilter === sf.id}
+					onclick={() => (statusFilter = sf.id)}
 				>
-					{t.label}
+					{sf.label}
 				</button>
 			{/each}
 		</div>
 
-		{#if $friendGroupFilter !== 'offline'}
-			<div class="view-tabs">
-				{#each VIEW_MODES as v}
-					<button
-						class="view-tab"
-						class:on={viewMode === v.id}
-						title={v.label}
-						onclick={() => (viewMode = v.id)}
-					>
-						<span class="ico">{v.icon}</span>
-						<span>{v.label}</span>
-					</button>
+		<div class="view-tabs">
+			{#each VIEW_TABS as t}
+				<button
+					class="view-tab"
+					class:on={viewMode === t.id}
+					title={t.label}
+					onclick={() => (viewMode = t.id)}
+				>
+					<span class="ico">{t.icon}</span>
+				</button>
+			{/each}
+			<select bind:value={sortBy} class="sort-sel" title="排序方式">
+				{#each SORT_OPTIONS as s}
+					<option value={s.id}>{s.label}</option>
 				{/each}
-			</div>
-		{/if}
+			</select>
+			<button class="dir" onclick={() => (sortDir = sortDir === 'asc' ? 'desc' : 'asc')} title="方向">
+				{sortDir === 'asc' ? '↑' : '↓'}
+			</button>
+		</div>
 
 		{#if $accounts.length > 1}
 			<select bind:value={$friendAccountFilter} class="account-select">
@@ -361,61 +683,158 @@
 	</div>
 
 	<div class="groups">
-		{#if $friendGroupFilter === 'all' || $friendGroupFilter === 'online'}
-			{#if $filteredFriends.online.length > 0}
-				{#if groupOnline($filteredFriends.online)}
-					{#each groupOnline($filteredFriends.online) as g (g.key)}
-						<section class="group">
-							<header>
-								<span class="dot online"></span>
-								<span class="group-label" title={g.label}>{g.label}</span>
-								<span class="group-count">{g.friends.length}</span>
-								{#if viewMode === 'instance' && g.location && g.location !== 'private'}
-									<button
-										class="launch-mini"
-										title="加入该实例"
-										onclick={() => launchVrc(g.location)}
-									>↗</button>
-								{/if}
-							</header>
-							{#each g.friends as f (f.id)}
-								{@render friendRow(f)}
-							{/each}
-						</section>
+		<!-- 1. Self -->
+		{#if ($friendsData.self || []).length > 0}
+			<section class="group self">
+				<header onclick={() => toggleSection('self')} role="button" tabindex="0">
+					<span class="chev" class:open={!collapsed.self}>▸</span>
+					<span>自己 ({$friendsData.self.length})</span>
+				</header>
+				{#if !collapsed.self}
+					{#each $friendsData.self as me}
+						<div class="me-row">
+							<div class="me-name">{me.displayName}</div>
+							<button class="world-link" onclick={() => openWorldDetail(me.location?.split(':')[0])}>
+								{me.location}
+							</button>
+						</div>
 					{/each}
-				{:else}
-					<section class="group">
-						<header><span class="dot online"></span> 在线 ({$filteredFriends.online.length})</header>
-						{#each $filteredFriends.online as f (f.id)}
+				{/if}
+			</section>
+		{/if}
+
+		<!-- 2. Same instance (when we're in one) -->
+		{#if sameInstanceFriends.length > 0}
+			<section class="group same-instance">
+				<header onclick={() => toggleSection('sameInstance')} role="button" tabindex="0">
+					<span class="chev" class:open={!collapsed.sameInstance}>▸</span>
+					<span>🧩 同实例 ({sameInstanceFriends.length})</span>
+				</header>
+				{#if !collapsed.sameInstance}
+					{#each sameInstanceFriends as f (f.id)}
+						{@render friendRow(f, '同实例')}
+					{/each}
+				{/if}
+			</section>
+		{/if}
+
+		<!-- 3. VIP (friend group members who are online) -->
+		{#if viewMode !== 'group' && vipGroups && vipGroups.length > 0}
+			{#each vipGroups as g (g.key)}
+				<section class="group vip" style:--g-color={g.color}>
+					<header onclick={() => toggleSection('vipGroups', g.key)} role="button" tabindex="0">
+						<span class="chev" class:open={!isCollapsed('vipGroups', g.key)}>▸</span>
+						<span>{g.label} ({g.count})</span>
+					</header>
+					{#if !isCollapsed('vipGroups', g.key)}
+						{#each g.friends as f (f.id)}
+							{@render friendRow(f, g.label)}
+						{/each}
+					{/if}
+				</section>
+			{/each}
+		{/if}
+
+		<!-- 4. Online (with grouping) -->
+		{#if onlineList.length > 0}
+			{#if onlineGroups && viewMode !== 'flat'}
+				{#each onlineGroups as g (g.key)}
+					<section class="group online-group">
+						<header
+							style:--g-color={g.color || ''}
+							onclick={() => toggleSection('online', g.key)}
+							role="button"
+							tabindex="0"
+						>
+							<span class="chev" class:open={!isCollapsed('online', g.key)}>▸</span>
+							<span class="dot online"></span>
+							{#if g.isGroup}
+								<span class="g-name">{g.label} ({g.count})</span>
+							{:else}
+								<button
+									class="g-name world-link"
+									onclick={(e) => { e.stopPropagation(); if (g.worldId) openWorldDetail(g.worldId); }}
+								>
+									{g.label} ({g.count})
+								</button>
+								{#if g.location && g.location !== 'private'}
+									<button class="launch-mini" title="加入该实例" onclick={(e) => { e.stopPropagation(); launchVrc(g.location); }}>↗</button>
+								{/if}
+							{/if}
+						</header>
+						{#if !isCollapsed('online', g.key)}
+							{#if g.subGroups}
+								<!-- World mode: render sub-groups (per instance) inside this world -->
+								{#each g.subGroups as sg (sg.key)}
+									<div class="sub-group">
+										<div class="sub-header">
+											<span class="dot online small"></span>
+											<span>{sg.label} ({sg.count})</span>
+											<button class="launch-mini" title="加入" onclick={() => launchVrc(sg.location)}>↗</button>
+										</div>
+										{#each sg.friends as f (f.id)}
+											{@render friendRow(f, sg.label)}
+										{/each}
+									</div>
+								{/each}
+							{:else if g.friends}
+								{#each g.friends as f (f.id)}
+									{@render friendRow(f, g.label)}
+								{/each}
+							{/if}
+						{/if}
+					</section>
+				{/each}
+			{:else}
+				<!-- Flat online list -->
+				<section class="group online-group">
+					<header onclick={() => toggleSection('online', 'flat')} role="button" tabindex="0">
+						<span class="chev" class:open={!isCollapsed('online', 'flat')}>▸</span>
+						<span class="dot online"></span>
+						<span>在线 ({onlineList.length})</span>
+					</header>
+					{#if !isCollapsed('online', 'flat')}
+						{#each onlineList as f (f.id)}
 							{@render friendRow(f)}
 						{/each}
-					</section>
+					{/if}
+				</section>
+			{/if}
+		{/if}
+
+		<!-- 5. Active -->
+		{#if activeList.length > 0}
+			<section class="group">
+				<header onclick={() => toggleSection('active', 'all')} role="button" tabindex="0">
+					<span class="chev" class:open={!isCollapsed('active', 'all')}>▸</span>
+					<span class="dot active"></span>
+					<span>Active ({activeList.length})</span>
+				</header>
+				{#if !isCollapsed('active', 'all')}
+					{#each activeList as f (f.id)}
+						{@render friendRow(f)}
+					{/each}
 				{/if}
-			{/if}
+			</section>
 		{/if}
 
-		{#if $friendGroupFilter === 'all' || $friendGroupFilter === 'active'}
-			{#if $filteredFriends.active.length > 0}
-				<section class="group">
-					<header><span class="dot active"></span> Active ({$filteredFriends.active.length})</header>
-					{#each $filteredFriends.active as f (f.id)}
+		<!-- 6. Offline -->
+		{#if offlineList.length > 0}
+			<section class="group">
+				<header onclick={() => toggleSection('offline', 'all')} role="button" tabindex="0">
+					<span class="chev" class:open={!isCollapsed('offline', 'all')}>▸</span>
+					<span class="dot offline"></span>
+					<span>离线 ({offlineList.length})</span>
+				</header>
+				{#if !isCollapsed('offline', 'all')}
+					{#each offlineList.slice(0, 200) as f (f.id)}
 						{@render friendRow(f)}
 					{/each}
-				</section>
-			{/if}
-		{/if}
-
-		{#if $friendGroupFilter === 'all' || $friendGroupFilter === 'offline'}
-			{#if $filteredFriends.offline.length > 0}
-				<section class="group">
-					<header>
-						<span class="dot offline"></span> 离线 ({$filteredFriends.offline.length})
-					</header>
-					{#each $filteredFriends.offline as f (f.id)}
-						{@render friendRow(f)}
-					{/each}
-				</section>
-			{/if}
+					{#if offlineList.length > 200}
+						<div class="more">还有 {offlineList.length - 200} 个离线好友，按 ↑↓ 排序调整</div>
+					{/if}
+				{/if}
+			</section>
 		{/if}
 
 		{#if $friendsData.total === 0}
@@ -425,7 +844,7 @@
 					登录账号后会自动拉取好友列表。拉取后会在此显示，包括在线状态和所在世界。
 				</p>
 			</div>
-		{:else if $filteredFriends.total === 0}
+		{:else if onlineList.length === 0 && activeList.length === 0 && offlineList.length === 0}
 			<div class="empty">
 				<p class="muted">没有匹配的好友</p>
 			</div>
@@ -460,10 +879,12 @@
 		display: flex;
 		gap: 4px;
 		align-items: center;
-		font-size: 11px;
 		text-transform: none;
 		letter-spacing: 0;
 		color: var(--text-faint);
+	}
+	.counts .dot {
+		margin-left: 6px;
 	}
 	.dot {
 		width: 8px;
@@ -478,11 +899,9 @@
 	.dot.active {
 		background: var(--active);
 	}
-	.counts .dot {
-		margin-left: 6px;
-	}
-	.counts .dot:first-of-type {
-		margin-left: 0;
+	.dot.small {
+		width: 6px;
+		height: 6px;
 	}
 	.filters {
 		padding: 8px 12px;
@@ -495,30 +914,23 @@
 		font-size: 12px;
 		padding: 6px 8px;
 	}
-	.tabs {
+	.status-row {
 		display: flex;
-		gap: 2px;
-		background: var(--bg-2);
-		border-radius: 8px;
-		padding: 2px;
+		gap: 4px;
+		flex-wrap: wrap;
 	}
-	.tab {
-		flex: 1;
-		padding: 4px 6px;
+	.chip {
 		font-size: 11px;
-		background: transparent;
-		border: none;
+		padding: 3px 8px;
+		background: var(--bg-2);
+		border: 1px solid var(--border);
+		border-radius: 999px;
 		color: var(--text-dim);
-		border-radius: 6px;
 	}
-	.tab:hover {
-		background: var(--bg-3);
-		color: var(--text);
-	}
-	.tab.on {
-		background: var(--bg-3);
-		color: var(--text);
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+	.chip.on {
+		background: var(--accent);
+		color: white;
+		border-color: var(--accent);
 	}
 	.view-tabs {
 		display: flex;
@@ -526,27 +938,40 @@
 		padding: 2px;
 		background: var(--bg-2);
 		border-radius: 8px;
+		align-items: center;
 	}
 	.view-tab {
 		flex: 1;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 4px;
 		padding: 4px 6px;
-		font-size: 11px;
+		font-size: 12px;
 		background: transparent;
 		border: none;
 		color: var(--text-dim);
 		border-radius: 6px;
 	}
-	.view-tab:hover {
-		background: var(--bg-3);
-		color: var(--text);
-	}
 	.view-tab.on {
 		background: var(--accent);
 		color: white;
+	}
+	.sort-sel {
+		flex: 0 0 auto;
+		font-size: 11px;
+		padding: 3px 6px;
+		width: auto;
+		background: var(--bg-3);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+	}
+	.dir {
+		padding: 3px 8px;
+		font-size: 12px;
+		background: var(--bg-3);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		color: var(--text-dim);
 	}
 	.account-select {
 		font-size: 12px;
@@ -558,10 +983,10 @@
 		padding: 4px 0 20px;
 	}
 	.group {
-		margin-bottom: 4px;
+		margin-bottom: 2px;
 	}
 	.group > header {
-		padding: 8px 14px 4px;
+		padding: 6px 14px 4px;
 		font-size: 11px;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
@@ -569,69 +994,101 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
+		cursor: pointer;
+		user-select: none;
 		border-bottom: none;
 	}
-	.group > header .group-label {
+	.group > header:hover {
+		background: var(--bg-2);
+		color: var(--text-dim);
+	}
+	.chev {
+		display: inline-block;
+		font-size: 9px;
+		transition: transform 0.15s;
+		color: var(--text-faint);
+	}
+	.chev.open {
+		transform: rotate(90deg);
+	}
+	.group .g-name {
 		flex: 1;
+		font-size: 12px;
+		color: var(--text-dim);
+		font-weight: 600;
+		letter-spacing: 0;
+		text-transform: none;
+		text-align: left;
+		background: transparent;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+	}
+	.group .g-name:hover {
+		color: var(--text);
+		text-decoration: underline;
+	}
+	.sub-group {
+		margin: 4px 0 8px 14px;
+		padding-left: 8px;
+		border-left: 2px solid var(--border);
+	}
+	.sub-header {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 3px 8px;
+		font-size: 11px;
+		color: var(--text-faint);
+	}
+	.online-group > header {
+		color: var(--online);
+	}
+	.vip > header {
+		color: var(--g-color, var(--text-dim));
+	}
+	.me-row {
+		display: flex;
+		gap: 8px;
+		padding: 6px 14px;
+		font-size: 12px;
+	}
+	.me-name {
+		color: var(--text);
+	}
+	.world-link {
+		font: inherit;
+		color: var(--text);
+		background: transparent;
+		border: none;
+		padding: 0;
+		text-align: left;
+		cursor: pointer;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		text-transform: none;
-		letter-spacing: 0;
-		font-size: 12px;
-		color: var(--text-dim);
-		font-weight: 500;
+		max-width: 100%;
 	}
-	.group > header .group-count {
-		font-size: 10px;
-		background: var(--bg-3);
-		padding: 1px 6px;
-		border-radius: 8px;
-		color: var(--text-faint);
-	}
-	.launch,
-	.launch-mini {
-		background: transparent;
-		border: 1px solid var(--border);
-		color: var(--text-dim);
-		padding: 0;
-		cursor: pointer;
-		border-radius: 6px;
-		font-size: 12px;
-		transition: background 0.12s, color 0.12s, border-color 0.12s;
-	}
-	.launch {
-		width: 22px;
-		height: 22px;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-	}
-	.launch-mini {
-		width: 22px;
-		height: 22px;
-		font-size: 11px;
-	}
-	.launch:hover,
-	.launch-mini:hover {
-		background: var(--accent);
-		border-color: var(--accent);
-		color: white;
+	.world-link:hover {
+		color: var(--accent);
+		text-decoration: underline;
 	}
 	.friend {
 		display: flex;
 		gap: 10px;
-		padding: 6px 12px;
-		margin: 1px 6px;
-		border-radius: 6px;
-		cursor: default;
+		padding: 8px 14px;
+		cursor: pointer;
+		transition: background 0.1s;
 	}
 	.friend:hover {
 		background: var(--bg-2);
 	}
 	.friend:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: -2px;
+		background: rgba(124, 92, 255, 0.12);
+		outline: none;
+	}
+	.friend.has-group {
+		padding-left: 20px;
 	}
 	.avatar {
 		position: relative;
@@ -642,9 +1099,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		color: var(--text-dim);
 		font-weight: 600;
-		font-size: 13px;
-		color: var(--text);
 		flex-shrink: 0;
 		overflow: hidden;
 	}
@@ -655,10 +1111,10 @@
 	}
 	.state {
 		position: absolute;
-		right: 0;
-		bottom: 0;
-		width: 10px;
-		height: 10px;
+		bottom: -1px;
+		right: -1px;
+		width: 12px;
+		height: 12px;
 		border-radius: 50%;
 		border: 2px solid var(--bg-1);
 	}
@@ -677,85 +1133,115 @@
 	}
 	.name-row {
 		display: flex;
-		gap: 4px;
-		align-items: center;
-		justify-content: space-between;
-	}
-	.name {
-		font-size: 13px;
-		font-weight: 500;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.platform {
-		font-size: 13px;
-		opacity: 0.7;
-	}
-	.sub {
-		font-size: 11px;
-		color: var(--text-dim);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.sub.muted {
-		color: var(--text-faint);
-		font-style: italic;
-	}
-	.meta {
-		margin-top: 2px;
-		display: flex;
 		gap: 6px;
 		align-items: center;
-		flex-wrap: wrap;
+		font-size: 13px;
+	}
+	.name {
+		font-weight: 600;
+		color: var(--text);
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.platform {
+		font-size: 12px;
 	}
 	.status-pill {
 		font-size: 10px;
-		padding: 0 6px;
-		border-radius: 999px;
+		padding: 1px 6px;
+		border-radius: 8px;
 		background: var(--bg-3);
 		color: var(--text-dim);
 	}
-	.status-pill[data-s='active'] {
-		background: rgba(31, 184, 255, 0.15);
-		color: var(--active);
-	}
-	.status-pill[data-s='join me'] {
+	.status-pill.status-join-me {
 		background: rgba(61, 220, 151, 0.15);
 		color: var(--online);
 	}
-	.status-pill[data-s='busy'] {
+	.status-pill.status-active {
+		background: rgba(31, 184, 255, 0.15);
+		color: var(--active);
+	}
+	.status-pill.status-busy {
 		background: rgba(255, 93, 108, 0.15);
 		color: var(--danger);
 	}
-	.status-pill[data-s='ask me'] {
+	.status-pill.status-ask-me {
 		background: rgba(255, 180, 84, 0.15);
 		color: var(--warn);
 	}
-	.via {
+	.launch,
+	.launch-mini {
+		background: transparent;
+		border: 1px solid var(--border);
+		color: var(--text-dim);
+		padding: 0;
+		cursor: pointer;
+		border-radius: 5px;
+		font-size: 11px;
+	}
+	.launch {
+		width: 20px;
+		height: 20px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.launch-mini {
+		width: 20px;
+		height: 20px;
+	}
+	.launch:hover,
+	.launch-mini:hover {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: white;
+	}
+	.sub {
+		font-size: 12px;
+		color: var(--text-dim);
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		margin-top: 2px;
+	}
+	.meta {
+		display: flex;
+		gap: 6px;
+		align-items: center;
 		font-size: 10px;
 		color: var(--text-faint);
+		margin-top: 2px;
 	}
-	.empty {
-		text-align: center;
-		padding: 40px 16px;
+	.via {
 		color: var(--text-dim);
 	}
-	.empty p {
-		margin: 0 0 8px;
-	}
-	.empty p.small {
-		font-size: 12px;
-		line-height: 1.5;
+	.grp {
+		padding: 1px 6px;
+		border-radius: 8px;
+		background: var(--g-color, var(--bg-3));
+		color: white;
+		font-size: 10px;
+		font-weight: 600;
 	}
 	.more {
-		text-align: center;
-		padding: 8px;
+		padding: 10px 14px;
 		font-size: 11px;
 		color: var(--text-faint);
+		text-align: center;
+	}
+	.empty {
+		padding: 40px 20px;
+		text-align: center;
+		color: var(--text-dim);
 	}
 	.muted {
-		color: var(--text-faint);
+		color: var(--text-dim);
+	}
+	.small {
+		font-size: 11px;
 	}
 </style>

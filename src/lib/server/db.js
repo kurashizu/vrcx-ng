@@ -215,6 +215,26 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- User-defined friend groups (VRCX-compatible: group_0..group_3 by default)
+CREATE TABLE IF NOT EXISTS friend_groups (
+    name TEXT PRIMARY KEY,
+    display_name TEXT,
+    sort_order INTEGER DEFAULT 0,
+    color TEXT,
+    visible INTEGER DEFAULT 1,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS friend_group_members (
+    group_name TEXT NOT NULL REFERENCES friend_groups(name) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    note TEXT,
+    sort_order INTEGER DEFAULT 0,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (group_name, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_fgm_user ON friend_group_members(user_id);
 `;
 
 function migrate(db) {
