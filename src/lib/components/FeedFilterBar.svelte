@@ -6,8 +6,6 @@
 		paused,
 		clearFeed
 	} from '$lib/stores/feed.js';
-	import { accounts } from '$lib/stores/accounts.js';
-	import { accountFilter } from '$lib/stores/feed.js';
 
 	/** @type {'list'|'bubbles'} */
 	let { mode = $bindable('list'), onModeChange } = $props();
@@ -78,27 +76,6 @@
 				onclick={() => toggleType(t)}
 			>
 				{t}
-			</button>
-		{/each}
-	</div>
-
-	<div class="row account-filter">
-		<span class="lbl">账号:</span>
-		<button
-			class="chip"
-			class:on={$accountFilter === null}
-			onclick={() => accountFilter.set(null)}
-		>
-			全部
-		</button>
-		{#each $accounts as a (a.id)}
-			<button
-				class="chip"
-				class:on={$accountFilter === a.id}
-				onclick={() => accountFilter.set(a.id)}
-				title={a.username}
-			>
-				{a.displayName}
 			</button>
 		{/each}
 	</div>

@@ -42,3 +42,21 @@ export function locationLabel(loc) {
 	if (!instanceId || instanceId === '0') return worldId;
 	return `${worldId} · ${instanceId}`;
 }
+
+/**
+ * Rewrite VRChat image URLs through our server-side proxy so that
+ * cookie-protected media (private avatars, friend-only thumbnails) loads in
+ * the browser. Other URLs pass through untouched.
+ * @param {string} url
+ * @param {string} [accountId] optional account whose cookie to use
+ * @returns {string}
+ */
+export function vrImage(url, accountId = '') {
+	if (!url) return '';
+	if (url.startsWith('/api/img-proxy') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+	if (/^https?:\/\/api\.vrchat\.cloud\/api\/1\//.test(url)) {
+		const q = encodeURIComponent(url);
+		return `/api/img-proxy?u=${q}${accountId ? `&account=${encodeURIComponent(accountId)}` : ''}`;
+	}
+	return url;
+}

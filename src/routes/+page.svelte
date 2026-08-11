@@ -21,7 +21,7 @@
 		friendsOpen = false;
 	}
 	// 'list' = traditional vertical list; 'bubbles' = full-bleed flex-wrap cards
-	let feedMode = $state(getSetting('ui.feedMode') || 'list');
+	let feedMode = $state(getSetting('ui.feedMode') || 'bubbles');
 	function setFeedMode(m) {
 		feedMode = m;
 		updateSetting('ui.feedMode', m);

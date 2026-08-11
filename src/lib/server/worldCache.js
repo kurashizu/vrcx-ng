@@ -40,9 +40,14 @@ export async function getWorldMeta(accountId, worldId, { fetchOnMiss = true } = 
 		.prepare('SELECT name, thumbnail_url, author_name, occupants, updated_at FROM world_cache WHERE world_id = ?')
 		.get(worldId);
 	if (row && Date.now() - row.updated_at < TTL_MS) {
+		let imageUrl = null;
+		if (row.raw_json) {
+			try { imageUrl = JSON.parse(row.raw_json).imageUrl || null; } catch {}
+		}
 		const rec = {
 			worldId,
 			name: row.name,
+			imageUrl,
 			thumbnailUrl: row.thumbnail_url || null,
 			authorName: row.author_name || null,
 			occupants: row.occupants ?? null
@@ -59,6 +64,7 @@ export async function getWorldMeta(accountId, worldId, { fetchOnMiss = true } = 
 		const rec = {
 			worldId,
 			name: w.name || worldId,
+			imageUrl: w.imageUrl || w.thumbnailImageUrl || null,
 			thumbnailUrl: w.thumbnailImageUrl || null,
 			authorName: w.authorName || null,
 			occupants: typeof w.occupants === 'number' ? w.occupants : null

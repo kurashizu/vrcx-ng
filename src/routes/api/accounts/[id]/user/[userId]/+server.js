@@ -105,6 +105,7 @@ function sanitizeUser(u) {
 		currentAvatar: u.currentAvatar,
 		currentAvatarImageUrl: u.currentAvatarImageUrl,
 		currentAvatarThumbnailImageUrl: u.currentAvatarThumbnailImageUrl,
+		vrcPlus: !!u.vrcPlus,
 		profilePicOverride: u.profilePicOverride,
 		profilePicOverrideThumbnail: u.profilePicOverrideThumbnail,
 		imageUrl: u.imageUrl,

@@ -378,3 +378,18 @@ select:focus {
 .setting-row .control {
 	flex-shrink: 0;
 }
+
+/* VRC+ subscription marker */
+.vrcplus {
+	margin-left: 5px;
+	display: inline-block;
+	font-size: 0.62em;
+	line-height: 1;
+	padding: 2px 4px;
+	border-radius: 5px;
+	background: linear-gradient(135deg, #ffd166, #ff8b3d);
+	color: #2b1c00;
+	font-weight: 800;
+	vertical-align: 2px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}

@@ -1,4 +1,5 @@
 <script>
+import { vrImage } from '$lib/shared/format.js';
 	import {
 		worldDetailRequest,
 		closeWorldDetail
@@ -336,13 +337,21 @@
 				</div>
 			{:else if data}
 				<header class="hero">
-					{#if data.imageUrl}
-						<img class="hero-img" src={data.imageUrl} alt="" />
-					{:else if data.thumbnailImageUrl}
-						<img class="hero-img" src={data.thumbnailImageUrl} alt="" />
+					{#if data.imageUrl || data.thumbnailUrl}
+						<div
+							class="hero-img"
+							style:--hero={vrImage(data.imageUrl || data.thumbnailUrl, inviterAccountId)}
+						></div>
 					{/if}
 					<div class="hero-bg"></div>
 					<div class="hero-content">
+						{#if data.thumbnailUrl || data.imageUrl}
+							<img
+								class="hero-avatar"
+								src={vrImage(data.thumbnailUrl || data.imageUrl, inviterAccountId)}
+								alt=""
+							/>
+						{/if}
 						<h2 class="world-name">{data.name || data.id}</h2>
 						<div class="author-line">
 							by <strong>{data.authorName || data.authorId || 'unknown'}</strong>
@@ -793,6 +802,10 @@
 		inset: 0;
 		width: 100%;
 		height: 100%;
+		background-image: var(--hero, none);
+		background-size: cover;
+		background-position: center;
+		z-index: 0;
 		object-fit: cover;
 	}
 	.hero-bg {
@@ -808,6 +821,16 @@
 		justify-content: flex-end;
 		min-height: 200px;
 		color: white;
+	}
+	.hero-avatar {
+		width: 64px;
+		height: 64px;
+		border-radius: 14px;
+		object-fit: cover;
+		border: 2px solid rgba(255, 255, 255, 0.35);
+		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+		margin-bottom: 10px;
+		background: rgba(255, 255, 255, 0.08);
 	}
 	.world-name {
 		margin: 0;

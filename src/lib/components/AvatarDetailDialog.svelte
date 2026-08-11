@@ -1,4 +1,5 @@
 <script>
+import { vrImage } from '$lib/shared/format.js';
 	import { avatarDetailRequest, closeAvatarDetail } from '$lib/stores/avatarDetail.js';
 	import { accounts } from '$lib/stores/accounts.js';
 	import { openUserDetail } from '$lib/stores/userDetail.js';
@@ -192,7 +193,7 @@
 
 				<header class="hero">
 					{#if av.thumbnailImageUrl}
-						<img class="thumb" src={av.thumbnailImageUrl} alt={av.name} loading="lazy" />
+						<img class="thumb" src={vrImage(av.thumbnailImageUrl, callerId)} alt={av.name} loading="lazy" />
 					{:else}
 						<div class="thumb noimg">?</div>
 					{/if}

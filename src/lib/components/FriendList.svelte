@@ -1,4 +1,5 @@
 <script>
+import { vrImage } from '$lib/shared/format.js';
 	import {
 		friendsData,
 		filteredFriends,
@@ -198,19 +199,18 @@
 					}
 				];
 
-		// 邀请自己：把自己拉进好友当前所在的实例（所有访问类型均可），然后启动游戏
+		// 邀请自己：把自己拉进好友当前所在的实例（所有访问类型均可），然后启动游戏。
+		// 不做客户端预判（在线/实例类型）——接口失败会返回错误并 toast。
 		const selfInviteItems = acctList.length > 1
 			? acctList.map((a) => ({
 					icon: '🎯',
 					label: `以 ${a.displayName} 邀请自己`,
-					disabled: !isOnline,
 					action: () => selfInviteToFriend(a.id, f)
 				}))
 			: [
 					{
 						icon: '🎯',
 						label: '邀请自己到 TA 的实例',
-						disabled: !isOnline,
 						action: () => selfInviteToFriend(defaultAccountId, f)
 					}
 				];
@@ -277,7 +277,7 @@
 
 	async function selfInviteToFriend(accountId, f) {
 		const loc = f.location;
-		if (!loc || loc === 'offline' || loc === 'private') return;
+		// 不做客户端预判：任何 location 都交给接口，接口失败自然返回错误。
 		try {
 			const r = await fetch(`/api/accounts/${accountId}/instance-action`, {
 				method: 'POST',
@@ -657,7 +657,7 @@
 	>
 		<div class="avatar">
 			{#if f.currentAvatarThumbnailImageUrl}
-				<img src={f.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
+				<img src={vrImage(f.currentAvatarThumbnailImageUrl, f.accountIds?.[0] || '')} alt="" loading="lazy" />
 			{:else}
 				<span>{f.displayName.slice(0, 1).toUpperCase()}</span>
 			{/if}
@@ -665,7 +665,7 @@
 		</div>
 		<div class="info">
 			<div class="name-row">
-				<span class="name {trustClass(f)}">{f.displayName}</span>
+				<span class="name {trustClass(f)}">{f.displayName}{#if f.vrcPlus}<span class="vrcplus" title="VRC+">◈+</span>{/if}</span>
 				<span class="platform" title={f.platform}>{platformIcon(f.platform)}</span>
 				{#if f.status && STATUS_ICON[f.status]}
 					<span class={statusPillClass(f.status)}>{STATUS_ICON[f.status]} {f.status}</span>

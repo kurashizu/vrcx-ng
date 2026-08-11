@@ -1,4 +1,5 @@
 <script>
+import { vrImage } from '$lib/shared/format.js';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import {
@@ -206,7 +207,7 @@
 										<div class="acct-avatar">
 											{#if a.currentUser?.currentAvatarThumbnailImageUrl}
 												<img
-													src={a.currentUser.currentAvatarThumbnailImageUrl}
+													src={vrImage(a.currentUser.currentAvatarThumbnailImageUrl, a.id)}
 													alt=""
 													loading="lazy"
 												/>

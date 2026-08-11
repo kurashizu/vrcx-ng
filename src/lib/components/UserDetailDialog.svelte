@@ -1,4 +1,5 @@
 <script>
+import { vrImage } from '$lib/shared/format.js';
 	import {
 		userDetailRequest,
 		userDetailData,
@@ -14,6 +15,7 @@
 	import { openAvatarDetail } from '$lib/stores/avatarDetail.js';
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { parseLocation, accessTypeLabel, shortInstanceLabel } from '$lib/shared/location.js';
+	import { trustColor } from '$lib/shared/trust.js';
 
 	let data = $state(null);
 	let loading = $state(false);
@@ -153,15 +155,15 @@
 					<div class="hero-content">
 						<div class="avatar">
 							{#if data.user?.currentAvatarThumbnailImageUrl}
-								<img src={data.user.currentAvatarThumbnailImageUrl} alt="" />
+								<img src={vrImage(data.user.currentAvatarThumbnailImageUrl, $userDetailRequest.accountId)} alt="" />
 							{:else if data.user?.profilePicOverrideThumbnail}
-								<img src={data.user.profilePicOverrideThumbnail} alt="" />
+								<img src={vrImage(data.user.profilePicOverrideThumbnail, $userDetailRequest.accountId)} alt="" />
 							{:else}
 								<span>{(data.user?.displayName || '?').slice(0, 1).toUpperCase()}</span>
 							{/if}
 						</div>
 						<div class="hero-info">
-							<div class="display-name">{data.user?.displayName}</div>
+							<div class="display-name {trustColor(data.user)}">{data.user?.displayName}{#if data.user?.vrcPlus}<span class="vrcplus" title="VRC+">◈+</span>{/if}</div>
 							<div class="username">@{data.user?.username}</div>
 							<div class="badges">
 								{#if data.user?.developerType && data.user.developerType !== 'none'}
@@ -316,7 +318,7 @@
 							{#each data.avatars || [] as a (a.id)}
 								<button class="thumb btn" onclick={() => openAvatarDetail(a.id, $userDetailRequest.accountId)} title={a.name}>
 									{#if a.thumbnailImageUrl}
-										<img src={a.thumbnailImageUrl} alt={a.name} loading="lazy" />
+										<img src={vrImage(a.thumbnailImageUrl, $userDetailRequest.accountId)} alt={a.name} loading="lazy" />
 									{:else}
 										<div class="noimg">?</div>
 									{/if}
@@ -335,7 +337,7 @@
 							{#each data.worlds || [] as w (w.id)}
 								<div class="thumb">
 									{#if w.thumbnailImageUrl}
-										<img src={w.thumbnailImageUrl} alt={w.name} loading="lazy" />
+										<img src={vrImage(w.thumbnailImageUrl, $userDetailRequest.accountId)} alt={w.name} loading="lazy" />
 									{:else}
 										<div class="noimg">?</div>
 									{/if}
@@ -354,7 +356,7 @@
 							{#each data.badges || [] as b (b.badgeId)}
 								<div class="badge-card" title={b.badgeDescription || ''}>
 									{#if b.badgeImageUrl}
-										<img src={b.badgeImageUrl} alt={b.badgeName} />
+										<img src={vrImage(b.badgeImageUrl, $userDetailRequest.accountId)} alt={b.badgeName} />
 									{:else}
 										<div class="noimg">🏅</div>
 									{/if}

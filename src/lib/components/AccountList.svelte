@@ -1,4 +1,5 @@
 <script>
+import { vrImage } from '$lib/shared/format.js';
 	import {
 		accounts,
 		logoutAccount,
@@ -6,6 +7,7 @@
 		reconnectAccount,
 		loginAccount
 	} from '$lib/stores/accounts.js';
+	import { openUserDetail } from '$lib/stores/userDetail.js';
 	import { accountFilter } from '$lib/stores/feed.js';
 
 	/** @type {{ onAdd: () => void }} */
@@ -50,7 +52,7 @@
 				<button class="account-main" onclick={() => accountFilter.set(acc.id)} title={acc.username}>
 					<div class="avatar">
 						{#if acc.currentUser?.currentAvatarThumbnailImageUrl}
-							<img src={acc.currentUser.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
+							<img src={vrImage(acc.currentUser.currentAvatarThumbnailImageUrl, acc.id)} alt="" loading="lazy" />
 						{:else}
 							<span>{(acc.displayName || acc.username || '?').slice(0, 1).toUpperCase()}</span>
 						{/if}
@@ -78,6 +80,13 @@
 				</button>
 				<div class="actions">
 					{#if acc.loggedIn}
+						{#if acc.currentUser?.id}
+							<button
+								class="ghost xs"
+								title="查看用户详细信息"
+								onclick={() => openUserDetail(acc.id, acc.currentUser.id, acc.displayName || acc.currentUser.displayName)}
+							>👤</button>
+						{/if}
 						{#if !acc.connected}
 							<button class="ghost xs" title="重连" onclick={() => reconnectAccount(acc.id)}>↻</button>
 						{/if}

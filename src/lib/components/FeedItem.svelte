@@ -1,6 +1,8 @@
 <script>
+import { vrImage } from '$lib/shared/format.js';
 	import EventIcon from './EventIcon.svelte';
 	import { timeAgo, formatTime, locationLabel } from '$lib/shared/format.js';
+	import { trustColor } from '$lib/shared/trust.js';
 	import { accounts } from '$lib/stores/accounts.js';
 	import { showContextMenu } from '$lib/stores/contextMenu.js';
 	import { openUserDetail } from '$lib/stores/userDetail.js';
@@ -26,6 +28,8 @@
 	// Private avatars often come back without a thumbnail in the event payload;
 	// fall back to the friend snapshot (which the server backfills via getAvatar).
 	const friendInfo = $derived($friendInfoById.get(entry.userId));
+	// trust-rank CSS class + VRC+ flag for the subject user
+	const trustClass = $derived(friendInfo ? trustColor(friendInfo) : '');
 	const userThumb = $derived(entry.userThumbnailUrl || friendInfo?.thumbnail || '');
 	const accColor = $derived(stringHue(account?.displayName || entry.accountId));
 	const userHue = $derived(stringHue(displayName));
@@ -219,7 +223,7 @@
 		onclick={(e) => { e.stopPropagation(); clickUser(e); }}
 	>
 		{#if userThumb}
-			<img src={userThumb} alt="" loading="lazy" />
+			<img src={vrImage(userThumb, entry.accountId)} alt="" loading="lazy" />
 		{:else}
 			<span>{displayName.slice(0, 1).toUpperCase()}</span>
 		{/if}
@@ -236,7 +240,7 @@
 		<div class="head-row">
 			<EventIcon type={entry.type} />
 			{#if entry.userId}
-				<button class="user-name" onclick={clickUser} title={entry.userId}>
+				<button class="user-name {trustClass}" onclick={clickUser} title={entry.userId}>
 					{displayName}
 				</button>
 			{:else}
@@ -326,7 +330,7 @@
 						title="查看旧模型"
 						onclick={(e) => { e.stopPropagation(); clickChip({ key: 'avatar-prev', avatarId: extractAvatarId(entry.previousCurrentAvatarImageUrl) }); }}
 					>
-						<img src={entry.previousCurrentAvatarThumbnailImageUrl} alt="" loading="lazy" />
+						<img src={vrImage(entry.previousCurrentAvatarThumbnailImageUrl, entry.accountId)} alt="" loading="lazy" />
 						<span class="lbl">Before</span>
 					</button>
 				{/if}
@@ -337,7 +341,7 @@
 						title="查看新模型"
 						onclick={(e) => { e.stopPropagation(); clickChip({ key: 'avatar-next', avatarId: extractAvatarId(entry.currentAvatarImageUrl) }); }}
 					>
-						<img src={entry.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
+						<img src={vrImage(entry.currentAvatarThumbnailImageUrl, entry.accountId)} alt="" loading="lazy" />
 						<span class="lbl">After</span>
 					</button>
 				{/if}

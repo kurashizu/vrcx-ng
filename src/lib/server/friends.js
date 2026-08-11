@@ -581,11 +581,18 @@ function normalizeFriend(f, activeSet, onlineSet) {
 
 	const loc = f.location && f.location !== 'offline' ? f.location : '';
 	const worldId = loc ? loc.split(':')[0] : '';
+	// VRChat marks private avatars with a thumbnail that equals the user's
+	// iconUrl (a file that 404s for everyone). Swap it for the larger profile
+	// image when that happens so the UI falls back cleanly.
+	const thumbRaw = f.currentAvatarThumbnailImageUrl || '';
+	const iconRaw = f.iconUrl || '';
+	const thumbOk = thumbRaw && thumbRaw !== iconRaw ? thumbRaw : (f.imageUrl || f.iconUrl || '');
 	return {
 		id: f.id,
 		displayName: f.displayName || f.id,
 		currentAvatar: f.currentAvatar || '',
-		currentAvatarThumbnailImageUrl: f.currentAvatarThumbnailImageUrl || '',
+		currentAvatarThumbnailImageUrl: thumbOk,
+		vrcPlus: !!f.vrcPlus,
 		status: f.status || 'offline',
 		statusDescription: f.statusDescription || '',
 		bio: f.bio || '',

@@ -1,4 +1,5 @@
 <script>
+import { vrImage } from '$lib/shared/format.js';
 	import { friendGridOpen, closeFriendGrid } from '$lib/stores/friendGrid.js';
 	import { friendsData } from '$lib/stores/friends.js';
 	import { accounts } from '$lib/stores/accounts.js';
@@ -13,9 +14,9 @@
 	const STATUS_ORDER = [
 		{ key: 'joinme', label: '🔵 加入我', status: 'join me' },
 		{ key: 'online', label: '🟢 在线', status: '' },
-		{ key: 'active', label: '🟣 活跃', status: 'active' },
 		{ key: 'askme', label: '🟡 询问我', status: 'ask me' },
 		{ key: 'busy', label: '🔴 忙碌', status: 'busy' },
+		{ key: 'active', label: '🟣 活跃', status: 'active' },
 		{ key: 'offline', label: '⚫ 离线', status: 'offline' }
 	];
 
@@ -136,7 +137,7 @@
 									>
 										<div class="avatar">
 											{#if f.currentAvatarThumbnailImageUrl}
-												<img src={f.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
+												<img src={vrImage(f.currentAvatarThumbnailImageUrl, f.accountIds?.[0] || '')} alt="" loading="lazy" />
 											{:else}
 												<div class="noimg" style:background={`hsl(${hue} 60% 30%)`}>
 													{String(f.displayName || '?').slice(0, 1).toUpperCase()}
@@ -148,7 +149,7 @@
 											{/if}
 										</div>
 										<div class="meta">
-											<div class="name" style:--trust-hue={hue}>{f.displayName}</div>
+											<div class="name {trustColor(f)}" style:--trust-hue={hue}>{f.displayName}{#if f.vrcPlus}<span class="vrcplus" title="VRC+">◈+</span>{/if}</div>
 											{#if f.statusDescription}
 												<div class="sub">{f.statusDescription}</div>
 											{/if}

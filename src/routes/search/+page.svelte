@@ -1,4 +1,5 @@
 <script>
+import { vrImage } from '$lib/shared/format.js';
 	import { accounts } from '$lib/stores/accounts.js';
 	import { openUserDetail } from '$lib/stores/userDetail.js';
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
@@ -169,7 +170,7 @@
 							<button class="row" onclick={() => openFriend(r)}>
 								<img
 									class="avatar"
-									src={r.userThumbnailUrl || `https://api.vrchat.cloud/api/1/image/${r.userId}/1/256.jpg`}
+									src={vrImage(r.userThumbnailUrl || `https://api.vrchat.cloud/api/1/image/${r.userId}/1/256.jpg`, r.accountId)}
 									alt=""
 									loading="lazy"
 								/>
@@ -219,7 +220,7 @@
 							<button class="row" onclick={() => openUserResult(r)}>
 								<img
 									class="avatar"
-									src={r.currentAvatarThumbnailImageUrl || `https://api.vrchat.cloud/api/1/image/${r.id}/1/256.jpg`}
+									src={vrImage(r.currentAvatarThumbnailImageUrl || `https://api.vrchat.cloud/api/1/image/${r.id}/1/256.jpg`, r.accountId)}
 									alt=""
 									loading="lazy"
 								/>
@@ -252,7 +253,7 @@
 						<li>
 							<button class="row" onclick={() => openWorldResult(r)}>
 								{#if r.imageUrl || r.thumbnailImageUrl}
-									<img class="thumb" src={r.imageUrl || r.thumbnailImageUrl} alt="" loading="lazy" />
+									<img class="thumb" src={vrImage(r.imageUrl || r.thumbnailImageUrl, r.accountId)} alt="" loading="lazy" />
 								{:else}
 									<div class="thumb placeholder">🌍</div>
 								{/if}
@@ -281,7 +282,7 @@
 						<li>
 							<button class="row" onclick={() => openAvatarDetail(r.id, $accounts.find((a) => a.loggedIn)?.id || '')}>
 								{#if r.thumbnailImageUrl || r.imageUrl}
-									<img class="thumb" src={r.thumbnailImageUrl || r.imageUrl} alt="" loading="lazy" />
+									<img class="thumb" src={vrImage(r.thumbnailImageUrl || r.imageUrl, r.accountId)} alt="" loading="lazy" />
 								{:else}
 									<div class="thumb placeholder">🎭</div>
 								{/if}

@@ -5,6 +5,7 @@
 	import { openUserDetail } from '$lib/stores/userDetail.js';
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { toasts } from '$lib/stores/toast.js';
+	import { parseLocation, shortInstanceLabel } from '$lib/shared/location.js';
 
 	let { open = $bindable(false) } = $props();
 
@@ -164,12 +165,13 @@
 									<span class="via">via {accName(it.accountId)}</span>
 								{/if}
 							</div>
-							{#if it.worldName || it.worldId}
+							{#if it.worldId || it.instanceId}
 								<button
 									class="world-chip"
 									onclick={() => launch(`${it.worldId}:${it.instanceId || ''}`)}
+									title="打开世界详情"
 								>
-									🌍 {it.worldName || it.worldId}{it.instanceId ? ` · ${it.instanceId}` : ''}
+									🌍 {it.worldName || '世界'}{it.instanceId ? ` · ${shortInstanceLabel(parseLocation(`${it.worldId}:${it.instanceId}`), it.senderDisplayName)}` : ''}
 								</button>
 							{/if}
 							{#if it.message}

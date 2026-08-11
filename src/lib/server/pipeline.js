@@ -540,6 +540,8 @@ async function handleMessage(state, msg) {
 			}
 			// Persist into the notification inbox (this is the type VRChat's
 			// websocket actually pushes — notification-v2 is rarely seen).
+			const notifWorldId = detail.worldId || '';
+			const notifWorldName = notifWorldId ? await resolveWorldName(state, notifWorldId) : '';
 			addNotification({
 				id: n.id,
 				accountId: state.accountId,
@@ -547,7 +549,8 @@ async function handleMessage(state, msg) {
 				senderUserId,
 				senderDisplayName: senderName,
 				senderUsername: n.senderUsername || '',
-				worldId: detail.worldId || '',
+				worldId: notifWorldId,
+				worldName: notifWorldName,
 				instanceId: detail.instanceId || '',
 				message: n.message || '',
 				raw: n
