@@ -11,6 +11,7 @@ import { vrImage } from '$lib/shared/format.js';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { timeAgo } from '$lib/shared/format.js';
+	import InviteFriendsDialog from './InviteFriendsDialog.svelte';
 
 	let data = $state(null);
 	let loading = $state(false);
@@ -111,6 +112,8 @@ import { vrImage } from '$lib/shared/format.js';
 
 	// ----- Invite yourself into an existing instance -----
 	let selfInviteBusy = $state(''); // location currently being processed
+	// 👥 invite-friends target: { accountId, location }
+	let inviteTarget = $state(null);
 
 	async function selfInviteTo(location) {
 		if (!inviterAccountId) {
@@ -579,6 +582,11 @@ import { vrImage } from '$lib/shared/format.js';
 																onclick={() => selfInviteTo(fullLoc)}
 															>{selfInviteBusy === fullLoc ? '…' : '✉️'}</button>
 																<button
+																	class="inst-invite"
+																	title="邀请好友加入此实例（多选 + 批量）"
+																	onclick={() => (inviteTarget = { accountId: inviterAccountId, location: fullLoc })}
+																>👥</button>
+																<button
 																	class="inst-launch"
 																	title="启动"
 																	onclick={() => launch(inst.id || inst.instanceId)}
@@ -710,6 +718,17 @@ import { vrImage } from '$lib/shared/format.js';
 											</div>
 											<div class="inst-actions">
 												<button
+													class="inst-self"
+													disabled={selfInviteBusy === fullLoc}
+													title="发送自我邀请（所有访问类型均可用）"
+													onclick={() => selfInviteTo(fullLoc)}
+												>{selfInviteBusy === fullLoc ? '…' : '✉️'}</button>
+												<button
+													class="inst-invite"
+													title="邀请好友加入此实例（多选 + 批量）"
+													onclick={() => (inviteTarget = { accountId: inviterAccountId, location: fullLoc })}
+												>👥</button>
+												<button
 													class="inst-launch"
 													title="加入该实例"
 													onclick={() => launch(inst.id || inst.instanceId)}
@@ -725,6 +744,15 @@ import { vrImage } from '$lib/shared/format.js';
 			{/if}
 		</div>
 	</div>
+{/if}
+
+{#if inviteTarget}
+	<InviteFriendsDialog
+		open
+		accountId={inviteTarget.accountId}
+		location={inviteTarget.location}
+		onClose={() => (inviteTarget = null)}
+	/>
 {/if}
 
 <style>
@@ -1157,6 +1185,7 @@ import { vrImage } from '$lib/shared/format.js';
 		flex-shrink: 0;
 	}
 	.inst-launch,
+	.inst-invite,
 	.inst-self {
 		width: 32px;
 		height: 32px;
@@ -1173,6 +1202,13 @@ import { vrImage } from '$lib/shared/format.js';
 	.inst-self:disabled {
 		opacity: 0.5;
 		cursor: default;
+	}
+	.inst-invite {
+		background: rgba(61, 220, 151, 0.1);
+		border-color: rgba(61, 220, 151, 0.35);
+	}
+	.inst-invite:hover {
+		background: rgba(61, 220, 151, 0.22);
 	}
 	.at-badge {
 		display: inline-block;
