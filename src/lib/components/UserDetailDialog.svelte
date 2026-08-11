@@ -38,9 +38,16 @@ import { vrImage } from '$lib/shared/format.js';
 	function profileSaved() {
 		loadUser($userDetailRequest.accountId, $userDetailRequest.userId);
 	}
+	let lastViewAccount = null;
 	$effect(() => {
 		const want = $userDetailRequest?.accountId;
-		if (want && loggedInAccounts.some((a) => a.id === want)) opAccountId = want;
+		// Follow the view account only when it actually changes or the
+		// current selection is no longer available; never re-pin a choice
+		// the user made manually.
+		if (want && want !== lastViewAccount) {
+			lastViewAccount = want;
+			if (loggedInAccounts.some((a) => a.id === want)) opAccountId = want;
+		}
 		if (!loggedInAccounts.some((a) => a.id === opAccountId)) {
 			opAccountId = want || loggedInAccounts[0]?.id || '';
 		}
