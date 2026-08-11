@@ -101,9 +101,9 @@ async function collectInstances(accountId, worldId) {
 		}
 	} catch {}
 
-	// 2) the requesting account's own instance
+	// 2) every logged-in account's own current instance (so a private /
+	//    friends instance you are in is always visible & self-invitable)
 	for (const s of getSelfLocations().values()) {
-		if (s.accountId !== accountId) continue;
 		const p = parse(s.location);
 		if (!p) continue;
 		add(p, { ownerName: s.displayName, ownerUserId: s.userId || '', occupants: 1 });

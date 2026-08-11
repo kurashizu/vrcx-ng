@@ -335,6 +335,12 @@ async function handleMessage(state, msg) {
 			const sess = getSession(state.accountId);
 			if (!sess?.user) break;
 			const loc = content.location;
+			// Persist the position on the account session — this is what
+			// powers the "my current instance" aggregation (self-invite to
+			// private/friends instances you are in) and the account bar.
+			if (loc && loc !== sess.user.location) {
+				setSession(state.accountId, { user: { ...sess.user, location: loc } });
+			}
 			if (loc && loc !== 'offline') {
 				const { worldId } = parseLocation(loc);
 				const worldName = worldId ? await resolveWorldName(state, worldId) : '';

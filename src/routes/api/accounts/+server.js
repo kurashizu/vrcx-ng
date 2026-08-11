@@ -17,7 +17,12 @@ export async function GET() {
 				? {
 						id: sess.user.id,
 						displayName: sess.user.displayName,
-						currentAvatarThumbnailImageUrl: sess.user.currentAvatarThumbnailImageUrl
+						currentAvatarThumbnailImageUrl: sess.user.currentAvatarThumbnailImageUrl,
+						location: sess.user.location || '',
+						status: sess.user.status || 'offline',
+						statusDescription: sess.user.statusDescription || '',
+						state: sess.user.state || 'offline',
+						platform: sess.user.platform || ''
 					}
 				: null,
 			lastError: sess?.lastError || null,

@@ -24,12 +24,12 @@
 	--shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 
 	/* Trust rank colors (used when ui.trustColors is on) */
-	--trust-visitor: #b8c4d6;
+	--trust-visitor: #cfd6e4;
 	--trust-newuser: #6bd1ff;
 	--trust-user: #3ddc97;
-	--trust-known: #b27cff;
-	--trust-trusted: #ffd166;
-	--trust-veteran: #ff8b3d;
+	--trust-known: #ffa54d;
+	--trust-trusted: #b27cff;
+	--trust-veteran: #ffd166;
 	--trust-legend: #ff5d6c;
 }
 
@@ -304,11 +304,47 @@ select:focus {
 :root[data-theme='light'] .trust-visitor { color: #5a6a85; }
 :root[data-theme='light'] .trust-newuser { color: #1e88c8; }
 :root[data-theme='light'] .trust-user    { color: #0e9968; }
-:root[data-theme='light'] .trust-known   { color: #7c46d4; }
-:root[data-theme='light'] .trust-trusted { color: #c08a00; }
-:root[data-theme='light'] .trust-veteran { color: #d35a00; }
+:root[data-theme='light'] .trust-known   { color: #d97b1c; }
+:root[data-theme='light'] .trust-trusted { color: #7c46d4; }
+:root[data-theme='light'] .trust-veteran { color: #c08a00; }
 :root[data-theme='light'] .trust-legend  { color: #d6263a; }
 
+.av-open {
+	flex: none;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--bg-2);
+	color: var(--text-dim);
+	font-size: 11px;
+	line-height: 1;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.av-open:hover {
+	background: var(--bg-3);
+	color: var(--text);
+}
+/* FriendGrid card variant (overlay button) */
+.card .av-open {
+	position: absolute;
+	right: 6px;
+	top: 6px;
+	width: 24px;
+	height: 24px;
+	font-size: 13px;
+	background: rgba(0, 0, 0, 0.55);
+	border-color: rgba(255, 255, 255, 0.2);
+	color: #fff;
+	z-index: 2;
+}
+.card .av-open:hover {
+	background: rgba(124, 92, 255, 0.7);
+}
 /* ---------- Shared form controls ---------- */
 .toggle {
 	position: relative;

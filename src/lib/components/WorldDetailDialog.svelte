@@ -120,7 +120,11 @@ import { vrImage } from '$lib/shared/format.js';
 			toasts.error('请选择账号');
 			return;
 		}
-		if (!location) return;
+		location = String(location || '');
+		if (!location || !location.includes(':') || !location.startsWith('wrld_') || location.includes('undefined')) {
+			toasts.error('self-invite 失败: 无效的实例位置');
+			return;
+		}
 		selfInviteBusy = location;
 		try {
 			const r = await fetch(
@@ -550,7 +554,7 @@ import { vrImage } from '$lib/shared/format.js';
 										{:else}
 											<div class="instances">
 												{#each instances as inst (inst.id || inst.instanceId)}
-													{@const fullLoc = `${data.id}:${inst.id || inst.instanceId}`}
+													{@const fullLoc = `${data.id}:${String(inst.id || inst.instanceId || '')}`}
 													{@const parsed = parseLocation(fullLoc)}
 													<div class="inst-row">
 														<div class="inst-main">
@@ -689,7 +693,7 @@ import { vrImage } from '$lib/shared/format.js';
 							{:else}
 								<div class="instances">
 									{#each instances as inst (inst.id || inst.instanceId)}
-										{@const fullLoc = `${data.id}:${inst.id || inst.instanceId}`}
+										{@const fullLoc = `${data.id}:${String(inst.id || inst.instanceId || '')}`}
 										{@const parsed = parseLocation(fullLoc)}
 										<div class="inst-row">
 											<div class="inst-main">

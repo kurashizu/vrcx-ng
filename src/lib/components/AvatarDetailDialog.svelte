@@ -310,7 +310,7 @@ import { vrImage } from '$lib/shared/format.js';
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 200;
+		z-index: 500; /* above every dialog (user/world/invite) */
 		padding: 20px;
 	}
 	.dialog {

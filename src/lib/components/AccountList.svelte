@@ -9,6 +9,30 @@ import { vrImage } from '$lib/shared/format.js';
 	} from '$lib/stores/accounts.js';
 	import { openUserDetail } from '$lib/stores/userDetail.js';
 	import { accountFilter } from '$lib/stores/feed.js';
+	import { parseLocation, shortInstanceLabel } from '$lib/shared/location.js';
+
+	// Mirror the friend list: show each account's game status + current
+	// location (world + instance chip). 'private' means incognito.
+	function accLoc(acc) {
+		const loc = (acc.currentUser?.location || '').trim();
+		if (!loc || loc === 'offline') return { text: '离线', cls: 'off', loc: '' };
+		if (loc === 'private') return { text: '隐身中', cls: 'invis', loc: '' };
+		const p = parseLocation(loc);
+		if (!p?.worldId) return { text: loc, cls: '', loc };
+		const short = (p.worldId.match(/wrld_[0-9a-f]{4}$/i) || [p.worldId])[0];
+		return {
+			text: `🌍 ${short}`,
+			cls: '',
+			loc: `${p.worldId}:${p.instanceId || ''}`,
+			chip: shortInstanceLabel(p) || ''
+		};
+	}
+	function statusPill(acc) {
+		const st = acc.currentUser?.status || '';
+		if (!st || st === 'offline' || st === 'active') return '';
+		const map = { 'join me': '🔵 加入我', 'ask me': '🟡 询问我', busy: '🔴 忙碌' };
+		return map[st] || st;
+	}
 
 	/** @type {{ onAdd: () => void }} */
 	let { onAdd } = $props();
@@ -76,6 +100,19 @@ import { vrImage } from '$lib/shared/format.js';
 								<span class="badge offline">未登录</span>
 							{/if}
 						</div>
+						{#if acc.connected}
+							{@const L = accLoc(acc)}
+							{@const SP = statusPill(acc)}
+							<div class="where" title={L.loc || acc.currentUser?.location || ''}>
+								{#if SP}
+									<span class="st-pill">{SP}</span>
+								{/if}
+								<span class="loc-txt {L.cls}">{L.text}</span>
+								{#if L.chip}
+									<span class="inst-chip">{L.chip}</span>
+								{/if}
+							</div>
+						{/if}
 					</div>
 				</button>
 				<div class="actions">
@@ -253,7 +290,45 @@ import { vrImage } from '$lib/shared/format.js';
 	.status {
 		margin-top: 2px;
 	}
-	.actions {
+	.where {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		margin-top: 2px;
+		min-width: 0;
+		flex-wrap: wrap;
+	}
+	.st-pill {
+		font-size: 10px;
+		padding: 0 6px;
+		border-radius: 999px;
+		background: var(--bg-2);
+		border: 1px solid var(--border);
+		color: var(--text-dim);
+		white-space: nowrap;
+	}
+	.loc-txt {
+		font-size: 11px;
+		color: var(--text-dim);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.loc-txt.off {
+		color: var(--text-faint);
+	}
+	.loc-txt.invis {
+		color: var(--text-dim);
+	}
+	.inst-chip {
+		font-size: 9px;
+		padding: 1px 5px;
+		border-radius: 5px;
+		background: rgba(124, 92, 255, 0.15);
+		color: var(--accent);
+		white-space: nowrap;
+	}
+		.actions {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;

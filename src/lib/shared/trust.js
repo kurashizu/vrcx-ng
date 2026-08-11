@@ -22,31 +22,52 @@ export function trustColor(f) {
 }
 
 /**
- * Derive the trust-rank CSS class from the tag list VRChat puts on users
- * (e.g. 'system_trust_basic' = User, 'system_trust_known' = Known...).
+ * Derive the trust-rank CSS class from the tag list VRChat puts on users.
+ * VRChat returns CUMULATIVE tags (a veteran carries basic/known/trusted/
+ * veteran at once), so we pick the HIGHEST level present.
+ * Map: basic/user→green, known→orange, trusted→purple, newuser→blue,
+ * visitor→white, veteran→gold, legend→red.
  * @param {string[]} tags
  * @returns {string}
  */
 export function trustClassFromTags(tags) {
 	if (!Array.isArray(tags)) return '';
+	let best = -1;
+	let cls = '';
 	for (const t of tags) {
 		const m = String(t).match(/system_trust_([a-z_]+)/);
-		if (m) {
-			const raw = m[1].replace(/_/g, '').trim();
-			const map = {
-				visitor: 'trust-visitor',
-				newuser: 'trust-newuser',
-				basic: 'trust-user',
-				user: 'trust-user',
-				known: 'trust-known',
-				trusted: 'trust-trusted',
-				veteran: 'trust-veteran',
-				legend: 'trust-legend'
-			};
-			return map[raw] || '';
+		if (!m) continue;
+		const raw = m[1].replace(/_/g, '').trim();
+		const rank = {
+			visitor: 0,
+			newuser: 1,
+			basic: 2,
+			user: 2,
+			known: 3,
+			trusted: 4,
+			veteran: 5,
+			legend: 6
+		}[raw];
+		if (rank === undefined) continue;
+		if (rank > best) {
+			best = rank;
+			cls =
+				raw === 'visitor'
+					? 'trust-visitor'
+					: raw === 'newuser'
+						? 'trust-newuser'
+						: raw === 'basic' || raw === 'user'
+							? 'trust-user'
+							: raw === 'known'
+								? 'trust-known'
+								: raw === 'trusted'
+									? 'trust-trusted'
+									: raw === 'veteran'
+										? 'trust-veteran'
+										: 'trust-legend';
 		}
 	}
-	return '';
+	return cls;
 }
 
 function trustToClass(rank) {

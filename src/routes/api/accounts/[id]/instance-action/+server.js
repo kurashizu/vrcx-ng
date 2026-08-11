@@ -57,8 +57,9 @@ export async function POST({ params, request }) {
 					: json({ ok: false, status: r.status, error: r.data?.error?.message || `HTTP ${r.status}` }, { status: 400 });
 			}
 			case 'selfInvite': {
-				const location = body.location;
-				if (!location || !location.includes(':')) {
+				const location = String(body.location || '');
+				// Reject anything that would make VRChat see an 'undefined' worldId
+				if (!location || !location.includes(':') || !location.startsWith('wrld_') || location.includes('undefined')) {
 					return json({ ok: false, error: 'location required (wrld_xxx:inst)' }, { status: 400 });
 				}
 				const r = await selfInvite(params.id, location);

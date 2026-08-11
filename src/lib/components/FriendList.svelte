@@ -12,6 +12,7 @@ import { vrImage } from '$lib/shared/format.js';
 	import { showContextMenu } from '$lib/stores/contextMenu.js';
 	import { openFriendGrid } from '$lib/stores/friendGrid.js';
 	import { openUserDetail as openUserDetailPanel } from '$lib/stores/userDetail.js';
+	import { openAvatarDetail } from '$lib/stores/avatarDetail.js';
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { toasts } from '$lib/stores/toast.js';
 	import { trustColor, vrcLaunchUrl } from '$lib/shared/trust.js';
@@ -276,7 +277,13 @@ import { vrImage } from '$lib/shared/format.js';
 	}
 
 	async function selfInviteToFriend(accountId, f) {
-		const loc = f.location;
+		const loc = String(f.location || '');
+		// Guard against broken locations ('undefined' sneaks in from stale
+		// snapshots) — VRChat would reply "'undefined' is not a valid worldId".
+		if (!loc || !loc.includes(':') || !loc.startsWith('wrld_') || loc.includes('undefined')) {
+			toasts.error('self-invite 失败: 无效的实例位置');
+			return;
+		}
 		// 不做客户端预判：任何 location 都交给接口，接口失败自然返回错误。
 		try {
 			const r = await fetch(`/api/accounts/${accountId}/instance-action`, {
@@ -463,7 +470,7 @@ import { vrImage } from '$lib/shared/format.js';
 				if (!groups.has('private')) {
 					groups.set('private', {
 						key: 'private',
-						label: 'Private / Unknown',
+						label: '🙈 隐身中',
 						friends: [],
 						count: 0
 					});
@@ -546,7 +553,7 @@ import { vrImage } from '$lib/shared/format.js';
 				});
 			}
 		}
-		// 'Private / Unknown' bucket always last, others by friend count desc
+		// '隐身中' bucket always last, others by friend count desc
 		return out.sort((a, b) => {
 			const aPriv = a.key === 'private';
 			const bPriv = b.key === 'private';
@@ -667,6 +674,13 @@ import { vrImage } from '$lib/shared/format.js';
 			<div class="name-row">
 				<span class="name {trustClass(f)}">{f.displayName}{#if f.vrcPlus}<span class="vrcplus" title="VRC+">◈+</span>{/if}</span>
 				<span class="platform" title={f.platform}>{platformIcon(f.platform)}</span>
+				{#if f.currentAvatar}
+					<button
+						class="av-open"
+						title="查看模型"
+						onclick={(e) => { e.stopPropagation(); openAvatarDetail(f.currentAvatar, f.accountIds?.[0] || ''); }}
+					>🧍</button>
+				{/if}
 				{#if f.status && STATUS_ICON[f.status]}
 					<span class={statusPillClass(f.status)}>{STATUS_ICON[f.status]} {f.status}</span>
 				{/if}
@@ -694,6 +708,8 @@ import { vrImage } from '$lib/shared/format.js';
 					{#if $settings['ui.showInstanceId']}
 						<span class="inst-detail" title={f.location}>{shortInstanceLabel(parsed)}</span>
 					{/if}
+				{:else if f.state === 'online' && (f.location === 'private' || f.location === 'undefined')}
+					<span class="muted">🙈 隐身中</span>
 				{:else if f.state === 'active'}
 					<span class="muted">在 VRChat 桌面客户端中</span>
 				{:else}
