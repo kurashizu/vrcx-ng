@@ -278,13 +278,14 @@ import { vrImage } from '$lib/shared/format.js';
 
 	async function selfInviteToFriend(accountId, f) {
 		const loc = String(f.location || '');
-		// Guard against broken locations ('undefined' sneaks in from stale
-		// snapshots) — VRChat would reply "'undefined' is not a valid worldId".
-		if (!loc || !loc.includes(':') || !loc.startsWith('wrld_') || loc.includes('undefined')) {
-			toasts.error('self-invite 失败: 无效的实例位置');
+		if (!loc || loc === 'offline' || loc === 'traveling') {
+			toasts.error('self-invite 失败: 该好友当前未加入任何实例');
 			return;
 		}
-		// 不做客户端预判：任何 location 都交给接口，接口失败自然返回错误。
+		if (loc === 'private') {
+			toasts.error('self-invite 失败: 该好友隐身中，无法自邀');
+			return;
+		}
 		try {
 			const r = await fetch(`/api/accounts/${accountId}/instance-action`, {
 				method: 'POST',
@@ -297,7 +298,7 @@ import { vrImage } from '$lib/shared/format.js';
 				const u = vrcLaunchUrl(loc);
 				if (u && browser) window.location.href = u;
 			} else {
-				toasts.error('self-invite 失败: ' + (j.error || '未知错误'));
+				toasts.error('self-invite 失败: ' + (j.error || '未知错误') + ` (location: ${loc.slice(0, 50)})`);
 			}
 		} catch (err) {
 			toasts.error('self-invite 失败: ' + err.message);

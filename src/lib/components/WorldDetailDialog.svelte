@@ -121,7 +121,7 @@ import { vrImage } from '$lib/shared/format.js';
 			return;
 		}
 		location = String(location || '');
-		if (!location || !location.includes(':') || !location.startsWith('wrld_') || location.includes('undefined')) {
+		if (!location) {
 			toasts.error('self-invite 失败: 无效的实例位置');
 			return;
 		}
@@ -141,7 +141,7 @@ import { vrImage } from '$lib/shared/format.js';
 				// VRCX 行为：邀请自己成功后立即拉起 VRChat 进入该实例
 				const u = vrcLaunchUrl(location);
 				if (u && browser) window.location.href = u;
-			} else toasts.error('self-invite 失败: ' + (j.error || '未知错误'));
+			} else toasts.error('self-invite 失败: ' + (j.error || '未知错误') + ` (location: ${location.slice(0, 50)})`);
 		} catch (err) {
 			toasts.error('self-invite 失败: ' + err.message);
 		} finally {

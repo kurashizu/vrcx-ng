@@ -58,14 +58,13 @@ export async function POST({ params, request }) {
 			}
 			case 'selfInvite': {
 				const location = String(body.location || '');
-				// Reject anything that would make VRChat see an 'undefined' worldId
-				if (!location || !location.includes(':') || !location.startsWith('wrld_') || location.includes('undefined')) {
-					return json({ ok: false, error: 'location required (wrld_xxx:inst)' }, { status: 400 });
+				if (!location) {
+					return json({ ok: false, error: 'location required' }, { status: 400 });
 				}
 				const r = await selfInvite(params.id, location);
-				return r.ok
-					? json({ ok: true })
-					: json({ ok: false, status: r.status, error: r.data?.error?.message || `HTTP ${r.status}` }, { status: 400 });
+				if (r.ok) return json({ ok: true });
+				// Surface VRChat's exact message (e.g. "'<inst>' is not a valid instanceId")
+				return json({ ok: false, status: r.status, error: r.data?.error?.message || `HTTP ${r.status}` }, { status: 400 });
 			}
 			case 'requestInvite': {
 				if (!body.userId) {

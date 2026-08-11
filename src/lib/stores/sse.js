@@ -1,6 +1,6 @@
 import { toasts } from './toast.js';
 import { setInitial, pushEntry } from './feed.js';
-import { accounts, accountsLoaded } from './accounts.js';
+import { accounts, accountsLoaded, refreshAccounts } from './accounts.js';
 import { setFriendsSnapshot } from './friends.js';
 
 let es = null;
@@ -37,6 +37,10 @@ export function connectSSE() {
 		try {
 			const data = JSON.parse(e.data);
 			if (data.accounts) applyAccountState(data.accounts);
+			// The SSE accounts payload only carries {connected}; refresh the
+			// full account list so the bar picks up currentUser.location
+			// (and other session-derived fields) after a user-location event.
+			scheduleAccountsRefresh();
 		} catch (err) {
 			console.error('accounts parse', err);
 		}
@@ -63,6 +67,15 @@ export function connectSSE() {
 	// EventSource has a built-in auto-reconnect on transient drops, but
 	// it doesn't emit a fresh event when it does — we still get a
 	// subsequent 'hello' on the new socket. No extra work needed here.
+}
+
+let accountsRefreshTimer = null;
+function scheduleAccountsRefresh() {
+	if (accountsRefreshTimer) return;
+	accountsRefreshTimer = setTimeout(() => {
+		accountsRefreshTimer = null;
+		refreshAccounts().catch((err) => console.error('accounts refresh', err));
+	}, 800);
 }
 
 function applyAccountState(stateMap) {
