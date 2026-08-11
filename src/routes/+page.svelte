@@ -279,6 +279,11 @@
 		gap: 10px;
 		padding: 12px;
 	}
+	.feed.bubbles .placeholder {
+		height: auto;
+		margin: auto;
+		align-self: center;
+	}
 	.placeholder {
 		height: 100%;
 		display: flex;
