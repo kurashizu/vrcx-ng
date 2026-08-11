@@ -298,6 +298,9 @@
 											✉️ 请求加入 TA 的实例
 										</button>
 									{/if}
+									<button class="ghost" onclick={action($userDetailRequest.accountId, 'invite', data.user.id)} title="邀请 TA 加入你当前所在的实例">
+										📨 邀请 TA 加入我的实例
+									</button>
 									<button class="ghost" onclick={action($userDetailRequest.accountId, 'mute', data.user.id)}>🔕 静音</button>
 									<button class="ghost danger" onclick={action($userDetailRequest.accountId, 'block', data.user.id)}>🚫 屏蔽</button>
 								{:else}

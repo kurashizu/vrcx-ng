@@ -8,10 +8,17 @@
 	import NotificationPanel from '$lib/components/NotificationPanel.svelte';
 	import { filteredFeed } from '$lib/stores/feed.js';
 	import { accounts, loggedInCount, onlineCount } from '$lib/stores/accounts.js';
+	import { settings, getSetting, updateSetting } from '$lib/stores/settings.js';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 
 	let addOpen = $state(false);
+	// 'list' = traditional vertical list; 'bubbles' = full-bleed flex-wrap cards
+	let feedMode = $state(getSetting('ui.feedMode') || 'list');
+	function setFeedMode(m) {
+		feedMode = m;
+		updateSetting('ui.feedMode', m);
+	}
 	let twofaOpen = $state(false);
 	let twofaAccountId = $state('');
 	let twofaMethods = $state(/** @type {string[]} */ ([]));
@@ -90,8 +97,8 @@
 	</aside>
 
 	<main class="main">
-		<FeedFilterBar />
-		<div class="feed" bind:this={listEl}>
+		<FeedFilterBar bind:mode={feedMode} onModeChange={setFeedMode} />
+		<div class="feed" class:bubbles={feedMode === 'bubbles'} bind:this={listEl}>
 			{#if $filteredFeed.length === 0}
 				<div class="placeholder">
 					<div class="big-icon">📡</div>
@@ -102,7 +109,7 @@
 				</div>
 			{:else}
 				{#each $filteredFeed as entry (entry.id)}
-					<FeedItem {entry} />
+					<FeedItem {entry} mode={feedMode} />
 				{/each}
 			{/if}
 		</div>
@@ -248,6 +255,13 @@
 		flex: 1;
 		overflow-y: auto;
 		background: var(--bg-0);
+	}
+	.feed.bubbles {
+		display: flex;
+		flex-wrap: wrap;
+		align-content: flex-start;
+		gap: 10px;
+		padding: 12px;
 	}
 	.placeholder {
 		height: 100%;

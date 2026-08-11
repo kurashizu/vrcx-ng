@@ -440,6 +440,23 @@ export async function sendFriendRequest(accountId, userId) {
 }
 
 /**
+ * Invite a friend to join a specific instance.
+ * @param {string} accountId
+ * @param {string} userId
+ * @param {string} location  e.g. "wrld_xxx:12345"
+ * @param {string} [message]
+ * @returns {Promise<{ ok: boolean, status?: number, error?: string }>}
+ */
+export async function sendInvite(accountId, userId, location, message = '') {
+	const { status, data } = await api(accountId, `invite/${userId}`, {
+		method: 'POST',
+		body: { instanceId: location, message }
+	});
+	if (status === 200) return { ok: true, data };
+	return { ok: false, status, error: data?.error?.message || `HTTP ${status}` };
+}
+
+/**
  * Search users (displayName fuzzy match)
  * @param {string} accountId
  * @param {{ search?: string, n?: number, offset?: number, fuzzy?: boolean, sort?: 'relevance'|'last_login', developerType?: string, customFields?: string }} params

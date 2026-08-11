@@ -9,6 +9,14 @@
 	import { accounts } from '$lib/stores/accounts.js';
 	import { accountFilter } from '$lib/stores/feed.js';
 
+	/** @type {'list'|'bubbles'} */
+	let { mode = $bindable('list'), onModeChange } = $props();
+
+	function setMode(m) {
+		mode = m;
+		onModeChange?.(m);
+	}
+
 	function toggleType(t) {
 		typeFilter.update((arr) => (arr.includes(t) ? arr.filter((x) => x !== t) : [...arr, t]));
 	}
@@ -35,6 +43,23 @@
 			{$paused ? '▶ 继续' : '⏸ 暂停'}
 		</button>
 		<button class="ghost small" onclick={clearFeed} title="清空 feed">🗑</button>
+		<span class="mode-sep"></span>
+		<button
+			class="ghost small"
+			class:active={mode === 'list'}
+			onclick={() => setMode('list')}
+			title="传统列表模式"
+		>
+			☰ 列表
+		</button>
+		<button
+			class="ghost small"
+			class:active={mode === 'bubbles'}
+			onclick={() => setMode('bubbles')}
+			title="大气泡 flex 模式"
+		>
+			▦ 气泡
+		</button>
 	</div>
 
 	<div class="types">
@@ -95,6 +120,12 @@
 	}
 	.search {
 		flex: 1;
+	}
+	.mode-sep {
+		width: 1px;
+		height: 16px;
+		background: var(--border);
+		margin: 0 2px;
 	}
 	.types,
 	.account-filter {

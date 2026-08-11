@@ -11,8 +11,8 @@
 	import { settings } from '$lib/stores/settings.js';
 	import { friendNameById, friendInfoById } from '$lib/stores/friends.js';
 
-	/** @type {{ entry: import('$lib/shared/feed.js').FeedEntry }} */
-	let { entry } = $props();
+	/** @type {{ entry: import('$lib/shared/feed.js').FeedEntry, mode?: 'list'|'bubbles' }} */
+	let { entry, mode = 'list' } = $props();
 
 	const account = $derived($accounts.find((a) => a.id === entry.accountId));
 	// Some events arrive with only a bare usr_id (no user object). Resolve the
@@ -205,6 +205,7 @@
 
 <div
 	class="entry"
+	class:bubbles={mode === 'bubbles'}
 	role="button"
 	tabindex="0"
 	onclick={clickUser}
@@ -370,6 +371,7 @@
 		border-bottom: 1px solid var(--border);
 		transition: background 0.12s;
 		cursor: pointer;
+		animation: feed-slide 0.28s cubic-bezier(0.2, 0.8, 0.3, 1);
 	}
 	.entry:hover {
 		background: rgba(255, 255, 255, 0.02);
@@ -377,6 +379,41 @@
 	.entry:focus-visible {
 		background: rgba(124, 92, 255, 0.08);
 		outline: none;
+	}
+	/* 大气泡 flex 模式：宽度随内容弹性伸缩，每行数量自动适配 */
+	.entry.bubbles {
+		flex: 1 1 auto;
+		min-width: 250px;
+		max-width: 480px;
+		border-bottom: none;
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		background: var(--bg-1);
+		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+		transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+	}
+	.entry.bubbles:hover {
+		background: var(--bg-1);
+		transform: translateY(-2px);
+		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+		border-color: var(--accent);
+	}
+	.entry.bubbles .avatar {
+		width: 46px;
+		height: 46px;
+	}
+	.entry.bubbles .head-row {
+		flex-wrap: wrap;
+	}
+	@keyframes feed-slide {
+		from {
+			opacity: 0;
+			transform: translateY(-10px) scale(0.98);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0) scale(1);
+		}
 	}
 	.avatar {
 		position: relative;
