@@ -203,6 +203,50 @@ export function locationShort(location, groupName = '') {
 }
 
 /**
+ * Short, human-readable instance label. Avoids showing the raw instance ID
+ * (which is usually a long random hash) wherever possible.
+ *
+ * Returns something like:
+ *   - '邀请'                 → invite-only
+ *   - '邀请+'                → invite+ (canRequestInvite)
+ *   - '好友'                 → friends-only
+ *   - '好友+ 赵某'           → friends+ with owner name
+ *   - '群组 clubX'           → group instance
+ *   - '公开 #abc1234'        → public with short hash
+ *   - '~eu'                  → public with region only
+ *   - 'shortName'            → custom shortName if present
+ *
+ * @param {object} L  parsed location
+ * @param {string} [ownerName]  optional display name for the instance owner
+ */
+export function shortInstanceLabel(L, ownerName = '') {
+	if (!L) return '';
+	if (L.isOffline) return '离线';
+	if (L.isPrivate) return 'Private';
+	if (L.isTraveling) return 'Traveling';
+	if (!L.isRealInstance) return '';
+	if (L.shortName) return L.shortName;
+	const type = accessTypeLabel(L.accessTypeLabel);
+	if (L.accessType === 'invite' || L.accessType === 'invite+') return type;
+	if (L.accessType === 'friends') return type;
+	if (L.accessType === 'friends+') return ownerName ? `${type} ${ownerName}` : type;
+	if (L.accessType.startsWith('group')) {
+		const g = L.groupId ? L.groupId.replace(/^grp_/, '') : '';
+		return g ? `${type} ${truncate(g, 8)}` : type;
+	}
+	// public: show region + short nonce if any
+	if (L.region) return `~${L.region}`;
+	if (L.instanceName) return truncate(L.instanceName, 12);
+	return '';
+}
+
+function truncate(s, n) {
+	if (!s) return '';
+	if (s.length <= n) return s;
+	return s.slice(0, n - 1) + '…';
+}
+
+/**
  * Resolve region from a parsed location.
  */
 export function regionOf(L) {

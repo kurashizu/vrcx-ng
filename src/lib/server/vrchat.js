@@ -423,3 +423,55 @@ export async function sendFriendRequest(accountId, userId) {
 	});
 	return { ok: status === 200, status, data };
 }
+
+/**
+ * Search users (displayName fuzzy match)
+ * @param {string} accountId
+ * @param {{ search?: string, n?: number, offset?: number, fuzzy?: boolean, sort?: 'relevance'|'last_login', developerType?: string, customFields?: string }} params
+ */
+export async function searchUsers(accountId, params = {}) {
+	const q = new URLSearchParams();
+	if (params.search) q.set('search', params.search);
+	q.set('n', String(params.n ?? 20));
+	q.set('offset', String(params.offset ?? 0));
+	if (params.fuzzy) q.set('fuzzy', '1');
+	if (params.sort) q.set('sort', params.sort);
+	if (params.developerType) q.set('developerType', params.developerType);
+	if (params.customFields) q.set('customFields', params.customFields);
+	const { status, data } = await api(accountId, `users?${q.toString()}`);
+	return { ok: status === 200, data: data || [] };
+}
+
+/**
+ * Search worlds
+ * @param {string} accountId
+ * @param {{ search?: string, n?: number, offset?: number, sort?: 'relevance'|'popularity'|'last_updated'|'created_at', releaseStatus?: string, featured?: boolean }} params
+ */
+export async function searchWorlds(accountId, params = {}) {
+	const q = new URLSearchParams();
+	if (params.search) q.set('search', params.search);
+	q.set('n', String(params.n ?? 20));
+	q.set('offset', String(params.offset ?? 0));
+	if (params.sort) q.set('sort', params.sort);
+	if (params.releaseStatus) q.set('releaseStatus', params.releaseStatus);
+	if (params.featured) q.set('featured', 'true');
+	const { status, data } = await api(accountId, `worlds?${q.toString()}`);
+	return { ok: status === 200, data: data || [] };
+}
+
+/**
+ * Search avatars
+ * @param {string} accountId
+ * @param {{ search?: string, n?: number, offset?: number, sort?: 'relevance'|'popularity'|'last_updated'|'created_at', releaseStatus?: string, featured?: boolean }} params
+ */
+export async function searchAvatars(accountId, params = {}) {
+	const q = new URLSearchParams();
+	if (params.search) q.set('search', params.search);
+	q.set('n', String(params.n ?? 20));
+	q.set('offset', String(params.offset ?? 0));
+	if (params.sort) q.set('sort', params.sort);
+	if (params.releaseStatus) q.set('releaseStatus', params.releaseStatus);
+	if (params.featured) q.set('featured', 'true');
+	const { status, data } = await api(accountId, `avatars?${q.toString()}`);
+	return { ok: status === 200, data: data || [] };
+}

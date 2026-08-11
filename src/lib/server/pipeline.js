@@ -118,7 +118,8 @@ async function handleMessage(state, msg) {
 					displayName: user.displayName,
 					location: loc === 'offline' ? '' : loc,
 					worldId: content.worldId,
-					worldName
+					worldName,
+					userThumbnailUrl: user.currentAvatarThumbnailImageUrl || ''
 				})
 			);
 			break;
@@ -126,6 +127,7 @@ async function handleMessage(state, msg) {
 		case 'friend-active': {
 			const userId = content.userId;
 			cacheUser(state, content.user || {});
+			const user = state.userCache.get(userId) || {};
 			patchFriend(state.accountId, userId, {
 				state: 'active',
 				location: 'offline',
@@ -136,7 +138,8 @@ async function handleMessage(state, msg) {
 				feedEntry(state, {
 					type: 'Active',
 					userId,
-					displayName: content.user?.displayName || userId
+					displayName: content.user?.displayName || userId,
+					userThumbnailUrl: user.currentAvatarThumbnailImageUrl || ''
 				})
 			);
 			break;
@@ -154,7 +157,8 @@ async function handleMessage(state, msg) {
 				feedEntry(state, {
 					type: 'Offline',
 					userId,
-					displayName: prev?.displayName || content.user?.displayName || userId
+					displayName: prev?.displayName || content.user?.displayName || userId,
+					userThumbnailUrl: prev?.currentAvatarThumbnailImageUrl || ''
 				})
 			);
 			break;
@@ -184,7 +188,8 @@ async function handleMessage(state, msg) {
 						location: newLoc,
 						previousLocation: prevLoc || '',
 						worldId: content.worldId,
-						worldName
+						worldName,
+						userThumbnailUrl: next.currentAvatarThumbnailImageUrl || ''
 					})
 				);
 			}
@@ -220,7 +225,8 @@ async function handleMessage(state, msg) {
 						currentAvatarImageUrl: after.currentAvatarImageUrl,
 						currentAvatarThumbnailImageUrl: after.currentAvatarThumbnailImageUrl,
 						previousCurrentAvatarImageUrl: before.currentAvatarImageUrl,
-						previousCurrentAvatarThumbnailImageUrl: before.currentAvatarThumbnailImageUrl
+						previousCurrentAvatarThumbnailImageUrl: before.currentAvatarThumbnailImageUrl,
+						userThumbnailUrl: after.currentAvatarThumbnailImageUrl || ''
 					})
 				);
 			} else if (before.status && after.status && before.status !== after.status) {
@@ -232,7 +238,8 @@ async function handleMessage(state, msg) {
 						status: after.status,
 						statusDescription: after.statusDescription,
 						previousStatus: before.status,
-						previousStatusDescription: before.statusDescription
+						previousStatusDescription: before.statusDescription,
+						userThumbnailUrl: after.currentAvatarThumbnailImageUrl || ''
 					})
 				);
 			} else if (before.bio != null && after.bio != null && before.bio !== after.bio) {
@@ -242,7 +249,8 @@ async function handleMessage(state, msg) {
 						userId,
 						displayName: after.displayName || before.displayName,
 						bio: after.bio,
-						previousBio: before.bio
+						previousBio: before.bio,
+						userThumbnailUrl: after.currentAvatarThumbnailImageUrl || ''
 					})
 				);
 			}

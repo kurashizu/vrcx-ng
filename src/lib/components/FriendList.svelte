@@ -116,14 +116,16 @@
 		const loc = f.location || '';
 		if (loc === 'private') return 'Private World';
 		if (!loc || loc === 'offline') return '';
-		const [worldId, instanceId] = loc.split(':');
-		if (!worldId) return '未知世界';
+		const parsed = parseFullLocation(loc);
+		if (!parsed.worldId) return '未知世界';
 		const shortId =
-			worldId.length > 16 ? worldId.slice(0, 8) + '…' + worldId.slice(-4) : worldId;
+			parsed.worldId.length > 16
+				? parsed.worldId.slice(0, 8) + '…' + parsed.worldId.slice(-4)
+				: parsed.worldId;
 		const label = f.worldName || shortId;
 		if (!showInstance) return label;
-		if (!instanceId || instanceId === '0') return label;
-		return `${label} · ${instanceId}`;
+		const instLabel = shortInstanceLabel(parsed);
+		return instLabel ? `${label} · ${instLabel}` : label;
 	}
 
 	function parseLocation(loc) {
@@ -453,10 +455,12 @@
 			g.friends.push(f);
 			g.count++;
 			if (subKey && subKey !== topKey) {
+				const subParsed = parseFullLocation(subKey);
+				const subLabel = shortInstanceLabel(subParsed) || '实例';
 				if (!g.subGroups.has(subKey)) {
 					g.subGroups.set(subKey, {
 						key: subKey,
-						label: `实例 ${parsed.instanceId}`,
+						label: subLabel,
 						location: subKey,
 						friends: [],
 						count: 0
@@ -630,15 +634,19 @@
 			</div>
 			<div class="sub" title={f.location || ''}>
 				{#if f.state === 'online' && f.location && f.location !== 'offline' && f.location !== 'private'}
+					{@const parsed = parseFullLocation(f.location)}
 					{@const chip = instanceChip(f.location)}
-					<button class="world-link" onclick={(e) => clickWorld(f, e)}>
-						{displayWorld(f, $settings['ui.showInstanceId'])}
+					<button class="world-link" onclick={(e) => clickWorld(f, e)} title={parsed.shortName || f.worldName || parsed.worldId}>
+						{f.worldName || shortWorldId(parsed.worldId)}
 					</button>
 					{#if chip}
 						<span class="at-badge {chip.colorClass}" title="访问类型">{chip.label}</span>
 						{#if chip.region}
 							<span class="region-tag" title="区域">{chip.region}</span>
 						{/if}
+					{/if}
+					{#if $settings['ui.showInstanceId']}
+						<span class="inst-detail" title={f.location}>{shortInstanceLabel(parsed)}</span>
 					{/if}
 				{:else if f.state === 'active'}
 					<span class="muted">在 VRChat 桌面客户端中</span>
@@ -801,6 +809,7 @@
 								<button
 									class="g-name world-link"
 									onclick={(e) => { e.stopPropagation(); if (g.worldId) openWorldDetail(g.worldId); }}
+									title={g.label}
 								>
 									{g.label} ({g.count})
 								</button>
@@ -824,7 +833,7 @@
 									<div class="sub-group">
 										<div class="sub-header">
 											<span class="dot online small"></span>
-											<span>{sg.label} ({sg.count})</span>
+											<span class="sg-label">{sg.label} ({sg.count})</span>
 											{#if sgchip}
 												<span class="at-badge {sgchip.colorClass}">{sgchip.label}</span>
 												{#if sgchip.region}<span class="region-tag">{sgchip.region}</span>{/if}
@@ -1102,6 +1111,15 @@
 		padding: 3px 8px;
 		font-size: 11px;
 		color: var(--text-faint);
+		min-width: 0;
+	}
+	.sg-label {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
+		flex: 0 1 auto;
+		max-width: 100%;
 	}
 	.online-group > header {
 		color: var(--online);
@@ -1297,10 +1315,38 @@
 		font-size: 12px;
 		color: var(--text-dim);
 		min-width: 0;
+		margin-top: 3px;
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		flex-wrap: wrap;
+		max-width: 100%;
+		overflow: hidden;
+	}
+	.sub > .world-link {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		margin-top: 2px;
+		min-width: 0;
+		max-width: 100%;
+		flex: 0 1 auto;
+	}
+	.sub > .at-badge,
+	.sub > .region-tag,
+	.sub > .inst-detail {
+		flex: 0 0 auto;
+	}
+	.inst-detail {
+		font-size: 11px;
+		color: var(--text-faint);
+		padding: 0 5px;
+		background: var(--bg-2);
+		border: 1px solid var(--border);
+		border-radius: 5px;
+		max-width: 140px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.meta {
 		display: flex;

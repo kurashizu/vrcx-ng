@@ -5,6 +5,7 @@
 	import { showContextMenu } from '$lib/stores/contextMenu.js';
 	import { openUserDetail } from '$lib/stores/userDetail.js';
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
+	import { parseLocation, accessTypeLabel, accessTypeColor, regionOf } from '$lib/shared/location.js';
 	import { toasts } from '$lib/stores/toast.js';
 	import { browser } from '$app/environment';
 	import { settings } from '$lib/stores/settings.js';
@@ -14,6 +15,7 @@
 
 	const account = $derived($accounts.find((a) => a.id === entry.accountId));
 	const accColor = $derived(stringHue(account?.displayName || entry.accountId));
+	const userHue = $derived(stringHue(entry.displayName || entry.userId || entry.accountId));
 
 	// Friend (subject of the event)
 	const friend = $derived({
@@ -158,11 +160,33 @@
 		);
 	}
 
-	function clickWorldHead() {
+	function clickWorldHead(e) {
+		// Don't bubble up to the outer .entry click handler which would also
+		// open user detail.
+		e?.stopPropagation();
+		e?.preventDefault?.();
 		if (entry.location && entry.location !== 'offline' && entry.location !== 'private') {
 			const worldId = entry.worldId || entry.location.split(':')[0];
 			if (worldId) openWorldDetail(worldId, entry.accountId);
 		}
+	}
+
+	/**
+	 * Build the inline access-type chip for a feed item's world link.
+	 * Returns null for public or unparseable locations.
+	 */
+	function locChip(loc) {
+		if (!loc || loc === 'offline' || loc === 'private') return null;
+		const parsed = parseLocation(loc);
+		if (!parsed.isRealInstance) return null;
+		const lbl = accessTypeLabel(parsed.accessTypeLabel);
+		if (!lbl || parsed.accessType === 'public') return null;
+		const region = regionOf(parsed);
+		return {
+			label: lbl,
+			colorClass: accessTypeColor(parsed.accessTypeLabel),
+			region: region ? region.toUpperCase() : ''
+		};
 	}
 </script>
 
@@ -176,16 +200,20 @@
 >
 	<button
 		class="avatar"
-		style:--hue={accColor}
-		title={account?.displayName || entry.accountDisplayName || '账号'}
-		onclick={(e) => { e.stopPropagation(); /* future: open account detail */ }}
+		style:--hue={userHue}
+		title={entry.displayName || entry.userId}
+		onclick={(e) => { e.stopPropagation(); clickUser(e); }}
 	>
-		{#if account?.currentUser?.currentAvatarThumbnailImageUrl}
-			<img src={account.currentUser.currentAvatarThumbnailImageUrl} alt="" loading="lazy" />
+		{#if entry.userThumbnailUrl}
+			<img src={entry.userThumbnailUrl} alt="" loading="lazy" />
 		{:else}
-			<span>{(account?.displayName || '?').slice(0, 1).toUpperCase()}</span>
+			<span>{(entry.displayName || '?').slice(0, 1).toUpperCase()}</span>
 		{/if}
-		<span class="account-pip" title={account?.displayName || entry.accountDisplayName}>
+		<span
+			class="account-pip"
+			style:--pip-color={accColor}
+			title={account?.displayName || entry.accountDisplayName}
+		>
 			{account?.displayName?.slice(0, 1).toUpperCase() || '?'}
 		</span>
 	</button>
@@ -204,9 +232,14 @@
 			{#if entry.type === 'Online'}
 				<span class="sep">上线</span>
 				{#if entry.location && entry.location !== 'offline' && entry.location !== 'private'}
+					{@const chip = locChip(entry.location)}
 					<button class="chip world-chip" title={entry.location} onclick={clickWorldHead}>
 						→ {entry.worldName || entry.worldId || locationLabel(entry.location)}
 					</button>
+					{#if chip}
+						<span class="at-chip {chip.colorClass}">{chip.label}</span>
+						{#if chip.region}<span class="region-chip">{chip.region}</span>{/if}
+					{/if}
 				{/if}
 			{:else if entry.type === 'Offline'}
 				<span class="sep">离线了</span>
@@ -215,9 +248,14 @@
 			{:else if entry.type === 'GPS'}
 				<span class="sep">移动到了</span>
 				{#if entry.location && entry.location !== 'offline' && entry.location !== 'private'}
+					{@const chip = locChip(entry.location)}
 					<button class="chip world-chip" title={entry.location} onclick={clickWorldHead}>
 						{entry.worldName || entry.worldId || locationLabel(entry.location)}
 					</button>
+					{#if chip}
+						<span class="at-chip {chip.colorClass}">{chip.label}</span>
+						{#if chip.region}<span class="region-chip">{chip.region}</span>{/if}
+					{/if}
 				{/if}
 				{#if entry.previousLocation}
 					<span class="faint small">(从 {locationLabel(entry.previousLocation)})</span>
@@ -245,6 +283,10 @@
 					<button class="chip world-chip" title={entry.location} onclick={clickWorldHead}>
 						({entry.worldName})
 					</button>
+					{#if entry.location}
+						{@const chip = locChip(entry.location)}
+						{#if chip}<span class="at-chip {chip.colorClass}">{chip.label}</span>{/if}
+					{/if}
 				{/if}
 				{#if entry.detail}
 					<span class="muted">{entry.detail}</span>
@@ -353,14 +395,15 @@
 		width: 18px;
 		height: 18px;
 		border-radius: 50%;
-		background: var(--bg-3);
-		color: var(--text);
+		background: var(--pip-color, var(--bg-3));
+		color: white;
 		font-size: 10px;
 		font-weight: 700;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		border: 2px solid var(--bg-1);
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
 	}
 	.body {
 		flex: 1;
@@ -416,6 +459,39 @@
 	}
 	.world-chip {
 		max-width: 240px;
+	}
+	.at-chip {
+		display: inline-block;
+		padding: 1px 6px;
+		font-size: 10px;
+		font-weight: 600;
+		border-radius: 6px;
+		background: var(--bg-3);
+		color: var(--text-dim);
+		border: 1px solid var(--border);
+		margin-left: 4px;
+		vertical-align: middle;
+		line-height: 1.4;
+	}
+	.at-chip.at-public { background: rgba(61, 220, 151, 0.15); color: var(--online); border-color: rgba(61, 220, 151, 0.3); }
+	.at-chip.at-invite { background: rgba(255, 180, 84, 0.15); color: var(--warn); border-color: rgba(255, 180, 84, 0.3); }
+	.at-chip.at-invite-plus { background: rgba(255, 140, 80, 0.18); color: #ff8c50; border-color: rgba(255, 140, 80, 0.35); }
+	.at-chip.at-friends { background: rgba(124, 92, 255, 0.15); color: var(--accent); border-color: rgba(124, 92, 255, 0.3); }
+	.at-chip.at-friends-plus { background: rgba(178, 124, 255, 0.15); color: #b27cff; border-color: rgba(178, 124, 255, 0.3); }
+	.at-chip.at-group,
+	.at-chip.at-groupPublic,
+	.at-chip.at-groupPlus { background: rgba(31, 184, 255, 0.15); color: var(--active); border-color: rgba(31, 184, 255, 0.3); }
+	.region-chip {
+		display: inline-block;
+		padding: 1px 5px;
+		font-size: 10px;
+		font-weight: 700;
+		border-radius: 5px;
+		background: var(--bg-3);
+		color: var(--text-dim);
+		margin-left: 3px;
+		vertical-align: middle;
+		letter-spacing: 0.05em;
 	}
 	.status-flow {
 		color: var(--text);

@@ -247,6 +247,57 @@ function scheduleFriendsEmit() {
 /**
  * Aggregate all friends across all logged-in accounts.
  */
+/**
+ * Search across all logged-in accounts' cached friends.
+ * Matches displayName, note, userId (substring, case-insensitive).
+ * @param {string} q  search query
+ * @param {number} [limit=50]
+ * @returns {Array<{userId, displayName, note, state, status, location, worldName, accountIds}>}
+ */
+export function searchLocal(q, limit = 50) {
+	if (!q || q.length < 1) return [];
+	const needle = q.toLowerCase();
+	/** @type {Map<string, any>} */
+	const byId = new Map();
+	for (const [accountId, friends] of cache) {
+		for (const [userId, f] of friends) {
+			const dn = (f.displayName || '').toLowerCase();
+			const note = (f.note || '').toLowerCase();
+			const id = (userId || '').toLowerCase();
+			if (dn.includes(needle) || note.includes(needle) || id.includes(needle)) {
+				const existing = byId.get(userId);
+				if (existing) {
+					existing.accountIds.push(accountId);
+					const rank = (s) => (s === 'online' ? 2 : s === 'active' ? 1 : 0);
+					if (rank(f.state || 'offline') > rank(existing.state)) {
+						existing.state = f.state || 'offline';
+					}
+				} else {
+					byId.set(userId, {
+						userId,
+						displayName: f.displayName,
+						note: f.note,
+						state: f.state || 'offline',
+						status: f.status,
+						location: f.location,
+						worldName: f.worldName,
+						trustRank: f.trustRank,
+						accountIds: [accountId]
+					});
+				}
+			}
+		}
+	}
+	// Sort: online first, then active, then offline; alphabetical within group
+	const rank = (s) => (s === 'online' ? 2 : s === 'active' ? 1 : 0);
+	const sorted = [...byId.values()].sort((a, b) => {
+		const r = rank(b.state) - rank(a.state);
+		if (r !== 0) return r;
+		return (a.displayName || '').localeCompare(b.displayName || '');
+	});
+	return sorted.slice(0, limit);
+}
+
 export function aggregate() {
 	/** @type {Map<string, Friend & { accountIds: Set<string>, _state: string }>} */
 	const map = new Map();
