@@ -200,15 +200,33 @@ import { vrImage } from '$lib/shared/format.js';
 				<header class="hero" style:background-image={data.user?.bannerUrl ? `url(${data.user.bannerUrl})` : ''}>
 					<div class="hero-bg"></div>
 					<div class="hero-content">
-						<div class="avatar">
-							{#if data.user?.currentAvatarThumbnailImageUrl}
-								<img src={vrImage(data.user.currentAvatarThumbnailImageUrl, $userDetailRequest.accountId)} alt="" />
-							{:else if data.user?.profilePicOverrideThumbnail}
-								<img src={vrImage(data.user.profilePicOverrideThumbnail, $userDetailRequest.accountId)} alt="" />
-							{:else}
-								<span>{(data.user?.displayName || '?').slice(0, 1).toUpperCase()}</span>
-							{/if}
-						</div>
+						{#if data.user?.currentAvatar}
+							<button
+								class="avatar current"
+								title="当前模型：点击查看详情"
+								onclick={() => openAvatarDetail(data.user.currentAvatar, $userDetailRequest.accountId)}
+							>
+								{#if data.user?.currentAvatarThumbnailImageUrl}
+									<img src={vrImage(data.user.currentAvatarThumbnailImageUrl, $userDetailRequest.accountId)} alt="" loading="lazy" />
+								{:else if data.user?.currentAvatarImageUrl}
+									<img src={vrImage(data.user.currentAvatarImageUrl, $userDetailRequest.accountId)} alt="" loading="lazy" />
+								{:else if data.user?.profilePicOverrideThumbnail}
+									<img src={vrImage(data.user.profilePicOverrideThumbnail, $userDetailRequest.accountId)} alt="" loading="lazy" />
+								{:else}
+									<span>{(data.user?.displayName || '?').slice(0, 1).toUpperCase()}</span>
+								{/if}
+							</button>
+						{:else}
+							<div class="avatar">
+								{#if data.user?.currentAvatarThumbnailImageUrl}
+									<img src={vrImage(data.user.currentAvatarThumbnailImageUrl, $userDetailRequest.accountId)} alt="" />
+								{:else if data.user?.profilePicOverrideThumbnail}
+									<img src={vrImage(data.user.profilePicOverrideThumbnail, $userDetailRequest.accountId)} alt="" />
+								{:else}
+									<span>{(data.user?.displayName || '?').slice(0, 1).toUpperCase()}</span>
+								{/if}
+							</div>
+						{/if}
 						<div class="hero-info">
 							<div class="display-name {trustColor(data.user)}">{data.user?.displayName}{#if data.user?.vrcPlus}<span class="vrcplus" title="VRC+">◈+</span>{/if}</div>
 							<div class="username">@{data.user?.username}</div>
@@ -224,6 +242,13 @@ import { vrImage } from '$lib/shared/format.js';
 								{/if}
 								{#if data.user?.pronouns}
 									<span class="badge pron">({data.user.pronouns})</span>
+								{/if}
+								{#if data.user?.currentAvatar}
+									<button
+										class="badge avatar-chip"
+										title="查看当前模型详情"
+										onclick={() => openAvatarDetail(data.user.currentAvatar, $userDetailRequest.accountId)}
+									>🧍 当前模型</button>
 								{/if}
 							</div>
 						</div>
@@ -526,6 +551,22 @@ import { vrImage } from '$lib/shared/format.js';
 		flex-shrink: 0;
 		overflow: hidden;
 		border: 3px solid rgba(255, 255, 255, 0.2);
+		padding: 0;
+	}
+	.avatar.current {
+		cursor: pointer;
+		border-color: rgba(124, 92, 255, 0.85);
+		transition: transform 0.15s ease, box-shadow 0.15s ease;
+	}
+	.avatar.current:hover {
+		transform: scale(1.05);
+		box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.25);
+	}
+	.avatar.current .bub {
+		position: absolute;
+		bottom: 2px;
+		right: 2px;
+		font-size: 11px;
 	}
 	.avatar img {
 		width: 100%;
@@ -559,6 +600,15 @@ import { vrImage } from '$lib/shared/format.js';
 		background: rgba(255, 255, 255, 0.15);
 		color: white;
 		border: 1px solid rgba(255, 255, 255, 0.2);
+		cursor: default;
+	}
+	.badges .avatar-chip {
+		cursor: pointer;
+		background: rgba(124, 92, 255, 0.35);
+		border-color: rgba(124, 92, 255, 0.6);
+	}
+	.badges .avatar-chip:hover {
+		background: rgba(124, 92, 255, 0.55);
 	}
 	.badges .badge.status[data-s='active'] {
 		background: rgba(31, 184, 255, 0.4);
