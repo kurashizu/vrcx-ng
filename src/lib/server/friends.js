@@ -132,6 +132,11 @@ function mapOf(map, state) {
 /**
  * Re-derive state for already-cached friends using a fresh online/active list.
  * Used when currentUser updates (e.g. via 'user-update' pipeline event).
+ *
+ * Important: VRChat does NOT include friends who are in a private world in the
+ * `onlineFriends` array — that's the whole point of "private". But their
+ * friend.location field is the string 'private', so we treat them as online.
+ *
  * @param {string} accountId
  * @param {{ activeFriends?: string[], onlineFriends?: string[] }} lists
  */
@@ -142,9 +147,13 @@ export function reconcileStates(accountId, lists) {
 	const onlineSet = new Set(lists.onlineFriends || []);
 	let changed = false;
 	for (const f of map.values()) {
-		const prev = f.state;
-		const next = activeSet.has(f.id) ? 'active' : onlineSet.has(f.id) ? 'online' : 'offline';
-		if (prev !== next) {
+		const isPrivate = f.location === 'private';
+		const next = activeSet.has(f.id)
+			? 'active'
+			: onlineSet.has(f.id) || isPrivate
+				? 'online'
+				: 'offline';
+		if (f.state !== next) {
 			f.state = next;
 			if (next === 'offline') f.lastSeen = Date.now();
 			changed = true;

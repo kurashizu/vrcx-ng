@@ -13,6 +13,7 @@
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { toasts } from '$lib/stores/toast.js';
 	import { trustColor, vrcLaunchUrl } from '$lib/shared/trust.js';
+	import { parseLocation as parseFullLocation, accessTypeLabel, accessTypeColor, regionOf } from '$lib/shared/location.js';
 	import { settings } from '$lib/stores/settings.js';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
@@ -125,9 +126,24 @@
 	}
 
 	function parseLocation(loc) {
-		if (!loc || loc === 'offline' || loc === 'private') return null;
+		// Use the detailed VRCX-style parser from shared location util.
+		const full = parseFullLocation(loc);
+		if (!full.isRealInstance) return null;
 		const [worldId, instanceId] = loc.split(':');
 		return { worldId, instanceId: instanceId || '0' };
+	}
+
+	function instanceChip(loc) {
+		const full = parseFullLocation(loc);
+		if (!full.isRealInstance) return null;
+		const lbl = accessTypeLabel(full.accessTypeLabel);
+		if (!lbl || full.accessType === 'public') return null;
+		const region = regionOf(full);
+		return {
+			label: lbl,
+			colorClass: accessTypeColor(full.accessTypeLabel),
+			region: region ? region.toUpperCase() : ''
+		};
 	}
 
 	function launchVrc(location) {
@@ -286,9 +302,15 @@
 	}
 
 	/**
-	 * Sort comparator.
+	 * Sort comparator. Private friends are always pushed to the end (within
+	 * their natural sort position) so they're easier to ignore.
 	 */
 	function sortFn(a, b) {
+		// Tie-breaker: private always at the bottom regardless of sort key
+		const aPriv = a.location === 'private' ? 1 : 0;
+		const bPriv = b.location === 'private' ? 1 : 0;
+		if (aPriv !== bPriv) return aPriv - bPriv;
+
 		const dir = sortDir === 'asc' ? 1 : -1;
 		const key = sortBy;
 		if (key === 'lastSeen') {
@@ -374,7 +396,13 @@
 					count: ungrouped.length
 				});
 			}
-			return out.sort((a, b) => b.count - a.count);
+			// Private sub-group always last
+			return out.sort((a, b) => {
+				const aPriv = a.key === 'group:ungrouped' && a.friends.every((f) => f.location === 'private');
+				const bPriv = b.key === 'group:ungrouped' && b.friends.every((f) => f.location === 'private');
+				if (aPriv !== bPriv) return aPriv ? 1 : -1;
+				return b.count - a.count;
+			});
 		}
 
 		// instance/world/smart grouping
@@ -466,7 +494,13 @@
 				});
 			}
 		}
-		return out.sort((a, b) => b.count - a.count);
+		// 'Private / Unknown' bucket always last, others by friend count desc
+		return out.sort((a, b) => {
+			const aPriv = a.key === 'private';
+			const bPriv = b.key === 'private';
+			if (aPriv !== bPriv) return aPriv ? 1 : -1;
+			return b.count - a.count;
+		});
 	}
 
 	function shortWorldId(wid) {
@@ -593,9 +627,16 @@
 			</div>
 			<div class="sub" title={f.location || ''}>
 				{#if f.state === 'online' && f.location && f.location !== 'offline' && f.location !== 'private'}
+					{@const chip = instanceChip(f.location)}
 					<button class="world-link" onclick={(e) => clickWorld(f, e)}>
 						{displayWorld(f, $settings['ui.showInstanceId'])}
 					</button>
+					{#if chip}
+						<span class="at-badge {chip.colorClass}" title="访问类型">{chip.label}</span>
+						{#if chip.region}
+							<span class="region-tag" title="区域">{chip.region}</span>
+						{/if}
+					{/if}
 				{:else if f.state === 'active'}
 					<span class="muted">在 VRChat 桌面客户端中</span>
 				{:else}
@@ -757,6 +798,13 @@
 								>
 									{g.label} ({g.count})
 								</button>
+								{#if g.location}
+									{@const gchip = instanceChip(g.location)}
+									{#if gchip}
+										<span class="at-badge {gchip.colorClass}">{gchip.label}</span>
+										{#if gchip.region}<span class="region-tag">{gchip.region}</span>{/if}
+									{/if}
+								{/if}
 								{#if g.location && g.location !== 'private'}
 									<button class="launch-mini" title="加入该实例" onclick={(e) => { e.stopPropagation(); launchVrc(g.location); }}>↗</button>
 								{/if}
@@ -766,10 +814,15 @@
 							{#if g.subGroups}
 								<!-- World mode: render sub-groups (per instance) inside this world -->
 								{#each g.subGroups as sg (sg.key)}
+									{@const sgchip = instanceChip(sg.location)}
 									<div class="sub-group">
 										<div class="sub-header">
 											<span class="dot online small"></span>
 											<span>{sg.label} ({sg.count})</span>
+											{#if sgchip}
+												<span class="at-badge {sgchip.colorClass}">{sgchip.label}</span>
+												{#if sgchip.region}<span class="region-tag">{sgchip.region}</span>{/if}
+											{/if}
 											<button class="launch-mini" title="加入" onclick={() => launchVrc(sg.location)}>↗</button>
 										</div>
 										{#each sg.friends as f (f.id)}
@@ -1171,6 +1224,38 @@
 	.status-pill.status-ask-me {
 		background: rgba(255, 180, 84, 0.15);
 		color: var(--warn);
+	}
+	.at-badge {
+		display: inline-block;
+		padding: 0 6px;
+		font-size: 10px;
+		font-weight: 600;
+		border-radius: 6px;
+		background: var(--bg-3);
+		color: var(--text-dim);
+		border: 1px solid var(--border);
+		margin-left: 4px;
+		vertical-align: middle;
+	}
+	.at-badge.at-public { background: rgba(61, 220, 151, 0.15); color: var(--online); border-color: rgba(61, 220, 151, 0.3); }
+	.at-badge.at-invite { background: rgba(255, 180, 84, 0.15); color: var(--warn); border-color: rgba(255, 180, 84, 0.3); }
+	.at-badge.at-invite-plus { background: rgba(255, 140, 80, 0.18); color: #ff8c50; border-color: rgba(255, 140, 80, 0.35); }
+	.at-badge.at-friends { background: rgba(124, 92, 255, 0.15); color: var(--accent); border-color: rgba(124, 92, 255, 0.3); }
+	.at-badge.at-friends-plus { background: rgba(178, 124, 255, 0.15); color: #b27cff; border-color: rgba(178, 124, 255, 0.3); }
+	.at-badge.at-group,
+	.at-badge.at-groupPublic,
+	.at-badge.at-groupPlus { background: rgba(31, 184, 255, 0.15); color: var(--active); border-color: rgba(31, 184, 255, 0.3); }
+	.region-tag {
+		display: inline-block;
+		padding: 0 5px;
+		font-size: 10px;
+		font-weight: 700;
+		border-radius: 5px;
+		background: var(--bg-3);
+		color: var(--text-dim);
+		margin-left: 3px;
+		vertical-align: middle;
+		letter-spacing: 0.05em;
 	}
 	.launch,
 	.launch-mini {
