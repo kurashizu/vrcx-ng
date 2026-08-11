@@ -176,6 +176,9 @@ export async function loadFriends(accountId) {
 		}
 		cache.set(accountId, map);
 		bus.emit('friends');
+		// Kick off a bounded avatar-thumbnail backfill (private avatars often
+		// come back without a thumbnail URL in the friend list payload).
+		backfillAvatarThumbnails(accountId, 10).catch(() => {});
 	} catch (err) {
 		console.error(`[friends] load ${accountId} failed`, err.message);
 	} finally {
@@ -226,6 +229,44 @@ export function reconcileStates(accountId, lists) {
  * Drop cache for an account (on logout / delete).
  * @param {string} accountId
  */
+/**
+ * Resolve missing avatar thumbnails for friends whose `currentAvatar` is
+ * known but whose `currentAvatarThumbnailImageUrl` came back empty.
+ *
+ * VRChat's /auth/user/friends (and the websocket user payloads) often leave
+ * the thumbnail empty for private avatars; the avatar itself is still
+ * fetchable for friends. Bounded to `limit` per call to stay polite.
+ * @param {string} accountId
+ * @param {number} [limit]
+ * @returns {Promise<number>} number of thumbnails patched
+ */
+export async function backfillAvatarThumbnails(accountId, limit = 8) {
+	const map = cache.get(accountId);
+	if (!map) return 0;
+	const targets = [];
+	for (const [uid, f] of map) {
+		if (f.currentAvatar && !f.currentAvatarThumbnailImageUrl) {
+			targets.push([uid, f.currentAvatar]);
+			if (targets.length >= limit) break;
+		}
+	}
+	if (!targets.length) return 0;
+	const { getAvatar } = await import('./vrchat.js');
+	let patched = 0;
+	for (const [uid, avatarId] of targets) {
+		try {
+			const av = await getAvatar(accountId, avatarId);
+			if (av?.thumbnailImageUrl) {
+				patchFriend(accountId, uid, { currentAvatarThumbnailImageUrl: av.thumbnailImageUrl });
+				patched++;
+			}
+		} catch {
+			// private/blocked avatar or rate limit: skip quietly
+		}
+	}
+	return patched;
+}
+
 export function dropFriends(accountId) {
 	if (cache.delete(accountId)) bus.emit('friends');
 }
@@ -543,6 +584,7 @@ function normalizeFriend(f, activeSet, onlineSet) {
 	return {
 		id: f.id,
 		displayName: f.displayName || f.id,
+		currentAvatar: f.currentAvatar || '',
 		currentAvatarThumbnailImageUrl: f.currentAvatarThumbnailImageUrl || '',
 		status: f.status || 'offline',
 		statusDescription: f.statusDescription || '',

@@ -2,7 +2,14 @@ import { WebSocket } from 'ws';
 import { getWebsocketUrl, getPipelineToken, getCurrentUser, getWorld, getNotifications } from './vrchat.js';
 import { listAccounts, getSession, setSession } from './accounts.js';
 import { publishFeed, bus } from './bus.js';
-import { patchFriend, reconcileStates, loadFriends, removeFriend, lookupDisplayName } from './friends.js';
+import {
+	patchFriend,
+	reconcileStates,
+	loadFriends,
+	removeFriend,
+	lookupDisplayName,
+	backfillAvatarThumbnails
+} from './friends.js';
 import { getWorldMeta } from './worldCache.js';
 import { addNotification, hasNotification, normalizeNotificationType } from './notifications.js';
 
@@ -696,6 +703,10 @@ export async function connectPipeline(accountId) {
 			tick++;
 			if (tick % 3 === 0) {
 				syncNotifications(state).catch(() => {});
+			}
+			// occasionally backfill missing avatar thumbnails (private avatars)
+			if (tick % 5 === 0) {
+				backfillAvatarThumbnails(state.accountId, 8).catch(() => {});
 			}
 		}, 30000);
 		// initial sync right after connecting

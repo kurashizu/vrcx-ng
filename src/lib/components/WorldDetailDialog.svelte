@@ -21,7 +21,7 @@
 	let memo = $state('');
 	let inviterAccountId = $state('');
 	let inviterMessage = $state('Hello, can I join you?');
-	let inviteMode = $state('create'); // 'create' | 'request'
+	let inviteMode = $state('self'); // 'self' | 'create' | 'request'
 
 	$effect(() => {
 		const req = $worldDetailRequest;
@@ -108,7 +108,36 @@
 		if (browser) window.location.href = u;
 	}
 
-	// ----- Create new instance + self-invite -----
+	// ----- Invite yourself into an existing instance -----
+	let selfInviteBusy = $state(''); // location currently being processed
+
+	async function selfInviteTo(location) {
+		if (!inviterAccountId) {
+			toasts.error('请选择账号');
+			return;
+		}
+		if (!location) return;
+		selfInviteBusy = location;
+		try {
+			const r = await fetch(
+				`/api/accounts/${encodeURIComponent(inviterAccountId)}/instance-action`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ action: 'selfInvite', location })
+				}
+			);
+			const j = await r.json();
+			if (j.ok) toasts.success('已发送自我邀请 ✉️');
+			else toasts.error('self-invite 失败: ' + (j.error || '未知错误'));
+		} catch (err) {
+			toasts.error('self-invite 失败: ' + err.message);
+		} finally {
+			selfInviteBusy = '';
+		}
+	}
+
+	// ----- Create new instance -----
 	let newInstAccess = $state('public'); // public | friends | friends+ | invite | invite+
 	let newInstRegion = $state('us'); // us | use | eu | jp
 	let newInstBusy = $state(false);
@@ -151,26 +180,6 @@
 			}
 			newInstResult = j.instance;
 			toasts.success('实例已创建');
-
-			// Try self-invite; for public/friends this will likely fail with
-			// 401/403 (those don't accept invite-myself), so just show the
-			// launch URL either way.
-			const loc = j.instance?.location;
-			if (loc && (newInstAccess === 'invite' || newInstAccess === 'invite+')) {
-				const sr = await fetch(
-					`/api/accounts/${encodeURIComponent(inviterAccountId)}/instance-action`,
-					{
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ action: 'selfInvite', location: loc })
-					}
-				);
-				const sj = await sr.json();
-				if (sj.ok) toasts.success('已发送自我邀请');
-				else toasts.info('实例已创建，但 self-invite 失败: ' + (sj.error || '未知'));
-			} else if (loc) {
-				toasts.info('实例已创建。点击"启动"在 VRChat 中打开');
-			}
 		} catch (err) {
 			toasts.error(err.message);
 		} finally {
@@ -500,7 +509,12 @@
 									</select>
 								</label>
 
-								<div class="invite-tabs">
+									<div class="invite-tabs">
+									<button
+										class="invite-tab"
+										class:active={inviteMode === 'self'}
+										onclick={() => (inviteMode = 'self')}
+									>邀请自己</button>
 									<button
 										class="invite-tab"
 										class:active={inviteMode === 'create'}
@@ -513,7 +527,65 @@
 									>请求好友邀请</button>
 								</div>
 
-								{#if inviteMode === 'create'}
+								{#if inviteMode === 'self'}
+									<div class="form-stack">
+										<p class="muted small">
+											对下方已存在的实例发送自我邀请（仅"邀请 / 邀请+"类型支持）。
+											其他类型直接点 ↗ 启动加入即可。
+										</p>
+										{#if instances.length === 0}
+											<div class="muted small">
+												当前没有可见实例。可以切到「创建新实例」新建一个，或切到
+												「请求好友邀请」请好友拉你。
+											</div>
+										{:else}
+											<div class="instances">
+												{#each instances as inst (inst.id || inst.instanceId)}
+													{@const fullLoc = `${data.id}:${inst.id || inst.instanceId}`}
+													{@const parsed = parseLocation(fullLoc)}
+													<div class="inst-row">
+														<div class="inst-main">
+															<div class="inst-id-line">
+																<span class="inst-id">{inst.id || inst.instanceId}</span>
+																<span class="at-badge {accessTypeColor(parsed.accessTypeLabel)}">
+																	{accessTypeLabel(parsed.accessTypeLabel)}
+																</span>
+																{#if parsed.region}
+																	<span class="region-tag">{parsed.region.toUpperCase()}</span>
+																{/if}
+															</div>
+															{#if inst.ownerName || inst.userName}
+																<div class="inst-owner">
+																	由 <strong>{inst.ownerName || inst.userName}</strong> 创建
+																</div>
+															{/if}
+														</div>
+														<div class="inst-occupants">
+															{#if inst.occupants != null}
+																👥 {inst.occupants}{inst.capacity ? `/${inst.capacity}` : ''}
+																{/if}
+															</div>
+															<div class="inst-actions">
+																{#if parsed.canRequestInvite || parsed.accessType === 'invite' || parsed.accessType === 'invite+'}
+																	<button
+																		class="inst-self"
+																		disabled={selfInviteBusy === fullLoc}
+																		title="发送自我邀请"
+																		onclick={() => selfInviteTo(fullLoc)}
+																	>{selfInviteBusy === fullLoc ? '…' : '✉️'}</button>
+																{/if}
+																<button
+																	class="inst-launch"
+																	title="启动"
+																	onclick={() => launch(inst.id || inst.instanceId)}
+																>↗</button>
+															</div>
+														</div>
+													{/each}
+											</div>
+										{/if}
+									</div>
+								{:else if inviteMode === 'create'}
 									<div class="form-stack">
 										<label class="row">
 											<span class="lbl">访问类型</span>
@@ -539,20 +611,22 @@
 												class="primary small"
 												disabled={newInstBusy}
 												onclick={createInstanceAndSelfInvite}
-											>{newInstBusy ? '创建中…' : '创建并启动'}</button>
+											>{newInstBusy ? '创建中…' : '创建实例'}</button>
 											{#if newInstResult?.location}
 												<button class="ghost small" onclick={launchCreatedInstance}>
 													↗ 启动刚创建的实例
+												</button>
+												<button class="ghost small" onclick={() => selfInviteTo(newInstResult.location)}>
+													✉️ 邀请自己
 												</button>
 											{/if}
 										</div>
 										{#if newInstResult?.location}
 											<p class="muted small mono">{newInstResult.location}</p>
+											<p class="muted small">
+												创建后可用「✉️ 邀请自己」发送自我邀请（仅邀请 / 邀请+ 类型），或直接启动。
+											</p>
 										{/if}
-										<p class="muted small">
-											仅邀请 / 邀请+ 类型的实例会自动尝试发送 self-invite；其他类型会
-											让你在 VRChat 中手动启动。
-										</p>
 									</div>
 								{:else}
 									<!-- request mode: pick a friend whose private/friends/friends+ instance you want to join -->
@@ -1064,11 +1138,23 @@
 		color: var(--text-dim);
 		flex-shrink: 0;
 	}
-	.inst-launch {
+	.inst-launch,
+	.inst-self {
 		width: 32px;
 		height: 32px;
 		padding: 0;
 		font-size: 14px;
+	}
+	.inst-self {
+		background: rgba(124, 92, 255, 0.12);
+		border-color: rgba(124, 92, 255, 0.35);
+	}
+	.inst-self:hover {
+		background: rgba(124, 92, 255, 0.25);
+	}
+	.inst-self:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 	.at-badge {
 		display: inline-block;

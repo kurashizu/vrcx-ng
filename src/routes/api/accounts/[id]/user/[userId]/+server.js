@@ -5,7 +5,8 @@ import {
 	getUserAvatars,
 	getUserWorlds,
 	getUserBadges,
-	getWorld
+	getWorld,
+	getAvatar
 } from '$lib/server/vrchat.js';
 
 const TTL = 5 * 60 * 1000; // 5 minutes
@@ -53,6 +54,16 @@ export async function GET({ params }) {
 
 		if (!user) return json({ error: 'User not found' }, { status: 404 });
 
+		// VRChat often leaves currentAvatarThumbnailImageUrl empty for private
+		// avatars; fetch the avatar itself (visible for friends) to fill it in.
+		if (!user.currentAvatarThumbnailImageUrl && user.currentAvatar) {
+			const av = await getAvatar(id, user.currentAvatar).catch(() => null);
+			if (av?.thumbnailImageUrl) {
+				user.currentAvatarThumbnailImageUrl = av.thumbnailImageUrl;
+				user.currentAvatarImageUrl = av.imageUrl || user.currentAvatarImageUrl;
+			}
+		}
+
 		// Resolve world name for the current location if there is one
 		let currentWorld = null;
 		if (user.location && user.location !== 'offline' && user.location !== 'private') {
@@ -91,6 +102,7 @@ function sanitizeUser(u) {
 		state: u.state,
 		location: u.location,
 		platform: u.platform,
+		currentAvatar: u.currentAvatar,
 		currentAvatarImageUrl: u.currentAvatarImageUrl,
 		currentAvatarThumbnailImageUrl: u.currentAvatarThumbnailImageUrl,
 		profilePicOverride: u.profilePicOverride,
