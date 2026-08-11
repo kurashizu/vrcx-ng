@@ -16,18 +16,37 @@ export function trustColor(f) {
 	if (!f) return '';
 	const rank = (f.trustRank || '').toLowerCase();
 	if (!rank) {
-		// Some VRChat fields use different casing; also accept enum-ish values
-		// ('visitor', 'newuser', 'user', 'known', 'trusted', 'veteran', 'legend')
-		// Try matching via tags if explicit trustRank is missing.
-		if (Array.isArray(f.tags)) {
-			for (const t of f.tags) {
-				const cls = trustToClass(String(t).toLowerCase());
-				if (cls) return cls;
-			}
-		}
-		return '';
+		return trustClassFromTags(f.tags);
 	}
 	return trustToClass(rank) || '';
+}
+
+/**
+ * Derive the trust-rank CSS class from the tag list VRChat puts on users
+ * (e.g. 'system_trust_basic' = User, 'system_trust_known' = Known...).
+ * @param {string[]} tags
+ * @returns {string}
+ */
+export function trustClassFromTags(tags) {
+	if (!Array.isArray(tags)) return '';
+	for (const t of tags) {
+		const m = String(t).match(/system_trust_([a-z_]+)/);
+		if (m) {
+			const raw = m[1].replace(/_/g, '').trim();
+			const map = {
+				visitor: 'trust-visitor',
+				newuser: 'trust-newuser',
+				basic: 'trust-user',
+				user: 'trust-user',
+				known: 'trust-known',
+				trusted: 'trust-trusted',
+				veteran: 'trust-veteran',
+				legend: 'trust-legend'
+			};
+			return map[raw] || '';
+		}
+	}
+	return '';
 }
 
 function trustToClass(rank) {
@@ -38,6 +57,8 @@ function trustToClass(rank) {
 		case 'newuser':
 			return 'trust-newuser';
 		case 'user':
+			return 'trust-user';
+		case 'basic':
 			return 'trust-user';
 		case 'known':
 			return 'trust-known';

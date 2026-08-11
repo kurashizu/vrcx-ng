@@ -442,6 +442,23 @@ export async function unfriend(accountId, userId) {
 	return { ok: status === 200 || status === 204, status, data };
 }
 
+/**
+ * Update the account's own profile (bio, status, statusDescription,
+ * bioLinks, pronouns). PUT /users/:id with the session user's id.
+ * @param {string} accountId
+ * @param {object} params allowed: bio, bioLinks, status, statusDescription, pronouns
+ */
+export async function updateOwnProfile(accountId, params) {
+	const sess = getSession(accountId);
+	const userId = sess?.user?.id || sess?.userId;
+	if (!userId) return { ok: false, error: 'not logged in' };
+	const { status, data } = await api(accountId, `users/${userId}`, {
+		method: 'PUT',
+		body: params
+	});
+	return { ok: status === 200, status, data };
+}
+
 export async function sendFriendRequest(accountId, userId) {
 	const { status, data } = await api(accountId, `user/${userId}/friendRequest`, {
 		method: 'POST'

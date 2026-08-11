@@ -542,15 +542,8 @@ import { vrImage } from '$lib/shared/format.js';
 
 								{#if inviteMode === 'self'}
 									<div class="form-stack">
-										<p class="muted small">
-											对下方已存在的实例发送自我邀请（仅"邀请 / 邀请+"类型支持）。
-											其他类型直接点 ↗ 启动加入即可。
-										</p>
 										{#if instances.length === 0}
-											<div class="muted small">
-												当前没有可见实例。可以切到「创建新实例」新建一个，或切到
-												「请求好友邀请」请好友拉你。
-											</div>
+											<div class="muted small">暂无可见实例</div>
 										{:else}
 											<div class="instances">
 												{#each instances as inst (inst.id || inst.instanceId)}

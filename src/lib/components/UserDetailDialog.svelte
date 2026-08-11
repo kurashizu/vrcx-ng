@@ -16,6 +16,7 @@ import { vrImage } from '$lib/shared/format.js';
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { parseLocation, accessTypeLabel, shortInstanceLabel } from '$lib/shared/location.js';
 	import { trustColor } from '$lib/shared/trust.js';
+	import EditProfileDialog from './EditProfileDialog.svelte';
 
 	let data = $state(null);
 	let loading = $state(false);
@@ -27,6 +28,16 @@ import { vrImage } from '$lib/shared/format.js';
 	// mute/block/invite...) runs as this account, chosen explicitly.
 	let opAccountId = $state('');
 	const loggedInAccounts = $derived($accounts.filter((a) => a.loggedIn));
+	// Is the viewed user this account's own current user?
+	const isSelf = $derived(
+		!!data?.user?.id &&
+			!!loggedInAccounts.find((a) => a.id === opAccountId)?.currentUser &&
+			loggedInAccounts.find((a) => a.id === opAccountId)?.currentUser?.id === data.user.id
+	);
+	let editOpen = $state(false);
+	function profileSaved() {
+		loadUser($userDetailRequest.accountId, $userDetailRequest.userId);
+	}
 	$effect(() => {
 		const want = $userDetailRequest?.accountId;
 		if (want && loggedInAccounts.some((a) => a.id === want)) opAccountId = want;
@@ -333,6 +344,9 @@ import { vrImage } from '$lib/shared/format.js';
 								</label>
 							{/if}
 							<div class="actions">
+								{#if isSelf}
+									<button class="primary" onclick={() => (editOpen = true)}>✏️ 编辑个人资料</button>
+								{/if}
 								{#if data.user?.isFriend}
 									{#if data.user?.location && data.user.location !== 'offline' && data.user.location !== 'private'}
 										<button class="primary" onclick={action(opAccountId, 'requestInvite', data.user.id)}>
@@ -416,6 +430,8 @@ import { vrImage } from '$lib/shared/format.js';
 		</div>
 	</div>
 {/if}
+
+<EditProfileDialog bind:open={editOpen} accountId={opAccountId} user={data?.user} onSaved={profileSaved} />
 
 <style>
 	.dialog {

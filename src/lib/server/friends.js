@@ -616,7 +616,12 @@ function deriveTrustRankFromTags(tags) {
 	if (!Array.isArray(tags)) return '';
 	for (const t of tags) {
 		const m = String(t).match(/system_trust_(.+)/);
-		if (m) return m[1].replace(/_/g, ' ');
+		if (m) {
+			const raw = m[1].replace(/_/g, ' ').trim();
+			// normalize aliases to canonical rank names
+			if (raw === 'basic') return 'user';
+			return raw;
+		}
 	}
 	return '';
 }
