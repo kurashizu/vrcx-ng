@@ -482,15 +482,14 @@ import { vrImage } from '$lib/shared/format.js';
 	.name {
 		font-weight: 600;
 		font-size: 14px;
-		color: var(--text);
 	}
-	.name.trust-visitor { color: #aab0c4; }
-	.name.trust-newuser { color: #4ec5ff; }
-	.name.trust-user { color: #3ddc97; }
-	.name.trust-known { color: #b27cff; }
-	.name.trust-trusted { color: #ff8c50; }
-	.name.trust-veteran { color: #ff5d6c; }
-	.name.trust-legend { color: #ffb454; }
+	.name.trust-visitor { color: var(--trust-visitor); }
+	.name.trust-newuser { color: var(--trust-newuser); }
+	.name.trust-user    { color: var(--trust-user); }
+	.name.trust-known   { color: var(--trust-known); }
+	.name.trust-trusted { color: var(--trust-trusted); }
+	.name.trust-veteran { color: var(--trust-veteran); }
+	.name.trust-legend  { color: var(--trust-legend); }
 	.status-pill {
 		font-size: 10px;
 		padding: 1px 6px;
