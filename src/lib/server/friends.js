@@ -72,6 +72,7 @@ export function lookupDisplayName(userId) {
 
 /** @type {Map<string, boolean>} */
 const fetching = new Map();
+const friendsRetryTimers = new Map();
 
 /**
  * Load (or refresh) the friend list for a single account.
@@ -181,9 +182,26 @@ export async function loadFriends(accountId) {
 		backfillAvatarThumbnails(accountId, 10).catch(() => {});
 	} catch (err) {
 		console.error(`[friends] load ${accountId} failed`, err.message);
+		scheduleFriendsRetry(accountId);
 	} finally {
 		fetching.set(accountId, false);
 	}
+}
+
+/**
+ * After a failed loadFriends (often a DNS/network race during systemd boot),
+ * retry with backoff so the friend list eventually populates without a manual
+ * reconnect.
+ */
+function scheduleFriendsRetry(accountId) {
+	const cur = friendsRetryTimers.get(accountId);
+	if (cur) return;
+	let attempt = 1;
+	const tick = () => {
+		friendsRetryTimers.delete(accountId);
+		loadFriends(accountId).catch(() => {});
+	};
+	friendsRetryTimers.set(accountId, setTimeout(tick, attempt * 5000));
 }
 
 function mapOf(map, state) {

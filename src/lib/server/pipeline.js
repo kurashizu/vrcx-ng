@@ -684,6 +684,10 @@ export async function connectPipeline(accountId) {
 		console.error(`[pipeline ${accountId}] getCurrentUser failed`, err.message);
 		setSession(accountId, { lastError: `Auth check failed: ${err.message}` });
 		bus.emit('accounts');
+		// The first boot often races against network readiness (systemd starts
+		// the service before DNS / the interface is up). Retry so friends
+		// eventually load instead of leaving the account silently offline.
+		scheduleBootRetry(accountId);
 		return;
 	}
 	if (!me) {
@@ -797,6 +801,29 @@ function scheduleReconnect(accountId) {
 			scheduleReconnect(accountId);
 		});
 	}, 5000);
+}
+
+/**
+ * Retry the whole pipeline connect (including getCurrentUser + WS handshake)
+ * a few times after boot, since systemd starts the service before the network
+ * is necessarily ready and the first round of API calls fails.
+ */
+function scheduleBootRetry(accountId) {
+	const state = states.get(accountId);
+	if (!state) return;
+	if (state.bootRetryTimer) return;
+	let attempt = 1;
+	const tick = () => {
+		state.bootRetryTimer = null;
+		if (state.ws && state.ws.readyState === WebSocket.OPEN) return;
+		connectPipeline(accountId).catch((err) => {
+			console.error(`[pipeline ${accountId}] boot retry ${attempt} failed`, err.message);
+			if (attempt++ < 8) {
+				state.bootRetryTimer = setTimeout(tick, attempt * 5000);
+			}
+		});
+	};
+	state.bootRetryTimer = setTimeout(tick, 5000);
 }
 
 export async function disconnectPipeline(accountId) {
