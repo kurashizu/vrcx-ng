@@ -1291,13 +1291,23 @@ import { vrImage } from '$lib/shared/format.js';
 	}
 	.name {
 		font-weight: 600;
-		color: var(--text);
 		flex: 1;
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+	/* Trust class colors must outrank the scoped .name selector (0,2,0 vs
+	   the global .trust-X at 0,1,0). Re-declare inside this component so
+	   they compile to .name.trust-X.s-xxx (0,3,0) and win. */
+	.name.trust-visitor { color: var(--trust-visitor); }
+	.name.trust-newuser { color: var(--trust-newuser); }
+	.name.trust-user    { color: var(--trust-user); }
+	.name.trust-known   { color: var(--trust-known); }
+	.name.trust-trusted { color: var(--trust-trusted); }
+	.name.trust-veteran { color: var(--trust-veteran); }
+	.name.trust-legend  { color: var(--trust-legend); }
+
 	.platform {
 		font-size: 12px;
 	}

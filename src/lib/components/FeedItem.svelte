@@ -477,12 +477,20 @@ import { vrImage } from '$lib/shared/format.js';
 	.user-name {
 		font: inherit;
 		font-weight: 600;
-		color: var(--text);
 		background: transparent;
 		border: none;
 		padding: 0;
 		cursor: pointer;
 	}
+	/* Same specificity trick for the .user-name button in feed items. */
+	.user-name.trust-visitor { color: var(--trust-visitor); }
+	.user-name.trust-newuser { color: var(--trust-newuser); }
+	.user-name.trust-user    { color: var(--trust-user); }
+	.user-name.trust-known   { color: var(--trust-known); }
+	.user-name.trust-trusted { color: var(--trust-trusted); }
+	.user-name.trust-veteran { color: var(--trust-veteran); }
+	.user-name.trust-legend  { color: var(--trust-legend); }
+
 	.user-name:hover {
 		color: var(--accent);
 		text-decoration: underline;

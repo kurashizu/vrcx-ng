@@ -304,6 +304,14 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	.nm.trust-visitor { color: var(--trust-visitor); }
+	.nm.trust-newuser { color: var(--trust-newuser); }
+	.nm.trust-user    { color: var(--trust-user); }
+	.nm.trust-known   { color: var(--trust-known); }
+	.nm.trust-trusted { color: var(--trust-trusted); }
+	.nm.trust-veteran { color: var(--trust-veteran); }
+	.nm.trust-legend  { color: var(--trust-legend); }
+
 	.sub {
 		font-size: 11px;
 		color: var(--text-dim);

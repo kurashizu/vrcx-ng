@@ -582,6 +582,14 @@ import { vrImage } from '$lib/shared/format.js';
 		font-weight: 700;
 		text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 	}
+	.display-name.trust-visitor { color: var(--trust-visitor); }
+	.display-name.trust-newuser { color: var(--trust-newuser); }
+	.display-name.trust-user    { color: var(--trust-user); }
+	.display-name.trust-known   { color: var(--trust-known); }
+	.display-name.trust-trusted { color: var(--trust-trusted); }
+	.display-name.trust-veteran { color: var(--trust-veteran); }
+	.display-name.trust-legend  { color: var(--trust-legend); }
+
 	.username {
 		font-size: 13px;
 		opacity: 0.8;
