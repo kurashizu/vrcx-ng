@@ -1,110 +1,97 @@
 /**
- * VRChat trust rank mapping.
+ * VRChat trust rank mapping (same rules as VRCX's computeTrustLevel).
  *
- * The trust rank string returned by VRChat API is e.g. 'Visitor', 'New User',
- * 'User', 'Known', 'Trusted', 'Veteran', 'Legend'. We map these to CSS
- * class names defined in app.css (`.trust-visitor` etc).
+ * VRChat marks a user's rank with cumulative `system_trust_*` tags, and the
+ * tag names are one level behind the rank names shown in-game:
  *
- * VRCX exposes the actual rank via the user object — we look it up from
- * `friend.trustRank` (set by our server-side enrichment) or fall back to
- * whatever the Friend object already has.
+ *   system_trust_basic   → New User      (blue)    .trust-newuser
+ *   system_trust_known   → User          (green)   .trust-user
+ *   system_trust_trusted → Known User    (orange)  .trust-known
+ *   system_trust_veteran → Trusted User  (purple)  .trust-trusted
+ *   (none)               → Visitor       (grey)    .trust-visitor
  *
- * @param {{ trustRank?: string, tags?: string[] }} f
+ * On top of that `system_troll` / `system_probable_troll` override the colour
+ * (.trust-troll) and VRChat staff (`admin_moderator` tag or a non-"none"
+ * `developerType`) override it again (.trust-vip). `system_trust_legend` is a
+ * legacy tag that VRCX ignores, so we do too.
+ *
+ * The CSS classes are defined in app.css.
+ *
+ * @param {string[]} [tags]
+ * @param {string} [developerType]
+ * @returns {{ label: string, cls: string }} cls is '' when there is no rank info at all
+ */
+export function trustFromTags(tags, developerType) {
+	const list = Array.isArray(tags) ? tags : [];
+	const isStaff = list.includes('admin_moderator') || (!!developerType && developerType !== 'none');
+	if (!list.length && !isStaff) return { label: '', cls: '' };
+
+	let label = 'Visitor';
+	let cls = 'trust-visitor';
+	if (list.includes('system_trust_veteran')) {
+		label = 'Trusted User';
+		cls = 'trust-trusted';
+	} else if (list.includes('system_trust_trusted')) {
+		label = 'Known User';
+		cls = 'trust-known';
+	} else if (list.includes('system_trust_known')) {
+		label = 'User';
+		cls = 'trust-user';
+	} else if (list.includes('system_trust_basic')) {
+		label = 'New User';
+		cls = 'trust-newuser';
+	}
+	if (list.includes('system_troll') || list.includes('system_probable_troll')) cls = 'trust-troll';
+	if (isStaff) cls = 'trust-vip';
+	return { label, cls };
+}
+
+/** Rank label ('New User', 'User', …) for a tag list, '' when unknown. */
+export function trustLabelFromTags(tags, developerType) {
+	return trustFromTags(tags, developerType).label;
+}
+
+/**
+ * CSS class for a user/friend object (uses `tags` + `developerType`).
+ * @param {{ tags?: string[], developerType?: string, trustRank?: string }} f
  * @returns {string} the CSS class, or '' if no rank info
  */
 export function trustColor(f) {
 	if (!f) return '';
-	const rank = (f.trustRank || '').toLowerCase();
-	if (!rank) {
-		return trustClassFromTags(f.tags);
-	}
-	return trustToClass(rank) || '';
+	return trustFromTags(f.tags, f.developerType).cls || trustClassFromLabel(f.trustRank);
 }
 
-/**
- * Derive the trust-rank CSS class from the tag list VRChat puts on users.
- * VRChat returns CUMULATIVE tags (a veteran carries basic/known/trusted/
- * veteran at once), so we pick the HIGHEST level present.
- * Map: basic/user→green, known→orange, trusted→purple, newuser→blue,
- * visitor→white, veteran→gold, legend→red.
- * @param {string[]} tags
- * @returns {string}
- */
-export function trustClassFromTags(tags) {
-	if (!Array.isArray(tags)) return '';
-	let best = -1;
-	let cls = '';
-	for (const t of tags) {
-		const m = String(t).match(/system_trust_([a-z_]+)/);
-		if (!m) continue;
-		const raw = m[1].replace(/_/g, '').trim();
-		const rank = {
-			visitor: 0,
-			newuser: 1,
-			basic: 2,
-			user: 2,
-			known: 3,
-			trusted: 4,
-			veteran: 5,
-			legend: 6
-		}[raw];
-		if (rank === undefined) continue;
-		if (rank > best) {
-			best = rank;
-			cls =
-				raw === 'visitor'
-					? 'trust-visitor'
-					: raw === 'newuser'
-						? 'trust-newuser'
-						: raw === 'basic' || raw === 'user'
-							? 'trust-user'
-							: raw === 'known'
-								? 'trust-known'
-								: raw === 'trusted'
-									? 'trust-trusted'
-									: raw === 'veteran'
-										? 'trust-veteran'
-										: 'trust-legend';
-		}
-	}
-	return cls;
+export function trustClassFromTags(tags, developerType) {
+	return trustFromTags(tags, developerType).cls;
 }
 
-function trustToClass(rank) {
-	const r = rank.replace(/\s+/g, '');
-	switch (r) {
+/** Fallback for objects that only carry the rank label (e.g. 'Known User'). */
+function trustClassFromLabel(label) {
+	switch (String(label || '').toLowerCase().replace(/\s+/g, '')) {
 		case 'visitor':
 			return 'trust-visitor';
 		case 'newuser':
 			return 'trust-newuser';
 		case 'user':
 			return 'trust-user';
-		case 'basic':
-			return 'trust-user';
-		case 'known':
+		case 'knownuser':
 			return 'trust-known';
-		case 'trusted':
+		case 'trusteduser':
 			return 'trust-trusted';
-		case 'veteran':
-			return 'trust-veteran';
-		case 'legend':
-			return 'trust-legend';
 		default:
 			return '';
 	}
 }
 
 /**
- * Build a vrc:// launch URL for a given world/instance.
- * @param {string} location  e.g. "wrld_xxx:12345"
+ * Build a vrchat:// launch URL for a given world/instance (the same format
+ * VRCX uses). Sentinels (offline/private/traveling/local:*) have no URL.
+ * @param {string} location  e.g. "wrld_xxx:12345~private(usr_x)"
+ * @param {string} [shortName]
  * @returns {string|null}
  */
-export function vrcLaunchUrl(location) {
-	if (!location || location === 'offline' || location === 'private') return null;
-	const [worldId, instanceId] = location.split(':');
-	if (!worldId) return null;
-	if (instanceId && instanceId !== '0' && instanceId !== '') {
-		return `vrc://launch?worldId=${encodeURIComponent(worldId)}&instanceId=${encodeURIComponent(instanceId)}`;
-	}
-	return `vrc://world/${encodeURIComponent(worldId)}`;
+export function vrcLaunchUrl(location, shortName = '') {
+	if (!location || !String(location).startsWith('wrld_')) return null;
+	const sn = shortName ? `&shortName=${encodeURIComponent(shortName)}` : '';
+	return `vrchat://launch?ref=vrcx-ng&id=${location}${sn}`;
 }

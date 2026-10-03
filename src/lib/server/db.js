@@ -26,6 +26,7 @@ export function getDb() {
 	migrate(db);
 	// one-shot JSON migration if a legacy data dir is present and DB is empty
 	migrateFromJsonIfNeeded(db);
+	syncAccountsFromJson(db);
 	_db = db;
 	return db;
 }
@@ -239,6 +240,67 @@ CREATE INDEX IF NOT EXISTS idx_fgm_user ON friend_group_members(user_id);
 
 function migrate(db) {
 	db.exec(SCHEMA);
+	const version = db.pragma('user_version', { simple: true });
+	if (version < 1) {
+		// v1: world_cache used to keep the entire world payload; only imageUrl
+		// is ever read back, so slim the existing rows down to that.
+		db.exec(`UPDATE world_cache SET raw_json = json_object('imageUrl',
+			CASE WHEN json_valid(raw_json) THEN json_extract(raw_json, '$.imageUrl') END)`);
+		db.pragma('user_version = 1');
+	}
+	db.exec('CREATE INDEX IF NOT EXISTS idx_world_cache_updated ON world_cache(updated_at)');
+	pruneCaches(db);
+}
+
+/** Drop cache rows nobody will read again so the DB doesn't grow without bound. */
+function pruneCaches(db) {
+	const now = Date.now();
+	db.prepare('DELETE FROM world_cache WHERE updated_at < ?').run(now - 30 * 24 * 60 * 60 * 1000);
+	db.prepare('DELETE FROM user_cache WHERE expires_at < ?').run(now);
+}
+
+/* ---------------- accounts table (FK target) ---------------- */
+
+/**
+ * Accounts live in accounts.json, but feed_events / notifications /
+ * moderations / favorites reference accounts(id). Keep a stub row per account
+ * (without the password) so those inserts never fail the FK check.
+ */
+export function syncAccountRow({ id, username, displayName, createdAt }) {
+	if (!id) return;
+	const now = Date.now();
+	getDb()
+		.prepare(
+			`INSERT INTO accounts (id, username, display_name, password_enc, created_at, updated_at)
+			 VALUES (?, ?, ?, '', ?, ?)
+			 ON CONFLICT(id) DO UPDATE SET
+			   username = excluded.username,
+			   display_name = excluded.display_name,
+			   updated_at = excluded.updated_at`
+		)
+		.run(id, username || '', displayName || username || '', createdAt || now, now);
+}
+
+/** Deleting the row cascades to everything stored for that account. */
+export function removeAccountRow(id) {
+	if (!id) return;
+	getDb().prepare('DELETE FROM accounts WHERE id = ?').run(id);
+}
+
+function syncAccountsFromJson(db) {
+	const file = path.join(DATA_DIR, 'accounts.json');
+	if (!fs.existsSync(file)) return;
+	try {
+		const list = JSON.parse(fs.readFileSync(file, 'utf8') || '[]');
+		const now = Date.now();
+		const ins = db.prepare(`INSERT OR IGNORE INTO accounts
+			(id, username, display_name, password_enc, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?)`);
+		for (const a of list) {
+			if (a?.id) ins.run(a.id, a.username || '', a.displayName || a.username || '', a.createdAt || now, now);
+		}
+	} catch (err) {
+		console.error('[db] account sync failed', err.message);
+	}
 }
 
 /* ------------------ one-shot JSON → SQLite migration ------------------ */

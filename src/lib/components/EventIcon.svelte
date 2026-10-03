@@ -1,6 +1,6 @@
 <script>
 	/**
-	 * @typedef {'Online'|'Offline'|'Active'|'GPS'|'Status'|'Bio'|'Avatar'|'Join'|'Leave'|'FriendRequest'|'Invite'|'Instance.Closed'} FeedType
+	 * @typedef {'Online'|'Offline'|'Active'|'GPS'|'Status'|'Bio'|'Avatar'|'Join'|'Leave'|'FriendRequest'|'Invite'|'Instance.Closed'|'Friend'|'Group'|'Notification'} FeedType
 	 */
 
 	/** @type {{ type: FeedType, size?: number }} */
@@ -18,7 +18,10 @@
 		Leave: '⬅️',
 		FriendRequest: '🤝',
 		Invite: '✉️',
-		'Instance.Closed': '🚪'
+		'Instance.Closed': '🚪',
+		Friend: '🧑‍🤝‍🧑',
+		Group: '🏷️',
+		Notification: '🔔'
 	};
 
 	const colorMap = {
@@ -33,7 +36,10 @@
 		Leave: 'var(--leave)',
 		FriendRequest: 'var(--request)',
 		Invite: 'var(--request)',
-		'Instance.Closed': 'var(--danger)'
+		'Instance.Closed': 'var(--danger)',
+		Friend: 'var(--request)',
+		Group: '#7c5cff',
+		Notification: 'var(--text-dim)'
 	};
 
 	const symbol = $derived(iconMap[type] ?? '•');

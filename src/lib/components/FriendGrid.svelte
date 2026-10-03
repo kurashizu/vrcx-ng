@@ -3,6 +3,7 @@ import { vrImage } from '$lib/shared/format.js';
 	import { friendGridOpen, closeFriendGrid } from '$lib/stores/friendGrid.js';
 	import { friendsData } from '$lib/stores/friends.js';
 	import { accounts } from '$lib/stores/accounts.js';
+	import { settings } from '$lib/stores/settings.js';
 	import { openUserDetail } from '$lib/stores/userDetail.js';
 	import { openAvatarDetail } from '$lib/stores/avatarDetail.js';
 	import { parseLocation, accessTypeLabel, accessTypeColor, shortInstanceLabel } from '$lib/shared/location.js';
@@ -75,7 +76,7 @@ import { vrImage } from '$lib/shared/format.js';
 		const active = $friendsData.active.filter(match).sort(byName);
 		const offline = $friendsData.offline
 			.filter(match)
-			.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+			.sort($settings['friend.sortOfflineBy'] === 'name' ? byName : (a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
 
 		// Flatten all world-bucketed + traveling friends into a single list of
 		// cards so we can render one bubble-flow grid instead of one grid
@@ -204,10 +205,18 @@ import { vrImage } from '$lib/shared/format.js';
 							{#each sec.cards as c (c.f.id)}
 								{@const f = c.f}
 								{@const hue = trustColor(f) || '0'}
-								<button
+								<div
 									class="card"
 									class:bucket={sec.key}
+									role="button"
+									tabindex="0"
 									onclick={() => openUser(f)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											openUser(f);
+										}
+									}}
 									title={f.displayName}
 								>
 									<div class="avatar">
@@ -249,7 +258,7 @@ import { vrImage } from '$lib/shared/format.js';
 											<div class="plat">{f.platform === 'standalonewindows' ? '🖥 PC' : f.platform === 'android' ? '📱 Quest' : f.platform}</div>
 										{/if}
 									</div>
-								</button>
+								</div>
 							{/each}
 						</div>
 					{:else}
@@ -257,10 +266,18 @@ import { vrImage } from '$lib/shared/format.js';
 							{#each sec.friends as f (f.id)}
 								{@const chip = instChip(f)}
 								{@const hue = trustColor(f) || '0'}
-								<button
+								<div
 									class="card"
 									class:bucket={sec.key}
+									role="button"
+									tabindex="0"
 									onclick={() => openUser(f)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											openUser(f);
+										}
+									}}
 									title={f.displayName}
 								>
 									<div class="avatar">
@@ -302,7 +319,7 @@ import { vrImage } from '$lib/shared/format.js';
 											<div class="plat">{f.platform === 'standalonewindows' ? '🖥 PC' : f.platform === 'android' ? '📱 Quest' : f.platform}</div>
 										{/if}
 									</div>
-								</button>
+								</div>
 							{/each}
 						</div>
 					{/if}
@@ -524,8 +541,8 @@ import { vrImage } from '$lib/shared/format.js';
 	.name.trust-user    { color: var(--trust-user); }
 	.name.trust-known   { color: var(--trust-known); }
 	.name.trust-trusted { color: var(--trust-trusted); }
-	.name.trust-veteran { color: var(--trust-veteran); }
-	.name.trust-legend  { color: var(--trust-legend); }
+	.name.trust-troll { color: var(--trust-troll); }
+	.name.trust-vip  { color: var(--trust-vip); }
 
 	.sub {
 		font-size: 11px;

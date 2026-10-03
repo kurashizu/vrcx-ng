@@ -8,7 +8,8 @@
 	import NotificationPanel from '$lib/components/NotificationPanel.svelte';
 	import { filteredFeed } from '$lib/stores/feed.js';
 	import { accounts, loggedInCount, onlineCount } from '$lib/stores/accounts.js';
-	import { settings, getSetting, updateSetting } from '$lib/stores/settings.js';
+	import { settings, settingsLoaded, updateSetting } from '$lib/stores/settings.js';
+	import { notificationsTick } from '$lib/stores/sse.js';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 
@@ -21,8 +22,14 @@
 		friendsOpen = false;
 	}
 	// 'list' = traditional vertical list; 'bubbles' = full-bleed flex-wrap cards
-	let feedMode = $state(getSetting('ui.feedMode') || 'bubbles');
+	let feedMode = $state('bubbles');
+	let feedModeChosen = false;
+	// The saved mode is only known once the settings have loaded.
+	$effect(() => {
+		if ($settingsLoaded && !feedModeChosen) feedMode = $settings['ui.feedMode'] || 'bubbles';
+	});
 	function setFeedMode(m) {
+		feedModeChosen = true;
 		feedMode = m;
 		updateSetting('ui.feedMode', m);
 	}
@@ -36,11 +43,18 @@
 	async function refreshNotifCount() {
 		if (!browser) return;
 		try {
-			const r = await fetch('/api/notifications?onlyUnseen=true&limit=500');
+			// only the per-account unseen counts are needed, not the notifications
+			const r = await fetch('/api/notifications?onlyUnseen=true&limit=1');
 			const j = await r.json();
-			notifUnseen = (j.notifications || []).length;
+			notifUnseen = Object.values(j.unseen || {}).reduce((a, b) => a + b, 0);
 		} catch {}
 	}
+
+	// The server pushes a tick on every inbox change; the interval is only a safety net.
+	$effect(() => {
+		$notificationsTick;
+		refreshNotifCount();
+	});
 
 	function on2faEvent(e) {
 		const { accountId, methods } = e.detail;
@@ -51,8 +65,9 @@
 
 	onMount(() => {
 		window.addEventListener('vrc-2fa-required', on2faEvent);
-		refreshNotifCount();
-		const id = setInterval(refreshNotifCount, 15000);
+		const id = setInterval(() => {
+			if (document.visibilityState === 'visible') refreshNotifCount();
+		}, 60000);
 		return () => {
 			window.removeEventListener('vrc-2fa-required', on2faEvent);
 			clearInterval(id);
@@ -150,6 +165,7 @@
 		display: grid;
 		grid-template-columns: 280px 1fr 320px;
 		height: 100vh;
+		height: 100dvh;
 		overflow: hidden;
 	}
 	.sidebar,

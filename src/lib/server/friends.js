@@ -1,7 +1,11 @@
-import { getFriends, getFriendLists } from './vrchat.js';
-import { getSession, setSession } from './accounts.js';
-import { bus } from './bus.js';
+import { getFriends, getFriendLists, getAvatar } from './vrchat.js';
+import { getSession } from './accounts.js';
+import { bus, backfillFeedNames } from './bus.js';
 import { getGroupsForUsers } from './friendGroups.js';
+import { getWorldMeta } from './worldCache.js';
+import { getSetting } from './settings.js';
+import { parseLocation } from '../shared/location.js';
+import { trustLabelFromTags } from '../shared/trust.js';
 
 /**
  * Per-account friend cache.
@@ -20,12 +24,14 @@ import { getGroupsForUsers } from './friendGroups.js';
  * @property {string} [statusDescription]
  * @property {string} [bio]
  * @property {string} [state]                   // 'online'|'active'|'offline'
- * @property {string} [location]
- * @property {string} [worldId]
+ * @property {string} [location]                // wrld_x:inst | 'private' | 'traveling' | ''
+ * @property {string} [travelingToLocation]
+ * @property {string} [worldId]                 // only set for real wrld_ locations
  * @property {string} [worldName]
  * @property {string} [platform]
  * @property {string} [last_platform]
- * @property {number} [lastSeen]
+ * @property {number} [lastSeen]                // ms; when the friend was last seen (offline friends)
+ * @property {number} [evtAt]                   // ms; last time a pipeline event touched this record
  */
 
 /** @type {Map<string, Map<string, Friend>>} */
@@ -47,7 +53,9 @@ function seedGlobalName(userId, name) {
 	if (globalNameCache.get(userId) === name) return;
 	globalNameCache.set(userId, name);
 	// Patch already-buffered feed entries that still show the bare id.
-	import('./bus.js').then((m) => m.backfillFeedNames(userId, name)).catch(() => {});
+	try {
+		backfillFeedNames(userId, name);
+	} catch {}
 }
 
 /**
@@ -70,31 +78,81 @@ export function lookupDisplayName(userId) {
 	return '';
 }
 
-/** @type {Map<string, boolean>} */
-const fetching = new Map();
-const friendsRetryTimers = new Map();
+/** Real world id of a location string, '' for sentinels (private/traveling/offline/local). */
+function worldIdOf(loc) {
+	return typeof loc === 'string' && loc.startsWith('wrld_') ? loc.split(':')[0] : '';
+}
+
+/** Run `fn` over `items` with at most `limit` in flight. */
+async function mapLimit(items, limit, fn) {
+	let i = 0;
+	const worker = async () => {
+		while (i < items.length) {
+			const item = items[i++];
+			await fn(item).catch(() => {});
+		}
+	};
+	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
+/** @type {Map<string, Promise<void>>} */
+const loading = new Map();
+/** @type {Map<string, { timer: NodeJS.Timeout, attempt: number }>} */
+const retries = new Map();
+const RESYNC_INTERVAL_MS = 60 * 60 * 1000;
+let resyncTimer = null;
 
 /**
- * Load (or refresh) the friend list for a single account.
- * @param {string} accountId
+ * Hourly full resync of every logged-in account (VRCX does the same): the
+ * pipeline can silently miss events, so the cache is rebuilt from the API.
  */
-export async function loadFriends(accountId) {
-	if (fetching.get(accountId)) return;
-	fetching.set(accountId, true);
+function ensureResyncTimer() {
+	if (resyncTimer) return;
+	resyncTimer = setInterval(() => {
+		let i = 0;
+		for (const accountId of cache.keys()) {
+			if (!getSession(accountId)?.user) continue;
+			// stagger the accounts so they don't all hit the API at once
+			setTimeout(() => loadFriends(accountId), i++ * 15000).unref?.();
+		}
+	}, RESYNC_INTERVAL_MS);
+	resyncTimer.unref?.();
+}
+
+/**
+ * Load (or refresh) the friend list for a single account. Safe to call
+ * repeatedly: concurrent calls share one run, and every run is a full resync
+ * (friends that are gone upstream are removed, fresh API data wins over the
+ * cache except for pipeline events that arrived while the load was running).
+ * Never rejects.
+ * @param {string} accountId
+ * @returns {Promise<void>}
+ */
+export function loadFriends(accountId) {
+	const running = loading.get(accountId);
+	if (running) return running;
+	const p = doLoadFriends(accountId).finally(() => loading.delete(accountId));
+	loading.set(accountId, p);
+	return p;
+}
+
+async function doLoadFriends(accountId) {
+	ensureResyncTimer();
+	const startedAt = Date.now();
 	try {
 		// VRChat's /auth/user/friends API quirk: with offline=true it returns ONLY
 		// the offline subset; without it, it returns online+active. We need both.
 		// VRChat caps each request at 100 friends, so we must page through with
 		// `offset` to get the full list (a 500+ friend list otherwise loses
-		// everyone past the first page, which also silently breaks their
-		// online/active state on the next merge).
+		// everyone past the first page). 429s are retried inside api().
 		const fetchAll = async (params) => {
 			const out = [];
 			let offset = 0;
 			for (;;) {
 				const page = await getFriends(accountId, { ...params, n: 100, offset });
+				if (!Array.isArray(page)) break;
 				out.push(...page);
-				if (!Array.isArray(page) || page.length < 100) break;
+				if (page.length < 100) break;
 				offset += page.length;
 			}
 			return out;
@@ -107,6 +165,7 @@ export async function loadFriends(accountId) {
 
 		const activeSet = new Set(friendLists?.activeFriends || []);
 		const onlineApiSet = new Set(friendLists?.onlineFriends || []);
+		const allIds = new Set(friendLists?.friends || []);
 
 		// Build a map keyed by id, deduping across the two lists
 		const map = new Map();
@@ -123,59 +182,53 @@ export async function loadFriends(accountId) {
 
 		// Now compute state for each
 		for (const f of map.values()) {
-			const norm = normalizeFriend(f, activeSet, onlineApiSet);
-			map.set(f.id, norm);
+			map.set(f.id, normalizeFriend(f, activeSet, onlineApiSet));
 		}
 
-		// Resolve world names for friends currently online with a known location
-		const { getWorldMeta } = await import('./worldCache.js');
+		// Resolve world names for friends currently in a known world (bounded
+		// concurrency; unknown worlds are negative-cached in worldCache).
 		const worldIds = new Set();
+		for (const f of map.values()) if (f.worldId) worldIds.add(f.worldId);
+		const worldNames = new Map();
+		await mapLimit([...worldIds], 5, async (wid) => {
+			const meta = await getWorldMeta(accountId, wid, { fetchOnMiss: true });
+			if (meta?.name) worldNames.set(wid, meta.name);
+		});
 		for (const f of map.values()) {
-			if (f.state === 'online' && f.location && f.location !== 'offline' && f.location !== 'private') {
-				const wid = f.location.split(':')[0];
-				if (wid) worldIds.add(wid);
-			}
+			if (f.worldId && worldNames.has(f.worldId)) f.worldName = worldNames.get(f.worldId);
 		}
-		await Promise.all(
-			Array.from(worldIds).map(async (wid) => {
-				const meta = await getWorldMeta(accountId, wid, { fetchOnMiss: true });
-				if (!meta) return;
-				for (const f of map.values()) {
-					if (f.location?.split(':')[0] === wid) {
-						map.set(f.id, { ...map.get(f.id), worldId: wid, worldName: meta.name });
-					}
-				}
-			})
-		);
 
 		console.log(
 			`[friends] ${accountId} loaded ${map.size} (online=${mapOf(map, 'online').length} active=${mapOf(map, 'active').length} offline=${mapOf(map, 'offline').length})`
 		);
 
-		// Merge with existing cache so pipeline events that arrived between WS
-		// open and now aren't clobbered.
+		// Merge with the existing cache.
 		const existing = cache.get(accountId);
 		if (existing) {
 			for (const [uid, prev] of existing) {
-				if (!map.has(uid)) {
-					// Friend missing from the fresh page(s). Keep the pipeline's
-					// known state instead of forcing offline — friends in private
-					// instances or beyond the API page must not be demoted. The
-					// websocket's friend-offline events are the authoritative
-					// source for going offline.
-					map.set(uid, prev);
-				} else if (prev.state === 'online' || prev.state === 'active') {
-					const cur = map.get(uid);
+				const cur = map.get(uid);
+				if (!cur) {
+					// Missing from the fresh pages. Only drop it when VRChat's own
+					// friend-id list confirms it is no longer a friend; otherwise
+					// (partial data) keep what the pipeline knew.
+					if (!(allIds.size > 0 && !allIds.has(uid))) map.set(uid, prev);
+					continue;
+				}
+				if (prev.evtAt && prev.evtAt > startedAt) {
+					// A pipeline event arrived while this load was running — it is
+					// newer than what we fetched, so it wins.
 					map.set(uid, {
 						...cur,
-						state: prev.state,
-						location: prev.location || cur.location,
-						platform: prev.platform || cur.platform
+						...prev,
+						displayName: prev.displayName && prev.displayName !== uid ? prev.displayName : cur.displayName
 					});
+				} else if (cur.state === 'offline') {
+					cur.lastSeen = Math.max(cur.lastSeen || 0, prev.lastSeen || 0);
 				}
 			}
 		}
 		cache.set(accountId, map);
+		retries.delete(accountId);
 		bus.emit('friends');
 		// Kick off a bounded avatar-thumbnail backfill (private avatars often
 		// come back without a thumbnail URL in the friend list payload).
@@ -183,25 +236,29 @@ export async function loadFriends(accountId) {
 	} catch (err) {
 		console.error(`[friends] load ${accountId} failed`, err.message);
 		scheduleFriendsRetry(accountId);
-	} finally {
-		fetching.set(accountId, false);
 	}
 }
 
 /**
- * After a failed loadFriends (often a DNS/network race during systemd boot),
- * retry with backoff so the friend list eventually populates without a manual
- * reconnect.
+ * After a failed loadFriends (often a DNS/network race during systemd boot, or
+ * a rate limit), retry with exponential backoff (5s → 5min) so the friend list
+ * eventually populates without a manual reconnect. Stops once the account is
+ * logged out.
  */
 function scheduleFriendsRetry(accountId) {
-	const cur = friendsRetryTimers.get(accountId);
-	if (cur) return;
-	let attempt = 1;
-	const tick = () => {
-		friendsRetryTimers.delete(accountId);
-		loadFriends(accountId).catch(() => {});
-	};
-	friendsRetryTimers.set(accountId, setTimeout(tick, attempt * 5000));
+	if (retries.get(accountId)?.timer) return;
+	const attempt = (retries.get(accountId)?.attempt ?? 0) + 1;
+	const delay = Math.min(5000 * 2 ** (attempt - 1), 5 * 60 * 1000);
+	const timer = setTimeout(() => {
+		retries.set(accountId, { timer: null, attempt });
+		if (!getSession(accountId)?.user) {
+			retries.delete(accountId);
+			return;
+		}
+		loadFriends(accountId);
+	}, delay);
+	timer.unref?.();
+	retries.set(accountId, { timer, attempt });
 }
 
 function mapOf(map, state) {
@@ -212,11 +269,14 @@ function mapOf(map, state) {
 
 /**
  * Re-derive state for already-cached friends using a fresh online/active list.
- * Used when currentUser updates (e.g. via 'user-update' pipeline event).
+ * Used on (re)connect with the current user's onlineFriends / activeFriends.
  *
  * Important: VRChat does NOT include friends who are in a private world in the
  * `onlineFriends` array — that's the whole point of "private". But their
  * friend.location field is the string 'private', so we treat them as online.
+ * Without BOTH lists we cannot tell "offline" from "missing data", so nothing
+ * is changed. Friends a pipeline event touched in the last 15 s are left alone
+ * (the REST lists can lag behind the websocket).
  *
  * @param {string} accountId
  * @param {{ activeFriends?: string[], onlineFriends?: string[] }} lists
@@ -224,10 +284,13 @@ function mapOf(map, state) {
 export function reconcileStates(accountId, lists) {
 	const map = cache.get(accountId);
 	if (!map) return;
-	const activeSet = new Set(lists.activeFriends || []);
-	const onlineSet = new Set(lists.onlineFriends || []);
+	if (!Array.isArray(lists?.activeFriends) || !Array.isArray(lists?.onlineFriends)) return;
+	const activeSet = new Set(lists.activeFriends);
+	const onlineSet = new Set(lists.onlineFriends);
+	const now = Date.now();
 	let changed = false;
 	for (const f of map.values()) {
+		if (f.evtAt && now - f.evtAt < 15000) continue;
 		const isPrivate = f.location === 'private';
 		const next = activeSet.has(f.id)
 			? 'active'
@@ -236,17 +299,13 @@ export function reconcileStates(accountId, lists) {
 				: 'offline';
 		if (f.state !== next) {
 			f.state = next;
-			if (next === 'offline') f.lastSeen = Date.now();
+			if (next === 'offline') f.lastSeen = now;
 			changed = true;
 		}
 	}
 	if (changed) scheduleFriendsEmit();
 }
 
-/**
- * Drop cache for an account (on logout / delete).
- * @param {string} accountId
- */
 /**
  * Resolve missing avatar thumbnails for friends whose `currentAvatar` is
  * known but whose `currentAvatarThumbnailImageUrl` came back empty.
@@ -269,7 +328,6 @@ export async function backfillAvatarThumbnails(accountId, limit = 8) {
 		}
 	}
 	if (!targets.length) return 0;
-	const { getAvatar } = await import('./vrchat.js');
 	let patched = 0;
 	for (const [uid, avatarId] of targets) {
 		try {
@@ -285,35 +343,67 @@ export async function backfillAvatarThumbnails(accountId, limit = 8) {
 	return patched;
 }
 
+/**
+ * Drop cache for an account (on logout / delete).
+ * @param {string} accountId
+ */
 export function dropFriends(accountId) {
+	const r = retries.get(accountId);
+	if (r?.timer) clearTimeout(r.timer);
+	retries.delete(accountId);
 	if (cache.delete(accountId)) bus.emit('friends');
 }
 
 /**
- * Update a single friend's state (called from pipeline events).
+ * The cached friend record of one account, or null. Used by the pipeline as
+ * the "before" baseline when diffing friend updates.
+ * @param {string} accountId
+ * @param {string} userId
+ * @returns {Friend|null}
+ */
+export function getCachedFriend(accountId, userId) {
+	return cache.get(accountId)?.get(userId) || null;
+}
+
+/**
+ * Update a single friend's state (called from pipeline events). Undefined
+ * values are ignored, and a known name is never replaced by a bare user id.
  * @param {string} accountId
  * @param {string} userId
  * @param {Partial<Friend>} patch
  */
 export function patchFriend(accountId, userId, patch) {
-	if (patch?.displayName) {
-		seedGlobalName(userId, patch.displayName);
-	}
+	const clean = {};
+	for (const [k, v] of Object.entries(patch || {})) if (v !== undefined) clean[k] = v;
+	if (!clean.displayName || clean.displayName === userId) delete clean.displayName;
+	if (clean.displayName) seedGlobalName(userId, clean.displayName);
 	const map = cache.get(accountId);
 	if (!map) return;
+	const now = Date.now();
 	const existing = map.get(userId);
 	if (!existing) {
 		// Friend not in cache (login just happened and loadFriends is still
 		// in-flight, or a new friend). Insert a minimal record so pipeline
 		// events aren't lost.
-		const minimal = normalizeFriend({ id: userId, displayName: userId, ...patch }, new Set(), new Set());
+		const minimal = normalizeFriend(
+			{ id: userId, displayName: lookupDisplayName(userId) || userId, ...clean },
+			new Set(),
+			new Set()
+		);
+		minimal.evtAt = now;
+		if (minimal.state === 'offline' && !minimal.lastSeen) minimal.lastSeen = now;
 		map.set(userId, minimal);
 		scheduleFriendsEmit();
 		return;
 	}
-	const next = { ...existing, ...patch, id: userId };
-	if (existing.state !== 'offline' && patch.state === 'offline') {
-		next.lastSeen = Date.now();
+	const next = { ...existing, ...clean, id: userId, evtAt: now };
+	if (clean.location !== undefined && clean.location !== existing.location) {
+		// keep the derived world fields in step with the new location
+		if (clean.worldId === undefined) next.worldId = worldIdOf(clean.location);
+		if (clean.worldName === undefined) next.worldName = '';
+	}
+	if (existing.state !== 'offline' && clean.state === 'offline') {
+		next.lastSeen = now;
 	}
 	map.set(userId, next);
 	scheduleFriendsEmit();
@@ -343,7 +433,10 @@ export function upsertFriend(accountId, friend) {
 	const map = cache.get(accountId);
 	if (!map) return;
 	const existing = map.get(friend.id);
-	map.set(friend.id, { ...existing, ...friend });
+	const defined = Object.fromEntries(Object.entries(friend).filter(([, v]) => v !== undefined));
+	const merged = normalizeFriend({ ...existing, ...defined }, new Set(), new Set());
+	merged.evtAt = Date.now();
+	map.set(friend.id, merged);
 	scheduleFriendsEmit();
 }
 
@@ -367,15 +460,14 @@ function scheduleFriendsEmit() {
 	}, 250);
 }
 
-/**
- * Aggregate all friends across all logged-in accounts.
- */
+const stateRank = (s) => (s === 'online' ? 2 : s === 'active' ? 1 : 0);
+
 /**
  * Search across all logged-in accounts' cached friends.
  * Matches displayName, note, userId (substring, case-insensitive).
  * @param {string} q  search query
  * @param {number} [limit=50]
- * @returns {Array<{userId, displayName, note, state, status, location, worldName, accountIds}>}
+ * @returns {Array<{userId, displayName, note, state, status, location, worldName, tags, developerType, accountIds}>}
  */
 export function searchLocal(q, limit = 50) {
 	if (!q || q.length < 1) return [];
@@ -391,8 +483,7 @@ export function searchLocal(q, limit = 50) {
 				const existing = byId.get(userId);
 				if (existing) {
 					existing.accountIds.push(accountId);
-					const rank = (s) => (s === 'online' ? 2 : s === 'active' ? 1 : 0);
-					if (rank(f.state || 'offline') > rank(existing.state)) {
+					if (stateRank(f.state || 'offline') > stateRank(existing.state)) {
 						existing.state = f.state || 'offline';
 					}
 				} else {
@@ -405,6 +496,10 @@ export function searchLocal(q, limit = 50) {
 						location: f.location,
 						worldName: f.worldName,
 						trustRank: f.trustRank,
+						tags: f.tags || [],
+						developerType: f.developerType || '',
+						userThumbnailUrl: f.currentAvatarThumbnailImageUrl || '',
+						accountId,
 						accountIds: [accountId]
 					});
 				}
@@ -412,9 +507,8 @@ export function searchLocal(q, limit = 50) {
 		}
 	}
 	// Sort: online first, then active, then offline; alphabetical within group
-	const rank = (s) => (s === 'online' ? 2 : s === 'active' ? 1 : 0);
 	const sorted = [...byId.values()].sort((a, b) => {
-		const r = rank(b.state) - rank(a.state);
+		const r = stateRank(b.state) - stateRank(a.state);
 		if (r !== 0) return r;
 		return (a.displayName || '').localeCompare(b.displayName || '');
 	});
@@ -422,40 +516,52 @@ export function searchLocal(q, limit = 50) {
 }
 
 /**
- * Return all friends currently in a given world, with their instance type
- * and (for private/friends/friends+ instances) the owner user id extracted
- * from the location qualifier.
+ * Parse a location into access type / owner. Same parser as the UI
+ * (shared/location.js); exported under the name other modules import.
+ */
+export const parseLocationFull = parseLocation;
+
+/**
+ * Return all friends currently in a given world, one entry per friend (a
+ * friend shared by several of the user's accounts is listed once with all
+ * their `accountIds`), with the instance type and (for private / friends /
+ * friends+ instances) the owner user id taken from the location qualifier.
  *
  * @param {string} worldId
- * @returns {Array<{userId, displayName, note, location, instanceType, ownerUserId, accountIds}>}
+ * @returns {Array<{userId, displayName, note, location, instanceId, instanceType, ownerUserId, accountId, accountIds}>}
  */
 export function friendsInWorld(worldId) {
 	if (!worldId) return [];
-	const out = [];
+	/** @type {Map<string, any>} */
+	const byUser = new Map();
 	for (const [accountId, friends] of cache) {
 		const sess = getSession(accountId);
 		if (!sess?.user) continue; // skip logged-out accounts
 		for (const f of friends.values()) {
 			const loc = f.location || '';
-			if (!loc || loc === 'offline' || loc === 'private' || loc === 'traveling') continue;
-			const [wId, instanceId] = loc.split(':');
-			if (wId !== worldId) continue;
-			const parsed = parseLocationFull(loc);
-			const owner = parsed.userId || null;
-			out.push({
+			if (worldIdOf(loc) !== worldId) continue;
+			const prev = byUser.get(f.id);
+			if (prev) {
+				prev.accountIds.push(accountId);
+				continue;
+			}
+			const parsed = parseLocation(loc);
+			byUser.set(f.id, {
 				userId: f.id,
 				displayName: f.displayName,
 				note: f.note,
 				location: loc,
-				instanceId: instanceId || null,
+				instanceId: parsed.instanceId || null,
 				instanceType: parsed.accessType || 'public',
 				accessTypeLabel: parsed.accessTypeLabel || 'public',
-				ownerUserId: owner,
+				ownerUserId: parsed.userId || null,
 				platform: f.platform || '',
-				accountId
+				accountId,
+				accountIds: [accountId]
 			});
 		}
 	}
+	const out = [...byUser.values()];
 	// Sort: invite-able first (private/friends/friends+), then public, then by name
 	const rank = (t) => {
 		if (t === 'invite' || t === 'invite+') return 0;
@@ -471,56 +577,13 @@ export function friendsInWorld(worldId) {
 	return out;
 }
 
-function parseLocationFull(loc) {
-	// Lightweight inline parser — return accessType/userId. Avoids an
-	// import cycle (location.js doesn't depend on this file).
-	let _tag = String(loc || '');
-	const ctx = {
-		accessType: '',
-		accessTypeLabel: '',
-		userId: null,
-		groupId: null,
-		groupAccessType: null
-	};
-	if (!_tag.includes(':')) return ctx;
-	const inst = _tag.split(':')[1] || '';
-	inst.split('~').forEach((s, i) => {
-		if (!i) return;
-		const A = s.indexOf('(');
-		const Z = A >= 0 ? s.lastIndexOf(')') : -1;
-		const key = Z >= 0 ? s.substr(0, A) : s;
-		const value = A < Z ? s.substr(A + 1, Z - A - 1) : '';
-		if (key === 'private') {
-			ctx.accessType = 'invite';
-			ctx.userId = value;
-		} else if (key === 'hidden') {
-			ctx.accessType = 'friends+';
-			ctx.userId = value;
-		} else if (key === 'friends') {
-			ctx.accessType = 'friends';
-			ctx.userId = value;
-		} else if (key === 'canRequestInvite' && ctx.accessType === 'invite') {
-			ctx.accessType = 'invite+';
-		} else if (key === 'group') {
-			ctx.accessType = 'group';
-			ctx.groupId = value;
-		} else if (key === 'groupAccessType') {
-			ctx.groupAccessType = value;
-		}
-	});
-	if (!ctx.accessType) ctx.accessType = 'public';
-	ctx.accessTypeLabel = ctx.accessType;
-	if (ctx.groupId && ctx.groupAccessType) {
-		ctx.accessTypeLabel = `group${ctx.groupAccessType[0].toUpperCase()}${ctx.groupAccessType.slice(1)}`;
-	}
-	return ctx;
-}
-
+/**
+ * Aggregate all friends across all logged-in accounts.
+ */
 export function aggregate() {
 	/** @type {Map<string, Friend & { accountIds: Set<string>, _state: string }>} */
 	const map = new Map();
 	const byAccount = {};
-	const userIds = [];
 
 	for (const [accountId, friends] of cache) {
 		const sess = getSession(accountId);
@@ -530,21 +593,23 @@ export function aggregate() {
 			const existing = map.get(f.id);
 			if (existing) {
 				existing.accountIds.add(accountId);
-				const rank = (s) => (s === 'online' ? 2 : s === 'active' ? 1 : 0);
-				if (rank(f.state || 'offline') > rank(existing._state)) {
+				const better =
+					stateRank(f.state) > stateRank(existing._state) ||
+					// equal state: a concrete location beats a 'private' / empty one
+					(stateRank(f.state) === stateRank(existing._state) &&
+						worldIdOf(f.location) &&
+						!worldIdOf(existing.location));
+				if (better) {
 					Object.assign(existing, f, { _state: f.state || 'offline' });
 				}
 			} else {
 				map.set(f.id, { ...f, accountIds: new Set([accountId]), _state: f.state || 'offline' });
-				userIds.push(f.id);
 			}
 		}
 	}
-	// ensure existing friends are also in userIds so we get group info for them
-	for (const id of map.keys()) if (!userIds.includes(id)) userIds.push(id);
 
 	// Bulk lookup: which group does each user belong to?
-	const groups = getGroupsForUsers(userIds);
+	const groups = getGroupsForUsers([...map.keys()]);
 
 	/** @type {any[]} */
 	const online = [];
@@ -556,14 +621,16 @@ export function aggregate() {
 	for (const f of map.values()) {
 		const flat = { ...f, accountIds: Array.from(f.accountIds), groupName: groups.get(f.id) || null };
 		delete flat._state;
+		delete flat.evtAt;
 		if (flat.state === 'online') online.push(flat);
 		else if (flat.state === 'active') active.push(flat);
 		else offline.push(flat);
 	}
 
-	online.sort((a, b) => a.displayName.localeCompare(b.displayName));
-	active.sort((a, b) => a.displayName.localeCompare(b.displayName));
-	offline.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+	const byName = (a, b) => (a.displayName || '').localeCompare(b.displayName || '');
+	online.sort(byName);
+	active.sort(byName);
+	offline.sort(getSetting('friend.sortOfflineBy') === 'name' ? byName : (a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
 
 	return {
 		online,
@@ -598,62 +665,38 @@ function normalizeFriend(f, activeSet, onlineSet) {
 				: 'offline';
 
 	const loc = f.location && f.location !== 'offline' ? f.location : '';
-	const worldId = loc ? loc.split(':')[0] : '';
 	// VRChat marks private avatars with a thumbnail that equals the user's
 	// iconUrl (a file that 404s for everyone). Swap it for the larger profile
 	// image when that happens so the UI falls back cleanly.
 	const thumbRaw = f.currentAvatarThumbnailImageUrl || '';
 	const iconRaw = f.iconUrl || '';
 	const thumbOk = thumbRaw && thumbRaw !== iconRaw ? thumbRaw : (f.imageUrl || f.iconUrl || '');
+	// When the friend was last seen: the API's last_activity / last_login (an
+	// event-derived value, kept by patchFriend/reconcile, takes precedence).
+	const apiLastSeen = Date.parse(f.last_activity || f.last_login || '') || 0;
 	return {
 		id: f.id,
 		displayName: f.displayName || f.id,
 		currentAvatar: f.currentAvatar || '',
 		currentAvatarThumbnailImageUrl: thumbOk,
+		currentAvatarImageUrl: f.currentAvatarImageUrl || '',
 		vrcPlus: !!f.vrcPlus,
 		status: f.status || 'offline',
 		statusDescription: f.statusDescription || '',
 		bio: f.bio || '',
 		state,
 		location: loc,
-		worldId,
-		worldName: '',
+		travelingToLocation: f.travelingToLocation || '',
+		worldId: worldIdOf(loc),
+		worldName: f.worldName || '',
 		platform: f.platform || '',
 		last_platform: f.last_platform || '',
-		lastSeen: state === 'offline' ? Date.now() : 0,
-		trustRank: f.trustRank || deriveTrustRankFromTags(f.tags) || '',
-		tags: f.tags || []
+		lastSeen: state === 'offline' ? (typeof f.lastSeen === 'number' && f.lastSeen ? f.lastSeen : apiLastSeen) : 0,
+		trustRank: trustLabelFromTags(f.tags, f.developerType),
+		developerType: f.developerType || '',
+		tags: f.tags || [],
+		note: f.note
 	};
-}
-
-/**
- * Try to derive a trust rank label from the user's tags (VRC adds tags like
- * 'system_trust_veteran' etc.) when `trustRank` isn't returned directly.
- * VRChat returns CUMULATIVE tags (a veteran carries basic/known/trusted/
- * veteran at once), so we pick the HIGHEST level present.
- * @param {string[]} tags
- * @returns {string}
- */
-function deriveTrustRankFromTags(tags) {
-	if (!Array.isArray(tags)) return '';
-	const order = ['visitor', 'new_user', 'user', 'known', 'trusted', 'veteran', 'legend'];
-	let best = -1;
-	let rank = '';
-	for (const t of tags) {
-		const m = String(t).match(/system_trust_(.+)/);
-		if (!m) continue;
-		const raw = m[1].replace(/_/g, ' ').trim();
-		// map raw to canonical order index
-		let key = raw === 'basic' ? 'user' : raw.replace(/\s+/g, '_');
-		if (key === 'new_user') key = 'new_user';
-		const i = order.indexOf(key);
-		if (i === -1) continue;
-		if (i > best) {
-			best = i;
-			rank = key.replace(/_/g, ' '); // canonical display label e.g. 'trusted', 'veteran'
-		}
-	}
-	return rank;
 }
 
 /**
@@ -661,15 +704,16 @@ function deriveTrustRankFromTags(tags) {
  * "same instance" section in the friend list.
  */
 export function getSelfLocations() {
-	/** @type {Map<string, { accountId: string, displayName: string, location: string, worldName: string }>} */
+	/** @type {Map<string, { accountId: string, userId: string, displayName: string, location: string, worldName: string }>} */
 	const out = new Map();
-	for (const [accountId, friends] of cache) {
+	for (const accountId of cache.keys()) {
 		const sess = getSession(accountId);
 		if (!sess?.user) continue;
 		const loc = sess.user.location || '';
-		if (loc && loc !== 'offline' && loc !== 'private') {
+		if (loc && loc !== 'offline' && loc !== 'private' && loc !== 'traveling') {
 			out.set(loc, {
 				accountId,
+				userId: sess.user.id || '',
 				displayName: sess.user.displayName || accountId,
 				location: loc,
 				worldName: '' // could be enriched via worldCache later

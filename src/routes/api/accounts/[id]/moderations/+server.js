@@ -13,30 +13,29 @@ export async function GET({ params, url }) {
 	const sess = getSession(params.id);
 	if (!sess?.user) return json({ ok: false, error: 'Not logged in' }, { status: 401 });
 	const type = url.searchParams.get('type') || '';
-	// VRChat's playermoderations endpoint returns *all* history for a
-	// type, including rows that were later undone (an `unmute` does not
-	// remove the original `mute` row). To show only currently-active
-	// mods we fetch the active type + its undo type and drop any target
-	// whose newest record is the undo type.
+	// Undoing a moderation now removes it server-side (PUT unplayermoderate),
+	// but accounts that used the old "unmute" record still have rows whose
+	// newest entry for a target is the undo type. Fetch the active type + its
+	// undo type and keep a target only when its newest record is the active
+	// type (one entry per target).
 	const TYPE_PAIRS = { mute: 'unmute', block: 'unblock' };
 	const undoType = TYPE_PAIRS[type] || '';
 
 	const activeOnly = (entries) => {
 		if (!type) return entries;
-		const lists = entries.filter((e) => e.type === type || e.type === undoType);
-		const latest = new Map();
+		const lists = entries
+			.filter((e) => e.type === type || e.type === undoType)
+			.sort((a, b) => (Date.parse(b.created || '') || 0) - (Date.parse(a.created || '') || 0));
+		const newest = new Map();
 		for (const e of lists) {
-			const cur = latest.get(e.targetUserId);
-			const t = Date.parse(e.created || '') || 0;
-			if (!cur || t > cur) latest.set(e.targetUserId, t);
+			if (!newest.has(e.targetUserId)) newest.set(e.targetUserId, e.type);
 		}
-		const undone = new Map();
-		for (const e of lists) {
-			if (e.type === undoType) undone.set(e.targetUserId, e.created);
-		}
-		return lists.filter(
-			(e) => e.type === type && !undone.has(e.targetUserId)
-		);
+		const seen = new Set();
+		return lists.filter((e) => {
+			if (e.type !== type || newest.get(e.targetUserId) !== type || seen.has(e.targetUserId)) return false;
+			seen.add(e.targetUserId);
+			return true;
+		});
 	};
 
 	try {
@@ -47,7 +46,8 @@ export async function GET({ params, url }) {
 		if (r1.ok && r2.ok) {
 			const entries = activeOnly([...(r1.data || []), ...(r2.data || [])]);
 			// Refresh the local cache so we can show the list even when the
-			// VRChat API is down. Prune undone pairs from the cache too.
+			// VRChat API is down. The cache mirrors the live list exactly, so
+			// entries that are gone upstream are dropped from it.
 			try {
 				const db = getDb();
 				const upsert = db.prepare(`
@@ -58,6 +58,8 @@ export async function GET({ params, url }) {
 						created_at = excluded.created_at
 				`);
 				const tx = db.transaction((rows) => {
+					if (type) db.prepare('DELETE FROM moderations WHERE account_id = ? AND type = ?').run(params.id, type);
+					else db.prepare('DELETE FROM moderations WHERE account_id = ?').run(params.id);
 					for (const e of rows) {
 						upsert.run(
 							crypto.randomUUID(),

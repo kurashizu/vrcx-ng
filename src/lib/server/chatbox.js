@@ -28,6 +28,32 @@ export function getTarget() {
 	};
 }
 
+// VRChat drops chatbox messages that arrive less than ~1.5 s after the
+// previous one. Sends are spaced out here (queued, not rejected) so a quick
+// second send is delivered instead of silently lost.
+const MIN_SEND_INTERVAL_MS = 1500;
+const MAX_QUEUED = 5;
+let sendChain = Promise.resolve();
+let lastSentAt = 0;
+let queued = 0;
+
+function spaced(fn) {
+	if (queued >= MAX_QUEUED) return Promise.reject(new Error('发送过于频繁，请稍后再试'));
+	queued++;
+	const run = sendChain.then(async () => {
+		try {
+			const wait = lastSentAt + MIN_SEND_INTERVAL_MS - Date.now();
+			if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+			return await fn();
+		} finally {
+			lastSentAt = Date.now();
+			queued--;
+		}
+	});
+	sendChain = run.catch(() => {});
+	return run;
+}
+
 /**
  * Send text to VRChat chatbox.
  * @param {{text:string, immediate?:boolean, sfx?:boolean}} req
@@ -37,7 +63,7 @@ export async function send(req) {
 	const immediate = req.immediate !== false; // default true
 	const sfx = req.sfx !== false;
 	const { host, port } = getTarget();
-	await sendOsc(host, port, '/chatbox/input', [text, !!immediate, !!sfx]);
+	await spaced(() => sendOsc(host, port, '/chatbox/input', [text, !!immediate, !!sfx]));
 	return {
 		ok: true,
 		text,

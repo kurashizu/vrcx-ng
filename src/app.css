@@ -29,8 +29,8 @@
 	--trust-user: #3ddc97;
 	--trust-known: #ffa54d;
 	--trust-trusted: #b27cff;
-	--trust-veteran: #ffd166;
-	--trust-legend: #ff5d6c;
+	--trust-troll: #a8504a;
+	--trust-vip: #ff3b3b;
 }
 
 :root[data-theme='light'] {
@@ -297,8 +297,8 @@ select:focus {
 .trust-user    { color: var(--trust-user); }
 .trust-known   { color: var(--trust-known); }
 .trust-trusted { color: var(--trust-trusted); }
-.trust-veteran { color: var(--trust-veteran); }
-.trust-legend  { color: var(--trust-legend); }
+.trust-troll   { color: var(--trust-troll); }
+.trust-vip     { color: var(--trust-vip); }
 
 /* Light theme: darker / more saturated versions of trust colors for readability */
 :root[data-theme='light'] .trust-visitor { color: #5a6a85; }
@@ -306,8 +306,8 @@ select:focus {
 :root[data-theme='light'] .trust-user    { color: #0e9968; }
 :root[data-theme='light'] .trust-known   { color: #d97b1c; }
 :root[data-theme='light'] .trust-trusted { color: #7c46d4; }
-:root[data-theme='light'] .trust-veteran { color: #c08a00; }
-:root[data-theme='light'] .trust-legend  { color: #d6263a; }
+:root[data-theme='light'] .trust-troll   { color: #782f2f; }
+:root[data-theme='light'] .trust-vip     { color: #d11414; }
 
 .av-open {
 	flex: none;

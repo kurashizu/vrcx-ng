@@ -15,13 +15,13 @@ import { getSession } from '$lib/server/accounts.js';
  * }
  *
  * - createInstance: { worldId, type?, canRequestInvite?, region?,
- *                    groupId?, groupAccessType?, queueEnabled?,
- *                    displayName? } → POST /instances
+ *                    groupId?, groupAccessType?, roleIds?, queueEnabled?,
+ *                    displayName?, ageGate? } → POST /instances
  *
- * - selfInvite: { location } → POST /invite/myself/to/{location}
+ * - selfInvite: { location, shortName? } → POST /invite/myself/to/{location}
  *   Returns the VRChat response so the UI can show a toast.
  *
- * - requestInvite: { userId, message? } → POST /requestInvite/requestInvite/{userId}
+ * - requestInvite: { userId } → POST /requestInvite/{userId}
  *   The friend will receive an invite request from us and can accept.
  */
 export async function POST({ params, request }) {
@@ -35,23 +35,35 @@ export async function POST({ params, request }) {
 	try {
 		switch (action) {
 			case 'createInstance': {
-				const sess = getSession(params.id);
+				const type = body.type || 'public';
 				// VRChat requires an explicit ownerId for non-public instances
 				// (group instances use the group id instead of a user id).
-				const ownerId = body.type === 'group' ? body.groupId || undefined : sess?.user?.id;
-				if (body.type !== 'public' && !ownerId) {
+				const ownerId = type === 'group' ? body.groupId || undefined : sess?.user?.id;
+				if (type !== 'public' && !ownerId) {
 					return json({ ok: false, error: 'ownerId required for this instance type' }, { status: 400 });
 				}
-				const r = await createInstance(params.id, {
+				// Same payload shape VRCX sends: group-only fields are only set for
+				// group instances.
+				const payload = {
 					worldId: body.worldId,
-					type: body.type || 'public',
+					type,
 					canRequestInvite: !!body.canRequestInvite,
 					region: body.region || 'us',
-					ownerId,
-					groupId: body.groupId || undefined,
-					groupAccessType: body.groupAccessType || undefined,
-					queueEnabled: body.queueEnabled !== false
-				});
+					ownerId
+				};
+				if (type === 'group') {
+					payload.groupAccessType = body.groupAccessType || undefined;
+					payload.queueEnabled = body.queueEnabled !== false;
+					if (body.groupAccessType === 'members' && Array.isArray(body.roleIds)) {
+						payload.roleIds = body.roleIds;
+					}
+					if (body.minimumAvatarPerformance) {
+						payload.minimumAvatarPerformance = body.minimumAvatarPerformance;
+					}
+					if (body.ageGate) payload.ageGate = true;
+				}
+				if (body.displayName) payload.displayName = String(body.displayName);
+				const r = await createInstance(params.id, payload);
 				return r.ok
 					? json({ ok: true, instance: r.data })
 					: json({ ok: false, status: r.status, error: r.data?.error?.message || `HTTP ${r.status}` }, { status: 400 });
@@ -61,7 +73,7 @@ export async function POST({ params, request }) {
 				if (!location) {
 					return json({ ok: false, error: 'location required' }, { status: 400 });
 				}
-				const r = await selfInvite(params.id, location);
+				const r = await selfInvite(params.id, location, body.shortName ? String(body.shortName) : undefined);
 				if (r.ok) return json({ ok: true });
 				// Surface VRChat's exact message (e.g. "'<inst>' is not a valid instanceId")
 				return json({ ok: false, status: r.status, error: r.data?.error?.message || `HTTP ${r.status}` }, { status: 400 });
@@ -70,7 +82,7 @@ export async function POST({ params, request }) {
 				if (!body.userId) {
 					return json({ ok: false, error: 'userId required' }, { status: 400 });
 				}
-				const r = await sendRequestInvite(params.id, body.userId, body.message);
+				const r = await sendRequestInvite(params.id, body.userId);
 				return r.ok
 					? json({ ok: true })
 					: json({ ok: false, error: r.error || r.data?.error?.message || 'failed' }, { status: 400 });

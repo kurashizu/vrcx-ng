@@ -6,13 +6,12 @@
 	import WorldDetailDialog from '$lib/components/WorldDetailDialog.svelte';
 	import AvatarDetailDialog from '$lib/components/AvatarDetailDialog.svelte';
 	import FriendGrid from '$lib/components/FriendGrid.svelte';
-	import NotificationPanel from '$lib/components/NotificationPanel.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { refreshAccounts } from '$lib/stores/accounts.js';
 	import { connectSSE } from '$lib/stores/sse.js';
 	import { fetchFriendsSnapshot, startEmptyFriendsWatchdog } from '$lib/stores/friends.js';
-	import { loadSettings, applyTheme } from '$lib/stores/settings.js';
+	import { loadSettings, applyTheme, getSetting } from '$lib/stores/settings.js';
 
 	let { children } = $props();
 
@@ -28,7 +27,7 @@
 		);
 		// If the store stays empty after the initial fetch (e.g. the API
 		// returned nothing yet because pipelines were still starting),
-		// keep retrying every 3 s until it has data.
+		// keep retrying (with backoff) until it has data.
 		const stopWatchdog = startEmptyFriendsWatchdog();
 		// Re-fetch when the tab regains focus (covers laptop sleep, etc.)
 		const onVisibility = () => {
@@ -40,12 +39,12 @@
 		loadSettings();
 		// 跟随系统主题变化
 		const mq = matchMedia('(prefers-color-scheme: dark)');
-		mq.addEventListener('change', () => {
-			// 重新触发 applyTheme，让 'system' 模式能即时切换
-			const cur = document.documentElement.dataset.theme;
-			applyTheme(cur === 'light' || cur === 'dark' ? cur : 'system');
-		});
+		// 重新按「设置里的主题」套用（dataset.theme 只是解析后的 light/dark，
+		// 用它判断的话 'system' 模式永远不会重新计算）
+		const onSystemTheme = () => applyTheme(getSetting('ui.theme'));
+		mq.addEventListener('change', onSystemTheme);
 		return () => {
+			mq.removeEventListener('change', onSystemTheme);
 			stopWatchdog();
 			document.removeEventListener('visibilitychange', onVisibility);
 		};
@@ -59,4 +58,3 @@
 <WorldDetailDialog />
 <AvatarDetailDialog />
 <FriendGrid />
-<NotificationPanel />

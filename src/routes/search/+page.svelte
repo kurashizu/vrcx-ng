@@ -5,6 +5,7 @@ import { vrImage } from '$lib/shared/format.js';
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { openAvatarDetail } from '$lib/stores/avatarDetail.js';
 	import { timeAgo } from '$lib/shared/format.js';
+	import { trustClassFromTags } from '$lib/shared/trust.js';
 
 	function comma(n) {
 		if (n == null) return '?';
@@ -40,10 +41,14 @@ import { vrImage } from '$lib/shared/format.js';
 
 	let timer;
 	$effect(() => {
-		// re-run on type change immediately
+		// Re-run (debounced) on every keystroke and on a type change. `query`
+		// must be read here: doSearch() runs inside a timeout, where reads are
+		// not tracked, so without this typing never triggered a search.
 		const t = type;
+		void query;
 		clearTimeout(timer);
 		timer = setTimeout(() => doSearch(), t === 'friends' ? 120 : 350);
+		return () => clearTimeout(timer);
 	});
 
 	async function doSearch() {
@@ -51,6 +56,7 @@ import { vrImage } from '$lib/shared/format.js';
 		if (q.length < 2) {
 			results = [];
 			error = '';
+			busy = false;
 			lastQuery = '';
 			lastType = '';
 			return;
@@ -70,9 +76,10 @@ import { vrImage } from '$lib/shared/format.js';
 				results = j.results || [];
 			}
 		} catch (err) {
-			error = err.message;
+			if (lastQuery === q && lastType === type) error = err.message;
 		} finally {
-			busy = false;
+			// a newer search owns `busy` now
+			if (lastQuery === q && lastType === type) busy = false;
 		}
 	}
 
@@ -93,12 +100,8 @@ import { vrImage } from '$lib/shared/format.js';
 		openWorldDetail(r.id, $accounts.find((a) => a.loggedIn)?.id || '');
 	}
 
-	function trustRankClass(tags = []) {
-		for (const t of tags) {
-			if (typeof t !== 'string') continue;
-			if (t.startsWith('system_trust_')) return `trust-${t.replace('system_trust_', '')}`;
-		}
-		return '';
+	function trustRankClass(tags = [], developerType = '') {
+		return trustClassFromTags(tags, developerType);
 	}
 
 	function getTags(r) {
@@ -168,16 +171,21 @@ import { vrImage } from '$lib/shared/format.js';
 					{#each results as r (r.userId)}
 						<li>
 							<button class="row" onclick={() => openFriend(r)}>
-								<img
-									class="avatar"
-									src={vrImage(r.userThumbnailUrl || `https://api.vrchat.cloud/api/1/image/${r.userId}/1/256.jpg`, r.accountId)}
-									alt=""
-									loading="lazy"
-								/>
+								{#if r.userThumbnailUrl}
+									<img
+										class="avatar"
+										src={vrImage(r.userThumbnailUrl, r.accountId)}
+										alt=""
+										loading="lazy"
+									/>
+								{:else}
+									<!-- private avatars have no thumbnail: show the initial like the friend grid -->
+									<div class="avatar initial">{String(r.displayName || '?').slice(0, 1).toUpperCase()}</div>
+								{/if}
 								<div class="info">
 									<div class="name-line">
 										<span class="dot {r.state}"></span>
-										<span class="name {trustRankClass([])}">{r.displayName}</span>
+										<span class="name {trustRankClass(getTags(r), r.developerType)}">{r.displayName}</span>
 										{#if r.status && r.status !== 'active'}
 											<span class="status-pill status-{r.status.replace(/\s+/g, '-')}">{r.status}</span>
 										{/if}
@@ -226,7 +234,7 @@ import { vrImage } from '$lib/shared/format.js';
 								/>
 								<div class="info">
 									<div class="name-line">
-										<span class="name {trustRankClass(getTags(r))}">{r.displayName}</span>
+										<span class="name {trustRankClass(getTags(r), r.developerType)}">{r.displayName}</span>
 										{#if r.status && r.status !== 'active'}
 											<span class="status-pill status-{r.status.replace(/\s+/g, '-')}">{r.status}</span>
 										{/if}
@@ -453,6 +461,14 @@ import { vrImage } from '$lib/shared/format.js';
 		object-fit: cover;
 		background: var(--bg-3);
 	}
+	.avatar.initial {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 20px;
+		font-weight: 600;
+		color: var(--text-dim);
+	}
 	.thumb.placeholder {
 		display: flex;
 		align-items: center;
@@ -488,8 +504,8 @@ import { vrImage } from '$lib/shared/format.js';
 	.name.trust-user    { color: var(--trust-user); }
 	.name.trust-known   { color: var(--trust-known); }
 	.name.trust-trusted { color: var(--trust-trusted); }
-	.name.trust-veteran { color: var(--trust-veteran); }
-	.name.trust-legend  { color: var(--trust-legend); }
+	.name.trust-troll { color: var(--trust-troll); }
+	.name.trust-vip  { color: var(--trust-vip); }
 	.status-pill {
 		font-size: 10px;
 		padding: 1px 6px;

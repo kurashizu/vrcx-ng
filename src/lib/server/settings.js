@@ -16,7 +16,7 @@ const DEFAULTS = {
 
 	// Feed
 	'feed.maxEntries': 1000,
-	'feed.retentionDays': 0, // 0 = forever
+	'feed.retentionDays': 30, // 0 = forever (the feed is persisted, so unbounded grows the DB)
 	'feed.types': {
 		// enabled by default
 		Online: true,
@@ -30,7 +30,8 @@ const DEFAULTS = {
 		Invite: true,
 		'Instance.Closed': true,
 		Notification: true,
-		Group: true
+		Group: true,
+		Friend: true
 	},
 
 	// Notifications (browser desktop)

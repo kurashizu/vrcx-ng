@@ -4,7 +4,7 @@
  * @property {string} id              // uuid
  * @property {string} accountId       // which VRChat account this event came from
  * @property {string} accountDisplayName
- * @property {string} type            // 'Online'|'Offline'|'Active'|'GPS'|'Status'|'Bio'|'Avatar'|'Join'|'Leave'|'FriendRequest'|'Invite'|'Instance.Closed'
+ * @property {string} type            // 'Online'|'Offline'|'Active'|'GPS'|'Status'|'Bio'|'Avatar'|'Join'|'Leave'|'FriendRequest'|'Invite'|'Instance.Closed'|'Friend'|'Group'|'Notification'
  * @property {string} created_at      // ISO string
  * @property {string} [userId]
  * @property {string} [displayName]
@@ -13,6 +13,7 @@
  * @property {string} [worldName]
  * @property {string} [groupName]
  * @property {string} [previousLocation]
+ * @property {string} [previousWorldName]
  * @property {string} [avatarName]
  * @property {string} [currentAvatarImageUrl]
  * @property {string} [currentAvatarThumbnailImageUrl]
@@ -24,6 +25,9 @@
  * @property {string} [previousStatusDescription]
  * @property {string} [bio]
  * @property {string} [previousBio]
+ * @property {number} [time]          // ms: time online (Offline) / time at the previous place (GPS)
+ * @property {string} [platform]
+ * @property {string} [detail]
  * @property {string} [raw]  // raw event for debugging
  */
 
@@ -39,5 +43,8 @@ export const FEED_TYPES = [
 	'Leave',
 	'FriendRequest',
 	'Invite',
-	'Instance.Closed'
+	'Instance.Closed',
+	'Friend',
+	'Group',
+	'Notification'
 ];

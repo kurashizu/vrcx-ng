@@ -6,7 +6,7 @@ export async function GET({ url }) {
 	const accountId = url.searchParams.get('accountId') || undefined;
 	const onlyUnseen = url.searchParams.get('onlyUnseen') === 'true';
 	const includeDismissed = url.searchParams.get('includeDismissed') === 'true';
-	const limit = Math.min(Number(url.searchParams.get('limit') || 100), 500);
+	const limit = Math.max(1, Math.min(Number(url.searchParams.get('limit')) || 100, 500));
 	const items = list({ accountId, onlyUnseen, includeDismissed, limit });
 	// Backfill world names from the world cache so invite/announcement
 	// notifications show a readable name instead of the raw wrld_xxx ID.

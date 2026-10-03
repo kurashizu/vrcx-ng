@@ -13,7 +13,7 @@ import { getDb } from './db.js';
  * with the requesting account.
  */
 
-export function list({ type = null, accountId = null, targetId = null } = {}) {
+export function list({ type = null, accountId = null, targetId = null, limit = 1000 } = {}) {
 	const db = getDb();
 	const where = [];
 	const args = [];
@@ -29,8 +29,9 @@ export function list({ type = null, accountId = null, targetId = null } = {}) {
 		where.push('target_id = ?');
 		args.push(targetId);
 	}
-	const sql = `SELECT * FROM favorites ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY created_at DESC LIMIT 500`;
-	return db.prepare(sql).all(...args).map(rowToFav);
+	const max = Math.max(1, Math.min(Number(limit) || 1000, 5000));
+	const sql = `SELECT * FROM favorites ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY created_at DESC LIMIT ?`;
+	return db.prepare(sql).all(...args, max).map(rowToFav);
 }
 
 export function add({ accountId, type, targetId, targetName = '', groupName = '', note = '' }) {
@@ -40,18 +41,25 @@ export function add({ accountId, type, targetId, targetName = '', groupName = ''
 		.prepare('SELECT id FROM favorites WHERE (account_id IS ? OR account_id = ?) AND type = ? AND target_id = ?')
 		.get(accountId, accountId, type, targetId);
 	if (existing) return existing.id;
-	const info = db
-		.prepare(`INSERT INTO favorites (id, account_id, type, target_id, target_name, group_name, note, created_at)
-		          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-		.run(crypto.randomUUID(), accountId || null, type, targetId, targetName, groupName, note, Date.now());
-	return info.lastInsertRowid;
+	const id = crypto.randomUUID();
+	db.prepare(`INSERT INTO favorites (id, account_id, type, target_id, target_name, group_name, note, created_at)
+	            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+		.run(id, accountId || null, type, targetId, targetName, groupName, note, Date.now());
+	return id;
 }
 
+/**
+ * Remove a favorite. Without an `accountId` every account's entry for that
+ * target is removed (a favorite saved with an account would otherwise be
+ * impossible to un-favorite from a caller that doesn't know the account).
+ */
 export function remove({ accountId = null, type, targetId }) {
 	const db = getDb();
-	const result = db
-		.prepare('DELETE FROM favorites WHERE (account_id IS ? OR account_id = ?) AND type = ? AND target_id = ?')
-		.run(accountId, accountId, type, targetId);
+	const result = accountId
+		? db
+				.prepare('DELETE FROM favorites WHERE account_id = ? AND type = ? AND target_id = ?')
+				.run(accountId, type, targetId)
+		: db.prepare('DELETE FROM favorites WHERE type = ? AND target_id = ?').run(type, targetId);
 	return result.changes > 0;
 }
 

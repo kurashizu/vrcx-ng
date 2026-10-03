@@ -1,8 +1,10 @@
 <script>
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { browser } from '$app/environment';
 	import { settings, loadSettings, updateSetting } from '$lib/stores/settings.js';
 	import { toasts } from '$lib/stores/toast.js';
+
+	const toast = (message, kind = 'info') => toasts.push(message, kind);
 
 	const MAX = { chars: 144, lines: 9 };
 
@@ -184,8 +186,18 @@
 		if (typing) setTypingApi(false);
 	}
 	$effect(() => {
-		if (auto) startAutoSend();
-		else stopAutoSend();
+		const on = auto;
+		// untracked: stopAutoSend() reads `typing`, which must not re-run this
+		// effect (that would switch a manually enabled typing indicator off again)
+		untrack(() => {
+			if (on) startAutoSend();
+			else stopAutoSend();
+		});
+	});
+
+	onDestroy(() => {
+		if (pendingTimer) clearTimeout(pendingTimer);
+		if (browser && typing) postJson('/api/chatbox/typing', { typing: false }).catch(() => {});
 	});
 
 	// Keyboard shortcuts

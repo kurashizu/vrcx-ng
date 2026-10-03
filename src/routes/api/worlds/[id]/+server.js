@@ -2,7 +2,24 @@ import { json } from '@sveltejs/kit';
 import { getWorldMeta } from '$lib/server/worldCache.js';
 import { listAccounts, getSession } from '$lib/server/accounts.js';
 import { friendsInWorld, getSelfLocations } from '$lib/server/friends.js';
-import { api } from '$lib/server/vrchat.js';
+import { api, getWorld } from '$lib/server/vrchat.js';
+import { parseLocation } from '$lib/shared/location.js';
+
+/** Full world payloads (stats, description, …) are cached briefly: one dialog open = one fetch. */
+const FULL_TTL_MS = 5 * 60 * 1000;
+/** @type {Map<string, { t: number, data: any }>} */
+const fullCache = new Map();
+
+async function fullWorld(accountId, worldId) {
+	const hit = fullCache.get(worldId);
+	if (hit && Date.now() - hit.t < FULL_TTL_MS) return hit.data;
+	const w = await getWorld(accountId, worldId).catch(() => null);
+	if (w) {
+		fullCache.set(worldId, { t: Date.now(), data: w });
+		if (fullCache.size > 100) fullCache.delete(fullCache.keys().next().value);
+	}
+	return w;
+}
 
 /**
  * GET /api/worlds/:id
@@ -35,13 +52,18 @@ export async function GET({ params, url }) {
 		return json({ error: 'no logged-in account to fetch world' }, { status: 503 });
 	}
 
-	const meta = await getWorldMeta(accountId, worldId, { fetchOnMiss: true });
-	if (!meta) {
+	// The dialog needs the full world object (id, stats, description, …); the
+	// cached meta is only the fallback when VRChat can't be reached.
+	const [meta, full] = await Promise.all([
+		getWorldMeta(accountId, worldId, { fetchOnMiss: true }),
+		fullWorld(accountId, worldId)
+	]);
+	if (!meta && !full) {
 		return json({ error: 'world not found' }, { status: 404 });
 	}
 	const friends = friendsInWorld(worldId);
 	const instances = await collectInstances(accountId, worldId);
-	return json({ ...meta, friendsInWorld: friends, instances });
+	return json({ ...meta, ...full, id: worldId, worldId, friendsInWorld: friends, instances });
 }
 
 /**
@@ -67,9 +89,18 @@ async function collectInstances(accountId, worldId) {
 			capacity: null,
 			accessType: instParsed.accessType || 'public',
 			canRequestInvite: !!instParsed.canRequestInvite,
-			users: []
+			users: [],
+			fromApi: false
 		};
-		prev.occupants += extra.occupants || 0;
+		// VRChat's own occupant count is authoritative; friends / own accounts
+		// are only counted for instances the API didn't list (they are already
+		// part of the API number otherwise).
+		if (extra.fromApi) {
+			prev.fromApi = true;
+			prev.occupants += extra.occupants || 0;
+		} else if (!prev.fromApi) {
+			prev.occupants += extra.occupants || 0;
+		}
 		if (extra.ownerName) prev.ownerName = prev.ownerName || extra.ownerName;
 		if (extra.ownerUserId) prev.ownerUserId = prev.ownerUserId || extra.ownerUserId;
 		if (extra.userName && !prev.users.includes(extra.userName)) prev.users.push(extra.userName);
@@ -88,15 +119,8 @@ async function collectInstances(accountId, worldId) {
 		if (Array.isArray(r.data)) {
 			for (const i of r.data) {
 				if (!i?.id) continue;
-				const tag = `${worldId}:${i.id}`;
-				let parsed = null;
-				try {
-					const { parseLocationFull } = await import('$lib/server/friends.js');
-					parsed = parseLocationFull(tag);
-				} catch {
-					parsed = { instanceId: i.id, userId: i.ownerId || null, accessType: i.type || 'public', canRequestInvite: !!i.canRequestInvite };
-				}
-				add(parsed, { occupants: typeof i.occupants === 'number' ? i.occupants : 0 });
+				const parsed = parseLocation(`${worldId}:${i.id}`);
+				add(parsed, { fromApi: true, occupants: typeof i.occupants === 'number' ? i.occupants : 0 });
 			}
 		}
 	} catch {}
@@ -125,6 +149,6 @@ async function collectInstances(accountId, worldId) {
 	}
 
 	return Array.from(out.values())
-		.map((e) => ({ ...e }))
+		.map(({ fromApi, ...e }) => e)
 		.sort((a, b) => String(a.instanceId).localeCompare(String(b.instanceId)));
 }

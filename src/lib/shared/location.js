@@ -82,6 +82,9 @@ export function parseLocation(tag) {
 		if (sep >= 0) {
 			ctx.worldId = _tag.substr(0, sep);
 			ctx.instanceId = _tag.substr(sep + 1);
+			let privateId = null;
+			let friendsId = null;
+			let hiddenId = null;
 			ctx.instanceId.split('~').forEach((s, i) => {
 				if (i) {
 					const A = s.indexOf('(');
@@ -89,22 +92,17 @@ export function parseLocation(tag) {
 					const key = Z >= 0 ? s.substr(0, A) : s;
 					const value = A < Z ? s.substr(A + 1, Z - A - 1) : '';
 					if (key === 'private') {
-						ctx.accessType = 'invite';
-						ctx.userId = value;
+						privateId = value;
 					} else if (key === 'hidden') {
-						ctx.accessType = 'friends+';
-						ctx.userId = value;
+						hiddenId = value;
 					} else if (key === 'friends') {
-						ctx.accessType = 'friends';
-						ctx.userId = value;
+						friendsId = value;
 					} else if (key === 'canRequestInvite') {
 						ctx.canRequestInvite = true;
-						if (ctx.accessType === 'invite') ctx.accessType = 'invite+';
 					} else if (key === 'region') {
 						ctx.region = value;
 					} else if (key === 'group') {
 						ctx.groupId = value;
-						ctx.accessType = 'group';
 					} else if (key === 'groupAccessType') {
 						ctx.groupAccessType = value;
 					} else if (key === 'strict') {
@@ -116,9 +114,24 @@ export function parseLocation(tag) {
 					ctx.instanceName = s;
 				}
 			});
-			if (!ctx.accessType) ctx.accessType = 'public';
+			// Same precedence as VRCX regardless of qualifier order:
+			// private > friends > hidden > group.
+			ctx.accessType = 'public';
+			if (privateId !== null) {
+				ctx.accessType = ctx.canRequestInvite ? 'invite+' : 'invite';
+				ctx.userId = privateId;
+			} else if (friendsId !== null) {
+				ctx.accessType = 'friends';
+				ctx.userId = friendsId;
+			} else if (hiddenId !== null) {
+				ctx.accessType = 'friends+';
+				ctx.userId = hiddenId;
+			} else if (ctx.groupId !== null) {
+				ctx.accessType = 'group';
+			}
 			ctx.accessTypeLabel = ctx.accessType;
-			if (ctx.groupId && ctx.groupAccessType) {
+			// Only public / plus have their own label; `members` stays plain "group".
+			if (ctx.groupId !== null && (ctx.groupAccessType === 'public' || ctx.groupAccessType === 'plus')) {
 				ctx.accessTypeLabel = `group${ctx.groupAccessType[0].toUpperCase()}${ctx.groupAccessType.slice(1)}`;
 			}
 		} else {

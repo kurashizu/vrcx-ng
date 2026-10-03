@@ -129,7 +129,6 @@ import { vrImage } from '$lib/shared/format.js';
 				const obj = JSON.parse(String(reader.result || ''));
 				const updates = {};
 				for (const k of Object.keys(obj)) updates[k] = obj[k];
-				updateSetting('__import__', null); // trigger save
 				// Send bulk update
 				const r = await fetch('/api/settings', {
 					method: 'POST',
@@ -674,6 +673,7 @@ import { vrImage } from '$lib/shared/format.js';
 		display: flex;
 		flex-direction: column;
 		height: 100vh;
+		height: 100dvh;
 		overflow: hidden;
 	}
 	header {

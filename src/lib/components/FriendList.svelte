@@ -714,7 +714,7 @@ import { vrImage } from '$lib/shared/format.js';
 				{:else if f.state === 'active'}
 					<span class="muted">在 VRChat 桌面客户端中</span>
 				{:else}
-					<span class="muted">{f.lastSeen ? `${timeAgo(new Date(f.lastSeen).toISOString())} 离线` : '离线'}</span>
+					<span class="muted">{f.lastSeen && $settings['friend.showLastSeen'] !== false ? `${timeAgo(new Date(f.lastSeen).toISOString())} 离线` : '离线'}</span>
 				{/if}
 			</div>
 			<div class="meta">
@@ -1305,8 +1305,8 @@ import { vrImage } from '$lib/shared/format.js';
 	.name.trust-user    { color: var(--trust-user); }
 	.name.trust-known   { color: var(--trust-known); }
 	.name.trust-trusted { color: var(--trust-trusted); }
-	.name.trust-veteran { color: var(--trust-veteran); }
-	.name.trust-legend  { color: var(--trust-legend); }
+	.name.trust-troll { color: var(--trust-troll); }
+	.name.trust-vip  { color: var(--trust-vip); }
 
 	.platform {
 		font-size: 12px;

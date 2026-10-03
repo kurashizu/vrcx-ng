@@ -1,10 +1,9 @@
 import { json } from '@sveltejs/kit';
 import {
-	getUser,
+	api,
 	getProfile,
 	getUserAvatars,
 	getUserWorlds,
-	getUserBadges,
 	getWorld,
 	getAvatar
 } from '$lib/server/vrchat.js';
@@ -38,21 +37,30 @@ function setCached(accountId, userId, data) {
 	}
 }
 
-export async function GET({ params }) {
+export async function GET({ params, url }) {
 	const { id, userId } = params;
-	const cached = getCached(id, userId);
+	// ?fresh=1 bypasses the cache (the dialog sets it after unfriend / friend request / …)
+	const cached = url.searchParams.get('fresh') ? null : getCached(id, userId);
 	if (cached) return json(cached);
 
 	try {
-		const [user, profile, avatars, worlds, badges] = await Promise.all([
-			getUser(id, userId).catch(() => null),
+		const [userRes, profile, avatars, worlds] = await Promise.all([
+			api(id, `users/${userId}`).catch((err) => ({ status: 0, data: { error: err.message } })),
 			getProfile(id, userId).catch(() => null),
-			getUserAvatars(id, userId).catch(() => []),
-			getUserWorlds(id, userId).catch(() => []),
-			getUserBadges(id, userId).catch(() => [])
+			getUserAvatars(id, userId).catch(() => null),
+			getUserWorlds(id, userId).catch(() => null)
 		]);
 
-		if (!user) return json({ error: 'User not found' }, { status: 404 });
+		if (userRes.status !== 200 || !userRes.data) {
+			// Only a real 404 means "no such user"; auth / rate-limit / network
+			// failures must not be reported (or cached) as a missing user.
+			const msg = userRes.data?.error?.message || userRes.data?.error || `HTTP ${userRes.status}`;
+			return userRes.status === 404
+				? json({ error: 'User not found' }, { status: 404 })
+				: json({ error: String(msg) }, { status: 502 });
+		}
+		const user = userRes.data;
+		const badges = Array.isArray(user.badges) ? user.badges : [];
 
 		// VRChat often leaves currentAvatarThumbnailImageUrl empty for private
 		// avatars; fetch the avatar itself (visible for friends) to fill it in.
@@ -76,13 +84,14 @@ export async function GET({ params }) {
 		const out = {
 			user: sanitizeUser(user),
 			profile: sanitizeProfile(profile),
-			avatars: avatars.filter(Boolean).map(sanitizeAvatar).slice(0, 24),
-			worlds: worlds.filter(Boolean).map(sanitizeWorld).slice(0, 24),
-			badges: (badges || []).map(sanitizeBadge),
+			avatars: (avatars || []).filter(Boolean).map(sanitizeAvatar).slice(0, 24),
+			worlds: (worlds || []).filter(Boolean).map(sanitizeWorld).slice(0, 24),
+			badges: badges.map(sanitizeBadge),
 			currentWorld: currentWorld ? sanitizeWorld(currentWorld) : null,
 			loadedAt: Date.now()
 		};
-		setCached(id, userId, out);
+		// Don't cache a partial result (a failed avatars/worlds sub-request).
+		if (avatars && worlds) setCached(id, userId, out);
 		return json(out);
 	} catch (err) {
 		return json({ error: err.message }, { status: 500 });

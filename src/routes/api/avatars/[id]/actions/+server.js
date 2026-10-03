@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import { selectAvatar } from '$lib/server/vrchat.js';
-import { getSession } from '$lib/server/accounts.js';
 import * as fav from '$lib/server/favorites.js';
 
 /**
@@ -15,10 +14,6 @@ export async function POST({ params, request }) {
 
 	// The account whose cookie performs the call.
 	let caller = accountId;
-	if (!caller) {
-		const sess = getSession('*');
-		caller = sess?.user?.id || null;
-	}
 	if (!caller) {
 		// fall back to any logged-in session
 		const { listSessions } = await import('$lib/server/accounts.js');

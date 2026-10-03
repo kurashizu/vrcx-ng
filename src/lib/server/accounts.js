@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { encrypt, decrypt } from './crypto.js';
+import { syncAccountRow, removeAccountRow } from './db.js';
 
 const DATA_DIR = process.env.DATA_DIR || './data';
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
@@ -10,15 +11,30 @@ function ensureDir() {
 	if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+/**
+ * Both files are only ever written through this module, so they are parsed
+ * once and served from memory afterwards (getSession runs on every API call).
+ * @type {Map<string, any>}
+ */
+const jsonCache = new Map();
+
 function readJson(file, fallback) {
+	if (jsonCache.has(file)) return structuredClone(jsonCache.get(file));
+	let data = fallback;
 	try {
-		if (!fs.existsSync(file)) return fallback;
-		const raw = fs.readFileSync(file, 'utf8');
-		return raw ? JSON.parse(raw) : fallback;
+		if (fs.existsSync(file)) {
+			const raw = fs.readFileSync(file, 'utf8');
+			data = raw ? JSON.parse(raw) : fallback;
+		}
 	} catch (err) {
 		console.error(`readJson ${file} failed`, err);
-		return fallback;
+		// Keep the unreadable file around: the next write would overwrite it.
+		try {
+			fs.copyFileSync(file, `${file}.corrupt-${Date.now()}`);
+		} catch {}
 	}
+	jsonCache.set(file, data);
+	return structuredClone(data);
 }
 
 function writeJson(file, data) {
@@ -26,6 +42,7 @@ function writeJson(file, data) {
 	const tmp = file + '.tmp';
 	fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
 	fs.renameSync(tmp, file);
+	jsonCache.set(file, structuredClone(data));
 }
 
 /* ----------------------------- accounts ----------------------------- */
@@ -66,7 +83,12 @@ export function getAccount(id) {
 export function upsertAccount({ id, username, displayName, password }) {
 	const list = readJson(ACCOUNTS_FILE, []);
 	const now = Date.now();
-	const existing = list.find((x) => x.id === id);
+	// Re-adding an existing username updates that account instead of duplicating it.
+	const existing =
+		list.find((x) => x.id === id) ||
+		(!id && username
+			? list.find((x) => String(x.username).toLowerCase() === String(username).toLowerCase())
+			: null);
 	const rec = {
 		id: id || existing?.id || crypto.randomUUID(),
 		username,
@@ -79,6 +101,11 @@ export function upsertAccount({ id, username, displayName, password }) {
 	if (idx >= 0) list[idx] = rec;
 	else list.push(rec);
 	writeJson(ACCOUNTS_FILE, list);
+	try {
+		syncAccountRow(rec);
+	} catch (err) {
+		console.error('[accounts] db account sync failed', err.message);
+	}
 	return {
 		id: rec.id,
 		username: rec.username,
@@ -92,6 +119,11 @@ export function deleteAccount(id) {
 	const list = readJson(ACCOUNTS_FILE, []);
 	const next = list.filter((x) => x.id !== id);
 	writeJson(ACCOUNTS_FILE, next);
+	try {
+		removeAccountRow(id);
+	} catch (err) {
+		console.error('[accounts] db account removal failed', err.message);
+	}
 	// also drop sessions
 	const sessions = readJson(SESSIONS_FILE, {});
 	if (sessions[id]) {
@@ -110,6 +142,25 @@ export function deleteAccount(id) {
  *   - `lastError`: string
  *   - `lastLoginAt`: number
  */
+function peekSessions() {
+	if (!jsonCache.has(SESSIONS_FILE)) readJson(SESSIONS_FILE, {});
+	return jsonCache.get(SESSIONS_FILE) || {};
+}
+
+/**
+ * Read-only view of a session WITHOUT cloning it — for hot paths (every API
+ * call, every proxied image). Never mutate the result; use setSession.
+ */
+export function peekSession(accountId) {
+	return peekSessions()[accountId] || null;
+}
+
+/** The first stored cookie jar of any session (used to fetch media). */
+export function firstCookie() {
+	for (const s of Object.values(peekSessions())) if (s?.cookie) return s.cookie;
+	return '';
+}
+
 export function getSession(accountId) {
 	const sessions = readJson(SESSIONS_FILE, {});
 	return sessions[accountId] || null;

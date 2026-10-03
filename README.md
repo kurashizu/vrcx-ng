@@ -28,8 +28,12 @@
 - **用户详情面板** — 头像 / Bio / 当前世界 / 模型 / 世界 / 徽章
 - **OSC Chatbox** — 浏览器里发消息到 VRChat chatbox（自带 OSC 编码，
   不需要 Python 桥接）。目标地址在 UI 里可改
-- **持久化** — SQLite (better-sqlite3)，重启后历史 feed / 好友 / 收藏
-  都不丢
+- **持久化** — SQLite (better-sqlite3)：feed 历史、通知、收藏、分组、设置
+  重启后都在。feed 按「设置 → 动态 → 保留天数」清理（默认 30 天，0 = 永久）
+- **自动同步** — pipeline 断线重连后、以及每小时，都会全量重新同步好友列表
+  （VRChat 的 websocket 偶尔会丢事件）；重连采用 5 s → 5 min 指数退避
+- **离线判定** — 好友的 Offline 事件会延迟 170 s 再进 feed，期间重新上线则两条
+  都不记（与 VRCX 一致，过滤切换实例时的瞬时掉线）
 
 ## 架构
 
@@ -105,24 +109,31 @@ node build
 | 路由 | 说明 |
 | --- | --- |
 | `GET /api/accounts` | 列出所有账号（不含密码） |
-| `POST /api/accounts` | 添加账号（加密存密码） |
-| `DELETE /api/accounts?id=…` | 删除账号 |
-| `POST /api/accounts/:id/login` | 登录（可带 `twoFactorCode`） |
+| `POST /api/accounts` | 添加账号（加密存密码；同用户名重复添加会更新原账号） |
+| `DELETE /api/accounts?id=…` | 删除账号（连同它在 SQLite 里的 feed / 通知 / 收藏等数据） |
+| `POST /api/accounts/:id/login` | 登录（可带 `twoFactorCode`，恢复码自动格式化为 `XXXX-XXXX`） |
 | `POST /api/accounts/:id/logout` | 登出 |
-| `POST /api/accounts/:id/reconnect` | 重连 pipeline WS |
-| `GET /api/accounts/:id/friends` | 该账号的好友原始列表 |
-| `GET /api/accounts/:id/user/:userId` | 用户详情（含 bio / avatar / world / badge，5 分钟缓存） |
-| `POST /api/accounts/:id/actions` | mute / block / requestInvite / friendRequest |
+| `POST /api/accounts/:id/reconnect` | 强制重连 pipeline 并重新同步好友 |
+| `GET /api/accounts/:id/friends` | 该账号的好友原始列表（`n` 1–100） |
+| `GET /api/accounts/:id/user/:userId` | 用户详情（bio / 头像 / 世界 / 徽章，5 分钟缓存，`?fresh=1` 跳过缓存） |
+| `POST /api/accounts/:id/actions` | mute / unmute / block / unblock / requestInvite / invite / friendRequest / unfriend |
+| `POST /api/accounts/:id/instance-action` | createInstance / selfInvite / requestInvite |
+| `GET /api/accounts/:id/moderations?type=mute\|block` | 当前生效的静音 / 屏蔽列表 |
+| `POST /api/accounts/:id/profile` | 修改自己的 bio / bioLinks（`PUT profile/:id`）与状态 / 代词（`PUT users/:id`） |
 | `GET /api/friends` | 多账号去重后的聚合好友列表 |
-| `GET /api/friends/locations` | 按世界聚合好友 |
-| `GET /api/notifications` | 通知列表（按账号） |
-| `GET /api/feed` | 历史 feed 事件 |
-| `GET /api/feed/events` | SSE 实时流 |
-| `GET /api/favorites` / `POST` / `DELETE` | 收藏（好友 / 模型 / 世界 / 群组） |
-| `GET /api/moderations` / `DELETE` | 静音 / 屏蔽列表 |
-| `POST /api/chatbox/send` | 发 chatbox 消息 |
+| `GET /api/notifications` / `POST` | 通知收件箱 / 标记已读、忽略 |
+| `GET /api/feed?limit&before&type&accountId&userId` | feed 历史（SQLite，向前翻页） |
+| `GET /api/feed/events` | SSE 实时流（`hello` / `feed` / `accounts` / `friends` / `notifications` / `ping`） |
+| `GET /api/search?q&type=friends\|users\|worlds\|avatars` | 搜索（friends 为本地缓存） |
+| `GET /api/worlds/:id` | 世界详情 + 在这个世界里的好友 + 各实例 |
+| `GET /api/avatars/:id` / `POST /api/avatars/:id/actions` | 模型详情 / 换装、本地收藏 |
+| `GET/POST/DELETE /api/favorites` | 本地收藏（好友 / 模型 / 世界） |
+| `/api/friend-groups` | 本地好友分组（一个好友同时只属于一个分组） |
+| `GET/POST/DELETE /api/settings` | 设置 |
+| `POST /api/chatbox/send` | 发 chatbox 消息（服务端保证两次发送间隔 ≥ 1.5 s，排队而不丢） |
 | `POST /api/chatbox/typing` | 切换 typing 指示 |
-| `GET /api/chatbox/settings` / `POST` | chatbox 目标地址（OSC UDP） |
+| `GET /api/chatbox/health` | chatbox 目标地址（UDP 无握手，仅解析主机名） |
+| `GET /api/img-proxy?u=…` | 带账号 cookie 的 VRChat 图片代理 |
 
 ## systemd 部署
 

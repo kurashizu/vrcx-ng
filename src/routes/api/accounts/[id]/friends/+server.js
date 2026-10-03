@@ -2,8 +2,8 @@ import { json } from '@sveltejs/kit';
 import { getFriends } from '$lib/server/vrchat.js';
 
 export async function GET({ params, url }) {
-	const n = Number(url.searchParams.get('n') || 100);
-	const offset = Number(url.searchParams.get('offset') || 0);
+	const n = Math.max(1, Math.min(Number(url.searchParams.get('n')) || 100, 100));
+	const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
 	const offline = url.searchParams.get('offline');
 	try {
 		const friends = await getFriends(params.id, {

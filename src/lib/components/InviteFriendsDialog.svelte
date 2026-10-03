@@ -309,8 +309,8 @@
 	.nm.trust-user    { color: var(--trust-user); }
 	.nm.trust-known   { color: var(--trust-known); }
 	.nm.trust-trusted { color: var(--trust-trusted); }
-	.nm.trust-veteran { color: var(--trust-veteran); }
-	.nm.trust-legend  { color: var(--trust-legend); }
+	.nm.trust-troll { color: var(--trust-troll); }
+	.nm.trust-vip  { color: var(--trust-vip); }
 
 	.sub {
 		font-size: 11px;

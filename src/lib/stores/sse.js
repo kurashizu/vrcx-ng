@@ -1,10 +1,17 @@
+import { writable, get } from 'svelte/store';
 import { toasts } from './toast.js';
 import { setInitial, pushEntry } from './feed.js';
 import { accounts, accountsLoaded, refreshAccounts } from './accounts.js';
 import { setFriendsSnapshot } from './friends.js';
+import { settings } from './settings.js';
+
+/** Bumped whenever the server reports a notification change (new / seen / dismissed). */
+export const notificationsTick = writable(0);
 
 let es = null;
 let reconnectTimer = null;
+let outage = false; // a "connection lost" toast is already showing for this outage
+let retryDelay = 3000;
 
 /**
  * Connect to the SSE feed endpoint. Auto-reconnects on close.
@@ -14,6 +21,11 @@ export function connectSSE() {
 	es = new EventSource('/api/feed/events');
 
 	es.addEventListener('hello', (e) => {
+		retryDelay = 3000;
+		if (outage) {
+			outage = false;
+			toasts.push('已重新连接', 'success');
+		}
 		try {
 			const data = JSON.parse(e.data);
 			setInitial(data.entries || []);
@@ -28,6 +40,7 @@ export function connectSSE() {
 		try {
 			const entry = JSON.parse(e.data);
 			pushEntry(entry);
+			desktopNotify(entry);
 		} catch (err) {
 			console.error('feed parse', err);
 		}
@@ -46,6 +59,8 @@ export function connectSSE() {
 		}
 	});
 
+	es.addEventListener('notifications', () => notificationsTick.update((n) => n + 1));
+
 	es.addEventListener('friends', (e) => {
 		try {
 			const data = JSON.parse(e.data);
@@ -59,14 +74,47 @@ export function connectSSE() {
 		// EventSource auto-reconnects, but if it permanently closes (readyState CLOSED), we fall back
 		if (es?.readyState === EventSource.CLOSED) {
 			es = null;
-			toasts.push('Connection lost, retrying…', 'error');
-			reconnectTimer = setTimeout(connectSSE, 3000);
+			if (!outage) {
+				outage = true;
+				toasts.push('连接已断开，正在重试…', 'error');
+			}
+			reconnectTimer = setTimeout(connectSSE, retryDelay);
+			retryDelay = Math.min(retryDelay * 2, 30000);
 		}
 	});
 
 	// EventSource has a built-in auto-reconnect on transient drops, but
 	// it doesn't emit a fresh event when it does — we still get a
 	// subsequent 'hello' on the new socket. No extra work needed here.
+}
+
+/**
+ * Browser notification for an incoming feed entry, per the "通知" settings.
+ * Only for a tab the user isn't looking at, and only where the browser allows
+ * the Notification API (https or localhost — not plain http on the LAN).
+ */
+function desktopNotify(entry) {
+	try {
+		if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+		if (typeof document !== 'undefined' && document.visibilityState === 'visible') return;
+		const s = get(settings);
+		if (!s['notification.desktop']) return;
+		const who = entry.displayName || entry.userId || '';
+		let title = '';
+		let body = '';
+		if (entry.type === 'Invite' && s['notification.invite']) {
+			title = `${who} 发来邀请`;
+			body = entry.worldName || entry.detail || '';
+		} else if (entry.type === 'FriendRequest' && s['notification.friendRequest']) {
+			title = `${who} 发来好友请求`;
+		} else if (entry.type === 'Online' && s['notification.friendOnline']) {
+			title = `${who} 上线了`;
+			body = entry.worldName || '';
+		} else {
+			return;
+		}
+		new Notification(title, { body, tag: entry.id });
+	} catch {}
 }
 
 let accountsRefreshTimer = null;

@@ -1,9 +1,10 @@
 import { writable, get } from 'svelte/store';
+import { toasts } from './toast.js';
 
 /**
- * Client-side mirror of server settings. Loaded on startup; updates POST to
- * /api/settings and the new values come back, which we write into this store.
- * Other tabs stay in sync via the 'storage' event.
+ * Client-side mirror of server settings. Loaded on startup; updates are
+ * debounced and POSTed to /api/settings (a failed save is retried and
+ * reported). Other tabs pick changes up on their next load.
  */
 
 export const settings = writable(/** @type {Record<string, any>} */ ({}));
@@ -51,13 +52,18 @@ async function flushSettings() {
 	for (const k of Object.keys(pending)) delete pending[k];
 	saveTimer = null;
 	try {
-		await fetch('/api/settings', {
+		const r = await fetch('/api/settings', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ updates })
 		});
+		if (!r.ok) throw new Error(`HTTP ${r.status}`);
 	} catch (err) {
 		console.error('save settings failed', err);
+		// keep the unsaved values (newer edits win) and try again shortly
+		for (const [k, v] of Object.entries(updates)) if (!(k in pending)) pending[k] = v;
+		toasts.error('设置保存失败，稍后重试');
+		if (!saveTimer) saveTimer = setTimeout(flushSettings, 5000);
 	}
 }
 

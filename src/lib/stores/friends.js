@@ -65,7 +65,11 @@ export const friendInfoById = derived(friendsData, ($data) => {
 				thumbnail: f.currentAvatarThumbnailImageUrl || '',
 				platform: f.platform || '',
 				location: f.location || '',
-				worldName: f.worldName || ''
+				worldName: f.worldName || '',
+				// needed for the trust-rank colour (trustColor reads these)
+				tags: f.tags || [],
+				developerType: f.developerType || '',
+				trustRank: f.trustRank || ''
 			});
 		}
 	}
@@ -116,16 +120,20 @@ export async function fetchFriendsSnapshot() {
 }
 
 /**
- * Start a watchdog that periodically refetches the friend snapshot when
- * the store is still empty. Runs at most once every 3 s and stops as soon
- * as the store contains data.
+ * Start a watchdog that refetches the friend snapshot while the store is
+ * still empty (e.g. right after a server restart). It starts at 3 s, backs
+ * off to 30 s and gives up after ~10 minutes, so an account with no friends
+ * (or nobody logged in) doesn't poll forever. It stops as soon as the store
+ * contains data.
  *
  * Returns a stop() function to cancel the watchdog.
  */
 export function startEmptyFriendsWatchdog() {
 	let cancelled = false;
+	let delay = 3000;
+	const giveUpAt = Date.now() + 10 * 60 * 1000;
 	const tick = async () => {
-		if (cancelled) return;
+		if (cancelled || Date.now() > giveUpAt) return;
 		let empty = true;
 		const unsub = friendsData.subscribe((d) => {
 			empty = !(d?.total > 0);
@@ -137,7 +145,10 @@ export function startEmptyFriendsWatchdog() {
 		} catch {
 			/* keep trying */
 		}
-		if (!cancelled) setTimeout(tick, 3000);
+		if (!cancelled) {
+			setTimeout(tick, delay);
+			delay = Math.min(Math.round(delay * 1.5), 30000);
+		}
 	};
 	setTimeout(tick, 500);
 	return () => {

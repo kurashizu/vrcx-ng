@@ -1,7 +1,7 @@
 <script>
 import { vrImage } from '$lib/shared/format.js';
 	import EventIcon from './EventIcon.svelte';
-	import { timeAgo, formatTime, locationLabel } from '$lib/shared/format.js';
+	import { timeAgo, formatTime, locationLabel, formatDuration } from '$lib/shared/format.js';
 	import { trustColor } from '$lib/shared/trust.js';
 	import { accounts } from '$lib/stores/accounts.js';
 	import { showContextMenu } from '$lib/stores/contextMenu.js';
@@ -261,6 +261,9 @@ import { vrImage } from '$lib/shared/format.js';
 				{/if}
 			{:else if entry.type === 'Offline'}
 				<span class="sep">离线了</span>
+				{#if entry.worldName || entry.time}
+					<span class="faint small">({entry.worldName ? `在 ${entry.worldName}` : ''}{entry.worldName && entry.time ? ' · ' : ''}{entry.time ? `在线 ${formatDuration(entry.time)}` : ''})</span>
+				{/if}
 			{:else if entry.type === 'Active'}
 				<span class="sep">变成了 Active</span>
 			{:else if entry.type === 'GPS'}
@@ -276,7 +279,7 @@ import { vrImage } from '$lib/shared/format.js';
 					{/if}
 				{/if}
 				{#if entry.previousLocation}
-					<span class="faint small">(从 {locationLabel(entry.previousLocation)})</span>
+					<span class="faint small">(从 {entry.previousWorldName || locationLabel(entry.previousLocation)}{entry.time ? ` · 停留 ${formatDuration(entry.time)}` : ''})</span>
 				{/if}
 			{:else if entry.type === 'Status'}
 				<span class="sep">状态变更</span>
@@ -313,6 +316,18 @@ import { vrImage } from '$lib/shared/format.js';
 				<span class="sep">实例已关闭</span>
 				{#if entry.location}
 					<span class="muted">{entry.location}</span>
+				{/if}
+			{:else if entry.type === 'Friend'}
+				<span class="sep">{entry.raw?.subtype === 'friend-delete' ? '解除了好友关系' : '成为了好友'}</span>
+			{:else if entry.type === 'Group'}
+				<span class="sep">群组</span>
+				{#if entry.detail}
+					<span class="muted">{entry.detail}</span>
+				{/if}
+			{:else if entry.type === 'Notification'}
+				<span class="sep">通知</span>
+				{#if entry.detail}
+					<span class="muted">{entry.detail}</span>
 				{/if}
 			{:else}
 				<span class="sep">{entry.type}</span>
@@ -488,8 +503,8 @@ import { vrImage } from '$lib/shared/format.js';
 	.user-name.trust-user    { color: var(--trust-user); }
 	.user-name.trust-known   { color: var(--trust-known); }
 	.user-name.trust-trusted { color: var(--trust-trusted); }
-	.user-name.trust-veteran { color: var(--trust-veteran); }
-	.user-name.trust-legend  { color: var(--trust-legend); }
+	.user-name.trust-troll { color: var(--trust-troll); }
+	.user-name.trust-vip  { color: var(--trust-vip); }
 
 	.user-name:hover {
 		color: var(--accent);

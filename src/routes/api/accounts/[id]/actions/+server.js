@@ -3,18 +3,22 @@ import {
 	addModeration,
 	sendRequestInvite,
 	sendFriendRequest,
-	sendInvite
+	sendInvite,
+	unfriend
 } from '$lib/server/vrchat.js';
-import { getSession, setSession } from '$lib/server/accounts.js';
-import { getSelfLocations } from '$lib/server/friends.js';
+import { getSession } from '$lib/server/accounts.js';
+import { getSelfLocations, removeFriend } from '$lib/server/friends.js';
+import { getWorldMeta } from '$lib/server/worldCache.js';
+
+const errText = (r) => r.data?.error?.message || r.data?.error || `HTTP ${r.status}`;
 
 /**
  * Generic action endpoint for friend-related actions.
- * body: { action: 'mute'|'unmute'|'block'|'unblock'|'requestInvite'|'friendRequest'|'invite', userId, message?, location? }
+ * body: { action: 'mute'|'unmute'|'block'|'unblock'|'requestInvite'|'friendRequest'|'unfriend'|'invite', userId, location? }
  */
 export async function POST({ params, request }) {
 	const body = await request.json().catch(() => ({}));
-	const { action, userId, message, location } = body || {};
+	const { action, userId, location } = body || {};
 	if (!action || !userId) return json({ error: 'action and userId required' }, { status: 400 });
 
 	const sess = getSession(params.id);
@@ -30,13 +34,10 @@ export async function POST({ params, request }) {
 				if (r.status === 200 || r.status === 201) {
 					return json({ ok: true });
 				}
-				return json(
-					{ ok: false, error: r.data?.error?.message || r.data?.error || `HTTP ${r.status}` },
-					{ status: 400 }
-				);
+				return json({ ok: false, error: errText(r) }, { status: 400 });
 			}
 			case 'requestInvite': {
-				const r = await sendRequestInvite(params.id, userId, message);
+				const r = await sendRequestInvite(params.id, userId);
 				if (r.ok) return json({ ok: true });
 				return json({ ok: false, error: r.error }, { status: 400 });
 			}
@@ -55,17 +56,19 @@ export async function POST({ params, request }) {
 				if (!loc) {
 					return json({ ok: false, error: '该账号当前不在任何实例中' }, { status: 400 });
 				}
-				const r = await sendInvite(params.id, userId, loc, message);
+				// VRChat shows the world name in the invite notification (VRCX sends it).
+				const worldId = String(loc).split(':')[0];
+				const meta = worldId.startsWith('wrld_')
+					? await getWorldMeta(params.id, worldId).catch(() => null)
+					: null;
+				const r = await sendInvite(params.id, userId, loc, { worldName: meta?.name });
 				if (r.ok) return json({ ok: true });
 				return json({ ok: false, error: r.error }, { status: 400 });
 			}
 			case 'friendRequest': {
 				const r = await sendFriendRequest(params.id, userId);
 				if (r.ok) return json({ ok: true });
-				return json(
-					{ ok: false, error: r.data?.error?.message || r.data?.error || `HTTP ${r.status}` },
-					{ status: 400 }
-				);
+				return json({ ok: false, error: errText(r) }, { status: 400 });
 			}
 			case 'unfriend': {
 				const r = await unfriend(params.id, userId);
@@ -73,16 +76,12 @@ export async function POST({ params, request }) {
 					removeFriend(params.id, userId);
 					return json({ ok: true });
 				}
-				return json(
-					{ ok: false, error: r.data?.error?.message || r.data?.error || `HTTP ${r.status}` },
-					{ status: 400 }
-				);
+				return json({ ok: false, error: errText(r) }, { status: 400 });
 			}
 			default:
 				return json({ error: `Unknown action: ${action}` }, { status: 400 });
 		}
 	} catch (err) {
-		setSession(params.id, { lastError: err.message });
 		return json({ ok: false, error: err.message }, { status: 500 });
 	}
 }

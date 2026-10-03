@@ -9,7 +9,7 @@ import { vrImage } from '$lib/shared/format.js';
 	import { vrcLaunchUrl } from '$lib/shared/trust.js';
 	import { parseLocation, accessTypeLabel, accessTypeColor } from '$lib/shared/location.js';
 	import { browser } from '$app/environment';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { timeAgo } from '$lib/shared/format.js';
 	import InviteFriendsDialog from './InviteFriendsDialog.svelte';
 
@@ -32,9 +32,14 @@ import { vrImage } from '$lib/shared/format.js';
 			error = '';
 			return;
 		}
-		loadWorld(req.worldId, req.accountId);
-		// Default the inviter to the requesting account, else first logged-in
-		inviterAccountId = req.accountId || ($accounts.find((a) => a.loggedIn)?.id || '');
+		// Untracked: reading $accounts here would re-run this effect (refetching
+		// the world + VRChat's instance list and resetting the chosen inviter)
+		// on every unrelated accounts update.
+		untrack(() => {
+			loadWorld(req.worldId, req.accountId);
+			// Default the inviter to the requesting account, else first logged-in
+			inviterAccountId = req.accountId || ($accounts.find((a) => a.loggedIn)?.id || '');
+		});
 	});
 
 	async function loadWorld(worldId, accountId) {
@@ -76,11 +81,12 @@ import { vrImage } from '$lib/shared/format.js';
 		favoriteAdding = true;
 		try {
 			if (isFavorite) {
-				await fetch(`/api/favorites?type=world&targetId=${data.id}`, { method: 'DELETE' });
+				const r = await fetch(`/api/favorites?type=world&targetId=${data.id}`, { method: 'DELETE' });
+				if (!r.ok) throw new Error(`HTTP ${r.status}`);
 				isFavorite = false;
 				toasts.success('已取消收藏');
 			} else {
-				await fetch('/api/favorites', {
+				const r = await fetch('/api/favorites', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
@@ -90,6 +96,8 @@ import { vrImage } from '$lib/shared/format.js';
 						groupName: 'group_0'
 					})
 				});
+				const j = await r.json().catch(() => ({}));
+				if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
 				isFavorite = true;
 				toasts.success('已加入收藏');
 			}

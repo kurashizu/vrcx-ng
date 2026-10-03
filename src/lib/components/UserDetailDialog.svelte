@@ -63,13 +63,14 @@ import { vrImage } from '$lib/shared/format.js';
 		loadUser(req.accountId, req.userId);
 	});
 
-	async function loadUser(accountId, userId) {
+	async function loadUser(accountId, userId, fresh = false) {
 		// cancel previous (best-effort)
 		inflight = userId + ':' + accountId;
 		loading = true;
 		error = '';
 		try {
-			const r = await fetch(`/api/accounts/${accountId}/user/${userId}`);
+			// fresh=1 skips the server's 5-minute cache (needed after we changed something)
+			const r = await fetch(`/api/accounts/${accountId}/user/${userId}${fresh ? '?fresh=1' : ''}`);
 			const j = await r.json();
 			if (inflight !== userId + ':' + accountId) return; // stale
 			if (!r.ok) {
@@ -117,7 +118,7 @@ import { vrImage } from '$lib/shared/format.js';
 		if (j.ok) {
 			toasts.success('已删除好友');
 			// refresh so isFriend reflects the new state
-			loadUser($userDetailRequest.accountId, $userDetailRequest.userId);
+			loadUser($userDetailRequest.accountId, $userDetailRequest.userId, true);
 		} else {
 			toasts.error(j.error || '删除好友失败');
 		}
@@ -156,7 +157,8 @@ import { vrImage } from '$lib/shared/format.js';
 		const parsed = parseLocation(loc);
 		if (!parsed?.worldId) return loc;
 		const short = shortInstanceLabel(parsed);
-		const type = accessTypeLabel(parsed) ? ` · ${accessTypeLabel(parsed)}` : '';
+		const typeLabel = accessTypeLabel(parsed.accessTypeLabel);
+		const type = typeLabel ? ` · ${typeLabel}` : '';
 		return (short || parsed.worldId) + type;
 	});
 
@@ -357,7 +359,11 @@ import { vrImage } from '$lib/shared/format.js';
 							{#if data.profile?.bioLinks?.length}
 								<div class="bio-links">
 									{#each data.profile.bioLinks as l}
-										<a href={l} target="_blank" rel="noopener">{l}</a>
+										{#if /^https?:\/\//i.test(l)}
+											<a href={l} target="_blank" rel="noopener noreferrer">{l}</a>
+										{:else}
+											<span>{l}</span>
+										{/if}
 									{/each}
 								</div>
 							{/if}
@@ -390,7 +396,7 @@ import { vrImage } from '$lib/shared/format.js';
 									</button>
 									<button class="ghost" onclick={action(opAccountId, 'mute', data.user.id)}>🔕 静音</button>
 									<button class="ghost danger" onclick={action(opAccountId, 'block', data.user.id)}>🚫 屏蔽</button>
-									<button class="ghost danger" onclick={unfriendUser(data.user.id)}>🗑 删除好友</button>
+									<button class="ghost danger" onclick={() => unfriendUser(data.user.id)}>🗑 删除好友</button>
 								{:else}
 									<button class="primary" onclick={action(opAccountId, 'friendRequest', data.user.id)}>🤝 发送好友请求</button>
 								{/if}
@@ -587,8 +593,8 @@ import { vrImage } from '$lib/shared/format.js';
 	.display-name.trust-user    { color: var(--trust-user); }
 	.display-name.trust-known   { color: var(--trust-known); }
 	.display-name.trust-trusted { color: var(--trust-trusted); }
-	.display-name.trust-veteran { color: var(--trust-veteran); }
-	.display-name.trust-legend  { color: var(--trust-legend); }
+	.display-name.trust-troll { color: var(--trust-troll); }
+	.display-name.trust-vip  { color: var(--trust-vip); }
 
 	.username {
 		font-size: 13px;

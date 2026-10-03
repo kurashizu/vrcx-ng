@@ -12,11 +12,14 @@ import { getDb } from './db.js';
  */
 
 /**
- * Add a notification. `type` is the raw pipeline type
+ * Add a notification (idempotent on `id`). Returns true when a new row was
+ * stored. `type` is the raw pipeline type
  * ('friendRequest', 'invite', 'requestInvite', 'group.joined', 'message'…).
  * @param {{
  *   accountId: string,
  *   type: string,
+ *   id?: string,
+ *   createdAt?: number|string,
  *   senderUserId?: string,
  *   senderDisplayName?: string,
  *   senderUsername?: string,
@@ -38,12 +41,7 @@ export function addNotification(n) {
 		 category, world_id, world_name, instance_id, group_id, message, raw_json, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 	const type = normalizeNotificationType(n.type);
-	const ts =
-		typeof n.createdAt === 'number'
-			? n.createdAt
-			: typeof n.created_at === 'number'
-				? n.created_at
-				: Date.now();
+	const ts = toMillis(n.createdAt ?? n.created_at);
 	const info = stmt.run(
 		n.id || `${n.accountId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 		n.accountId,
@@ -60,7 +58,18 @@ export function addNotification(n) {
 		n.raw ? JSON.stringify(n.raw) : '',
 		ts
 	);
-	return info.lastInsertRowid;
+	// true only when a new row was stored (false: this id was already known)
+	return info.changes === 1;
+}
+
+/** createdAt may arrive as epoch ms or an ISO string. */
+function toMillis(v) {
+	if (typeof v === 'number' && Number.isFinite(v)) return v;
+	if (typeof v === 'string') {
+		const t = Date.parse(v);
+		if (!Number.isNaN(t)) return t;
+	}
+	return Date.now();
 }
 
 /**
@@ -93,9 +102,12 @@ export function normalizeNotificationType(t) {
 	if (s === 'invite') return 'invite';
 	if (s === 'requestinvite') return 'requestInvite';
 	if (s === 'message') return 'message';
-	if (s.startsWith('moderation') || s === 'groupinvite' || s === 'groupjoinrequest' || s === 'inviteresponse' || s === 'requestinviteresponse' || s === 'boop') {
-		return 'moderation';
-	}
+	if (s === 'inviteresponse') return 'inviteResponse';
+	if (s === 'requestinviteresponse') return 'requestInviteResponse';
+	if (s === 'groupinvite') return 'groupInvite';
+	if (s === 'groupjoinrequest') return 'groupJoinRequest';
+	if (s === 'boop') return 'boop';
+	if (s.startsWith('moderation')) return 'moderation';
 	return t;
 }
 
@@ -104,10 +116,11 @@ export function normalizeNotificationType(t) {
  */
 function categoryFor(type) {
 	const t = String(type || '').toLowerCase();
-	if (t.includes('friend')) return 'social';
+	if (t.startsWith('group')) return 'group';
+	if (t.includes('friend') || t === 'boop') return 'social';
+	if (t.startsWith('requestinvite')) return 'request';
 	if (t.includes('invite')) return 'invite';
 	if (t.includes('request')) return 'request';
-	if (t.includes('group')) return 'group';
 	if (t.includes('message')) return 'message';
 	return 'other';
 }
@@ -151,6 +164,60 @@ export function dismissAll(accountId = null) {
 }
 
 /**
+ * Mark several notifications (by VRChat id) of one account as seen.
+ * @param {string} accountId
+ * @param {string[]} ids
+ */
+export function markSeenIds(accountId, ids) {
+	const stmt = getDb().prepare(
+		'UPDATE notifications SET seen_at = ? WHERE id = ? AND account_id = ? AND seen_at IS NULL'
+	);
+	const now = Date.now();
+	for (const id of ids || []) stmt.run(now, id, accountId);
+}
+
+/**
+ * Soft-delete several notifications (by VRChat id) of one account.
+ * @param {string} accountId
+ * @param {string[]} ids
+ */
+export function dismissIds(accountId, ids) {
+	const stmt = getDb().prepare(
+		'UPDATE notifications SET dismissed_at = ? WHERE id = ? AND account_id = ? AND dismissed_at IS NULL'
+	);
+	const now = Date.now();
+	for (const id of ids || []) stmt.run(now, id, accountId);
+}
+
+/**
+ * Apply a notification-v2-update (`{ id, updates }`): merge the updates into
+ * the stored payload and honour `seen`.
+ * @param {string} accountId
+ * @param {string} id
+ * @param {Record<string, any>} updates
+ * @returns {boolean} whether the notification is known
+ */
+export function updateNotification(accountId, id, updates) {
+	const db = getDb();
+	const row = db
+		.prepare('SELECT raw_json FROM notifications WHERE id = ? AND account_id = ?')
+		.get(id, accountId);
+	if (!row) return false;
+	let raw = {};
+	try {
+		raw = row.raw_json ? JSON.parse(row.raw_json) : {};
+	} catch {}
+	const next = { ...raw, ...(updates || {}) };
+	db.prepare('UPDATE notifications SET raw_json = ? WHERE id = ? AND account_id = ?').run(
+		JSON.stringify(next),
+		id,
+		accountId
+	);
+	if (updates?.seen === true) markSeenIds(accountId, [id]);
+	return true;
+}
+
+/**
  * List recent notifications.
  * @param {{ accountId?: string, onlyUnseen?: boolean, limit?: number }} opts
  */
@@ -168,7 +235,7 @@ export function list(opts = {}) {
 	if (!opts.includeDismissed) {
 		where.push('dismissed_at IS NULL');
 	}
-	const limit = opts.limit || 100;
+	const limit = Math.max(1, Math.min(Number(opts.limit) || 100, 1000));
 	const sql = `SELECT * FROM notifications
 		${where.length ? 'WHERE ' + where.join(' AND ') : ''}
 		ORDER BY created_at DESC LIMIT ?`;

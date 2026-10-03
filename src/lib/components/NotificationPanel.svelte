@@ -6,6 +6,7 @@
 	import { openWorldDetail } from '$lib/stores/worldDetail.js';
 	import { toasts } from '$lib/stores/toast.js';
 	import { parseLocation, shortInstanceLabel } from '$lib/shared/location.js';
+	import { notificationsTick } from '$lib/stores/sse.js';
 
 	let { open = $bindable(false) } = $props();
 
@@ -25,6 +26,7 @@
 	}
 
 	$effect(() => {
+		$notificationsTick;
 		if (open && browser) refresh();
 	});
 
@@ -77,14 +79,26 @@
 		invite: '✉️',
 		requestInvite: '✉️',
 		message: '💬',
-		groupAnnouncement: '📢'
+		groupAnnouncement: '📢',
+		inviteResponse: '📨',
+		requestInviteResponse: '📨',
+		groupInvite: '👥',
+		groupJoinRequest: '👥',
+		boop: '👋',
+		moderation: '🛡️'
 	};
 	const TYPE_LABEL = {
 		friendRequest: '好友请求',
 		invite: '实例邀请',
 		requestInvite: '请求加入',
 		message: '消息',
-		groupAnnouncement: '群公告'
+		groupAnnouncement: '群公告',
+		inviteResponse: '邀请回应',
+		requestInviteResponse: '请求回应',
+		groupInvite: '群邀请',
+		groupJoinRequest: '入群申请',
+		boop: 'Boop',
+		moderation: '管理通知'
 	};
 
 	function accName(id) {

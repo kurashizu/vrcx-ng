@@ -14,6 +14,12 @@ const MAX_PER_PAGE = 20;
  * - users / worlds / avatars: proxies to VRChat's REST API using whichever
  *   account is logged in (accountId query param, else first available).
  */
+/** VRChat failures must not look like an empty result set. */
+function searchResponse(meta, r) {
+	if (r.ok) return json({ ...meta, results: r.data, ok: true });
+	return json({ ...meta, results: [], ok: false, error: r.error || 'VRChat API error' }, { status: 502 });
+}
+
 export async function GET({ url }) {
 	const q = (url.searchParams.get('q') || '').trim();
 	const type = url.searchParams.get('type') || 'friends';
@@ -26,13 +32,13 @@ export async function GET({ url }) {
 	const accountId = url.searchParams.get('accountId') || loggedInIds[0] || '';
 
 	if (!q) {
-		return json({ q, type, results: [], total: 0, offset, n });
+		return json({ ok: true, q, type, results: [], total: 0, offset, n });
 	}
 
 	try {
 		if (type === 'friends') {
 			const results = searchLocal(q, n);
-			return json({ q, type, results, total: results.length, offset, n });
+			return json({ ok: true, q, type, results, total: results.length, offset, n });
 		}
 
 		if (!accountId) {
@@ -42,15 +48,15 @@ export async function GET({ url }) {
 		const params = { search: q, n, offset };
 		if (type === 'users') {
 			const r = await searchUsers(accountId, params);
-			return json({ q, type, accountId, results: r.data || [], ok: r.ok });
+			return searchResponse({ q, type, accountId }, r);
 		}
 		if (type === 'worlds') {
 			const r = await searchWorlds(accountId, params);
-			return json({ q, type, accountId, results: r.data || [], ok: r.ok });
+			return searchResponse({ q, type, accountId }, r);
 		}
 		if (type === 'avatars') {
 			const r = await searchAvatars(accountId, params);
-			return json({ q, type, accountId, results: r.data || [], ok: r.ok });
+			return searchResponse({ q, type, accountId }, r);
 		}
 
 		return json({ ok: false, error: `unknown type: ${type}` }, { status: 400 });

@@ -20,18 +20,28 @@ const DEFAULTS = [
 	{ name: 'group_3', displayName: '其他', sortOrder: 3, color: '#b27cff' }
 ];
 
+/**
+ * Seed the default groups exactly once. (Seeding whenever the table is empty
+ * would undo a user deleting every group.)
+ */
 function seedDefaults() {
 	const db = getDb();
+	const key = '_friend_groups_seeded';
+	if (db.prepare('SELECT 1 FROM settings WHERE key = ?').get(key)) return;
 	const now = Date.now();
 	const has = db.prepare('SELECT COUNT(*) AS n FROM friend_groups').get().n;
-	if (has === 0) {
-		const stmt = db.prepare(
-			'INSERT OR IGNORE INTO friend_groups (name, display_name, sort_order, color, visible, created_at) VALUES (?, ?, ?, ?, 1, ?)'
-		);
-		for (const g of DEFAULTS) {
-			stmt.run(g.name, g.displayName, g.sortOrder, g.color, now);
+	const tx = db.transaction(() => {
+		if (has === 0) {
+			const stmt = db.prepare(
+				'INSERT OR IGNORE INTO friend_groups (name, display_name, sort_order, color, visible, created_at) VALUES (?, ?, ?, ?, 1, ?)'
+			);
+			for (const g of DEFAULTS) {
+				stmt.run(g.name, g.displayName, g.sortOrder, g.color, now);
+			}
 		}
-	}
+		db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, JSON.stringify(now));
+	});
+	tx();
 }
 
 export function listGroups() {
@@ -48,6 +58,7 @@ export function getGroup(name) {
 
 export function createGroup({ name, displayName, color = '#7c5cff' }) {
 	if (!name || !displayName) throw new Error('name and displayName required');
+	if (getGroup(name)) throw new Error('分组已存在');
 	const db = getDb();
 	const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM friend_groups').get().m;
 	db.prepare(
@@ -119,16 +130,25 @@ export function getGroupsForUsers(userIds) {
 	return out;
 }
 
+/**
+ * Put a user into a group. A user belongs to one group at a time (the UI shows
+ * a single group per friend), so any other membership is dropped — otherwise
+ * "moving" a friend to a later group would keep showing the old one.
+ */
 export function addMember({ groupName, userId, note = '' }) {
 	if (!groupName || !userId) throw new Error('groupName and userId required');
 	const db = getDb();
-	const maxOrder = db
-		.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM friend_group_members WHERE group_name = ?')
-		.get(groupName).m;
-	db.prepare(
-		`INSERT OR REPLACE INTO friend_group_members (group_name, user_id, note, sort_order, added_at)
-		 VALUES (?, ?, ?, ?, ?)`
-	).run(groupName, userId, note, maxOrder + 1, Date.now());
+	const tx = db.transaction(() => {
+		db.prepare('DELETE FROM friend_group_members WHERE user_id = ? AND group_name != ?').run(userId, groupName);
+		const maxOrder = db
+			.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM friend_group_members WHERE group_name = ?')
+			.get(groupName).m;
+		db.prepare(
+			`INSERT OR REPLACE INTO friend_group_members (group_name, user_id, note, sort_order, added_at)
+			 VALUES (?, ?, ?, ?, ?)`
+		).run(groupName, userId, note, maxOrder + 1, Date.now());
+	});
+	tx();
 }
 
 export function removeMember({ groupName, userId }) {
