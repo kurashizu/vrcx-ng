@@ -28,6 +28,15 @@
 - **用户详情面板** — 头像 / Bio / 当前世界 / 模型 / 世界 / 徽章
 - **OSC Chatbox** — 浏览器里发消息到 VRChat chatbox（自带 OSC 编码，
   不需要 Python 桥接）。目标地址在 UI 里可改
+- **邀请 / 请求** — 对好友永远可以「请求加入」（不管 TA 在不在游戏里）；也可以从
+  VRChat 的 12 条预设消息里选一条一起发送，或改写后再发
+- **通知操作** — 在通知面板里直接接受好友请求、邀请 TA 进你的实例、用预设消息
+  回复并拒绝；「已读 / 忽略」会同步到 VRChat（游戏里和 VRCX 里也跟着变）
+- **备注与收藏** — 用户备注（VRChat 的 `userNotes`，游戏里也看得到）；好友 / 世界 /
+  模型可以加入 VRChat 自己的收藏分组（与游戏、VRCX 共用）
+- **好友日志** — 好友改名、信任等级变化会进 feed
+- **统计** — `/stats`：好友在线时长排行、上线时段分布、热门世界（来自已落库的 feed，
+  从开始记录的那天起逐渐完整）
 - **持久化** — SQLite (better-sqlite3)：feed 历史、通知、收藏、分组、设置
   重启后都在。feed 按「设置 → 动态 → 保留天数」清理（默认 30 天，0 = 永久）
 - **自动同步** — pipeline 断线重连后、以及每小时，都会全量重新同步好友列表
@@ -116,10 +125,15 @@ node build
 | `POST /api/accounts/:id/reconnect` | 强制重连 pipeline 并重新同步好友 |
 | `GET /api/accounts/:id/friends` | 该账号的好友原始列表（`n` 1–100） |
 | `GET /api/accounts/:id/user/:userId` | 用户详情（bio / 头像 / 世界 / 徽章，5 分钟缓存，`?fresh=1` 跳过缓存） |
-| `POST /api/accounts/:id/actions` | mute / unmute / block / unblock / requestInvite / invite / friendRequest / unfriend |
+| `POST /api/accounts/:id/actions` | mute / unmute / block / unblock / requestInvite（可带 `requestSlot`）/ invite（可带 `messageSlot`）/ friendRequest / cancelFriendRequest / unfriend |
 | `POST /api/accounts/:id/instance-action` | createInstance / selfInvite / requestInvite |
 | `GET /api/accounts/:id/moderations?type=mute\|block` | 当前生效的静音 / 屏蔽列表 |
 | `POST /api/accounts/:id/profile` | 修改自己的 bio / bioLinks（`PUT profile/:id`）与状态 / 代词（`PUT users/:id`） |
+| `GET/PUT /api/accounts/:id/invite-messages?type=message\|request\|response\|requestResponse` | 12 条预设消息（读取 / 修改，修改后该槽冷却约 60 分钟） |
+| `POST /api/accounts/:id/notification` | accept（好友请求）/ hide / see / respond（预设消息回复并拒绝），同时作用于 VRChat 与本地收件箱 |
+| `POST /api/accounts/:id/note` | 保存用户备注 |
+| `GET/POST/DELETE /api/accounts/:id/vrc-favorites` | VRChat 收藏分组与条目（好友 / 世界 / 模型） |
+| `GET /api/stats?days=1\|7\|30\|90` | 活跃度统计 |
 | `GET /api/friends` | 多账号去重后的聚合好友列表 |
 | `GET /api/notifications` / `POST` | 通知收件箱 / 标记已读、忽略 |
 | `GET /api/feed?limit&before&type&accountId&userId` | feed 历史（SQLite，向前翻页） |
@@ -183,7 +197,7 @@ journalctl --user -u vrcx-ng -f
 | 存储 | sql.js（内存 + WASM） | better-sqlite3（文件） |
 | Chatbox 转发 | ✅（内置） | ✅（集成） |
 | VR 模式 | ✅ | ❌（暂未实现） |
-| Dashboard / Charts | ✅ | ❌ |
+| Dashboard / Charts | ✅ | 部分（`/stats` 统计页） |
 | i18n | 多语言 | 中文 |
 
 ## 许可证

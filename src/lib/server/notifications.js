@@ -164,6 +164,16 @@ export function dismissAll(accountId = null) {
 }
 
 /**
+ * One stored notification (any state), or null.
+ * @param {string} accountId
+ * @param {string} id
+ */
+export function getNotification(accountId, id) {
+	const row = getDb().prepare('SELECT * FROM notifications WHERE id = ? AND account_id = ?').get(id, accountId);
+	return row ? rowToNotification(row) : null;
+}
+
+/**
  * Mark several notifications (by VRChat id) of one account as seen.
  * @param {string} accountId
  * @param {string[]} ids

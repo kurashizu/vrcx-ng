@@ -14,6 +14,9 @@
  * @property {string} [groupName]
  * @property {string} [previousLocation]
  * @property {string} [previousWorldName]
+ * @property {string} [previousDisplayName]   // DisplayName entries
+ * @property {string} [trustLevel]            // TrustLevel entries (e.g. 'Known User')
+ * @property {string} [previousTrustLevel]
  * @property {string} [avatarName]
  * @property {string} [currentAvatarImageUrl]
  * @property {string} [currentAvatarThumbnailImageUrl]
@@ -45,6 +48,8 @@ export const FEED_TYPES = [
 	'Invite',
 	'Instance.Closed',
 	'Friend',
+	'DisplayName',
+	'TrustLevel',
 	'Group',
 	'Notification'
 ];

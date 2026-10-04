@@ -512,15 +512,19 @@ export async function addModeration(accountId, moderatedUserId, type) {
 
 /**
  * Send a request-invite to a user (asks them to invite you to their instance).
- * VRChat has no free-form request message — only canned slots — so just the
- * platform is sent, like VRCX does.
+ * VRChat has no free-form request message — only canned slots (`requestSlot`,
+ * see getInviteMessages) — so by default just the platform is sent, like VRCX.
  * @param {string} accountId
  * @param {string} userId
+ * @param {{ requestSlot?: number }} [opts]
  */
-export async function sendRequestInvite(accountId, userId) {
+export async function sendRequestInvite(accountId, userId, opts = {}) {
+	const body = { platform: 'standalonewindows' };
+	// a preset "request" message (slot 0-11) instead of the bare request
+	if (Number.isInteger(opts.requestSlot)) body.requestSlot = opts.requestSlot;
 	const { status, data } = await api(accountId, `requestInvite/${userId}`, {
 		method: 'POST',
-		body: { platform: 'standalonewindows' }
+		body
 	});
 	if (status === 200) return { ok: true, data };
 	return { ok: false, status, error: errorMessage(status, data) };
@@ -581,12 +585,14 @@ export async function sendFriendRequest(accountId, userId) {
  * @param {string} accountId
  * @param {string} userId
  * @param {string} location  e.g. "wrld_xxx:12345~private(usr_x)"
- * @param {{ worldName?: string }} [opts]
+ * @param {{ worldName?: string, messageSlot?: number }} [opts]
  * @returns {Promise<{ ok: boolean, status?: number, error?: string }>}
  */
 export async function sendInvite(accountId, userId, location, opts = {}) {
 	const body = { instanceId: location, worldId: location };
 	if (opts.worldName) body.worldName = opts.worldName;
+	// a preset "message" (slot 0-11) attached to the invite
+	if (Number.isInteger(opts.messageSlot)) body.messageSlot = opts.messageSlot;
 	const { status, data } = await api(accountId, `invite/${userId}`, {
 		method: 'POST',
 		body
@@ -739,4 +745,205 @@ export async function getInstanceShortName(accountId, location) {
 		`instances/${location}/shortName`
 	);
 	return { ok: status === 200, status, data };
+}
+
+/* ------------------- preset messages (invite / request) ------------------- */
+
+export const MESSAGE_TYPES = ['message', 'request', 'response', 'requestResponse'];
+
+/**
+ * The 12 preset message slots of one kind:
+ *   message         – sent with an invite
+ *   request         – sent with a request-invite
+ *   response        – decline reply to an invite
+ *   requestResponse – decline reply to a request-invite
+ * @param {string} accountId
+ * @param {string} messageType
+ * @returns {Promise<{ ok: boolean, messages: Array<{ slot: number, message: string, remainingCooldownMinutes?: number }>, error?: string }>}
+ */
+export async function getInviteMessages(accountId, messageType) {
+	const me = peekSession(accountId)?.user?.id;
+	if (!me) return { ok: false, messages: [], error: 'not logged in' };
+	if (!MESSAGE_TYPES.includes(messageType)) return { ok: false, messages: [], error: 'bad message type' };
+	const { status, data } = await api(accountId, `message/${me}/${messageType}`);
+	if (status !== 200 || !Array.isArray(data)) return { ok: false, messages: [], error: errorMessage(status, data) };
+	return {
+		ok: true,
+		messages: data
+			.map((m) => ({
+				slot: m.slot,
+				message: m.message || '',
+				remainingCooldownMinutes: m.remainingCooldownMinutes || 0
+			}))
+			.sort((a, b) => a.slot - b.slot)
+	};
+}
+
+/**
+ * Edit one preset message. VRChat puts an edited slot on a cooldown (~60 min);
+ * an edit during the cooldown is silently ignored, which is detected here.
+ * @param {string} accountId
+ * @param {string} messageType
+ * @param {number} slot
+ * @param {string} message
+ */
+export async function editInviteMessage(accountId, messageType, slot, message) {
+	const me = peekSession(accountId)?.user?.id;
+	if (!me) return { ok: false, error: 'not logged in' };
+	if (!MESSAGE_TYPES.includes(messageType) || !Number.isInteger(slot)) return { ok: false, error: 'bad request' };
+	const { status, data } = await api(accountId, `message/${me}/${messageType}/${slot}`, {
+		method: 'PUT',
+		body: { message }
+	});
+	if (status !== 200) return { ok: false, error: errorMessage(status, data) };
+	const updated = Array.isArray(data) ? data.find((m) => m.slot === slot) : null;
+	if (updated && updated.message !== message) {
+		return { ok: false, error: `这个消息槽还在冷却中（约 ${updated.remainingCooldownMinutes || '?'} 分钟），暂时不能修改` };
+	}
+	return { ok: true };
+}
+
+/* --------------------------- notification actions --------------------------- */
+
+/** Accept an incoming friend request (the notification id, not the user id). */
+export async function acceptFriendRequest(accountId, notificationId) {
+	const { status, data } = await api(accountId, `auth/user/notifications/${notificationId}/accept`, { method: 'PUT' });
+	return { ok: status === 200, status, error: status === 200 ? undefined : errorMessage(status, data) };
+}
+
+/** Hide (dismiss) a notification on VRChat's side so it also disappears in-game. */
+export async function hideNotification(accountId, notificationId, { v2 = false } = {}) {
+	const { status, data } = v2
+		? await api(accountId, `notifications/${notificationId}`, { method: 'DELETE' })
+		: await api(accountId, `auth/user/notifications/${notificationId}/hide`, { method: 'PUT' });
+	return { ok: status === 200, status, error: status === 200 ? undefined : errorMessage(status, data) };
+}
+
+/** Mark a notification as seen on VRChat's side. */
+export async function seeNotification(accountId, notificationId, { v2 = false } = {}) {
+	const { status, data } = v2
+		? await api(accountId, `notifications/${notificationId}/see`, { method: 'POST' })
+		: await api(accountId, `auth/user/notifications/${notificationId}/see`, { method: 'PUT' });
+	return { ok: status === 200, status, error: status === 200 ? undefined : errorMessage(status, data) };
+}
+
+/**
+ * Reply to an invite / request-invite notification with one of the preset
+ * response messages (declines it).
+ * @param {number} responseSlot  slot of the `response` / `requestResponse` message
+ */
+export async function respondToInvite(accountId, notificationId, responseSlot) {
+	const { status, data } = await api(accountId, `invite/${notificationId}/response`, {
+		method: 'POST',
+		body: { responseSlot }
+	});
+	return { ok: status === 200, status, error: status === 200 ? undefined : errorMessage(status, data) };
+}
+
+/** Withdraw a sent friend request / decline a hidden one. */
+export async function cancelFriendRequest(accountId, userId) {
+	const { status, data } = await api(accountId, `user/${userId}/friendRequest`, { method: 'DELETE' });
+	return { ok: status === 200, status, error: status === 200 ? undefined : errorMessage(status, data) };
+}
+
+/* --------------------------------- notes --------------------------------- */
+
+/**
+ * VRChat's own per-user note (synced across devices, visible in-game).
+ * @returns {Promise<{ ok: boolean, note?: string, error?: string }>}
+ */
+export async function saveUserNote(accountId, targetUserId, note) {
+	const { status, data } = await api(accountId, 'userNotes', {
+		method: 'POST',
+		body: { targetUserId, note }
+	});
+	if (status !== 200) return { ok: false, error: errorMessage(status, data) };
+	return { ok: true, note: data?.note ?? note };
+}
+
+/* ------------------------------- favorites ------------------------------- */
+
+/** @param {'friend'|'world'|'avatar'|'vrcPlusWorld'} type */
+const FAVORITE_TYPES = ['friend', 'world', 'avatar', 'vrcPlusWorld'];
+
+/**
+ * The account's VRChat-side favorites: groups, entries and limits.
+ * @returns {Promise<{ ok: boolean, groups: any[], favorites: any[], limits: any, error?: string }>}
+ */
+export async function getVrcFavorites(accountId) {
+	const pageAll = async (path, params) => {
+		const out = [];
+		for (let offset = 0; offset < 2000; offset += 100) {
+			const { status, data } = await api(accountId, path, { params: { ...params, n: 100, offset } });
+			if (status !== 200 || !Array.isArray(data)) throw new Error(errorMessage(status, data));
+			out.push(...data);
+			if (data.length < 100) break;
+		}
+		return out;
+	};
+	try {
+		const [groups, favorites, lim] = await Promise.all([
+			pageAll('favorite/groups'),
+			pageAll('favorites'),
+			api(accountId, 'auth/user/favoritelimits')
+		]);
+		const limits = lim.status === 200 ? lim.data : null;
+		return {
+			ok: true,
+			groups: buildFavoriteGroups(accountId, groups, limits),
+			favorites: favorites.map((f) => ({
+				id: f.id,
+				type: f.type,
+				favoriteId: f.favoriteId,
+				group: Array.isArray(f.tags) ? f.tags[0] : ''
+			})),
+			limits
+		};
+	} catch (err) {
+		return { ok: false, groups: [], favorites: [], limits: null, error: err.message };
+	}
+}
+
+/**
+ * VRChat's `favorite/groups` lists only the groups that already exist, but an
+ * account can use as many groups as its limits allow (VRCX generates them the
+ * same way): friend `group_0..`, world `worlds1..`, avatar `avatars1..` and —
+ * for VRC+ — `vrcPlusWorlds1..`. The API's metadata (display name) is overlaid.
+ */
+function buildFavoriteGroups(accountId, apiGroups, limits) {
+	const max = limits?.maxFavoriteGroups || { friend: 3, world: 4, vrcPlusWorld: 4, avatar: 1 };
+	const supporter = (peekSession(accountId)?.user?.tags || []).includes('system_supporter');
+	const out = [];
+	const make = (count, type, nameOf, labelOf) => {
+		for (let i = 0; i < count; i++) out.push({ id: null, type, name: nameOf(i), displayName: labelOf(i), visibility: 'private' });
+	};
+	make(max.friend ?? 3, 'friend', (i) => `group_${i}`, (i) => `Group ${i + 1}`);
+	make(max.world ?? 4, 'world', (i) => `worlds${i + 1}`, (i) => `Group ${i + 1}`);
+	make(max.avatar ?? 1, 'avatar', (i) => `avatars${i + 1}`, (i) => `Group ${i + 1}`);
+	if (supporter || apiGroups.some((g) => g.type === 'vrcPlusWorld')) {
+		make(max.vrcPlusWorld ?? 4, 'vrcPlusWorld', (i) => `vrcPlusWorlds${i + 1}`, (i) => `VRC+ Group ${i + 1}`);
+	}
+	for (const a of apiGroups) {
+		const g = out.find((x) => x.type === a.type && x.name === a.name);
+		const meta = { id: a.id, displayName: a.displayName || a.name, visibility: a.visibility };
+		if (g) Object.assign(g, meta);
+		else out.push({ type: a.type, name: a.name, ...meta });
+	}
+	return out;
+}
+
+/** Add `favoriteId` (usr_/wrld_/avtr_) to the favorite group `group` (e.g. "group_0", "worlds1"). */
+export async function addVrcFavorite(accountId, type, favoriteId, group) {
+	if (!FAVORITE_TYPES.includes(type)) return { ok: false, error: 'bad favorite type' };
+	const { status, data } = await api(accountId, 'favorites', {
+		method: 'POST',
+		body: { type, favoriteId, tags: group } // a plain string, exactly what VRCX sends
+	});
+	return { ok: status === 200, status, error: status === 200 ? undefined : errorMessage(status, data) };
+}
+
+/** Remove a favorite by the id of the favorited object (usr_/wrld_/avtr_), like VRCX. */
+export async function removeVrcFavorite(accountId, favoriteId) {
+	const { status, data } = await api(accountId, `favorites/${favoriteId}`, { method: 'DELETE' });
+	return { ok: status === 200, status, error: status === 200 ? undefined : errorMessage(status, data) };
 }

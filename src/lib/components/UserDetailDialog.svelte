@@ -17,6 +17,8 @@ import { vrImage } from '$lib/shared/format.js';
 	import { parseLocation, accessTypeLabel, shortInstanceLabel } from '$lib/shared/location.js';
 	import { trustColor } from '$lib/shared/trust.js';
 	import EditProfileDialog from './EditProfileDialog.svelte';
+	import InviteMessageDialog from './InviteMessageDialog.svelte';
+	import VrcFavoriteDialog from './VrcFavoriteDialog.svelte';
 
 	let data = $state(null);
 	let loading = $state(false);
@@ -34,6 +36,58 @@ import { vrImage } from '$lib/shared/format.js';
 			!!loggedInAccounts.find((a) => a.id === opAccountId)?.currentUser &&
 			loggedInAccounts.find((a) => a.id === opAccountId)?.currentUser?.id === data.user.id
 	);
+	// ---- preset messages: request / invite with one of VRChat's 12 canned messages
+	let msgOpen = $state(false);
+	let msgKind = $state(/** @type {'request'|'message'} */ ('request'));
+	function openMessages(kind) {
+		msgKind = kind;
+		msgOpen = true;
+	}
+	async function sendWithMessage(slot) {
+		const request = msgKind === 'request';
+		const r = await fetch(`/api/accounts/${opAccountId}/actions`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				action: request ? 'requestInvite' : 'invite',
+				userId: data.user.id,
+				...(request ? { requestSlot: slot } : { messageSlot: slot })
+			})
+		});
+		const j = await r.json().catch(() => ({}));
+		if (r.ok && j.ok) toasts.success(request ? '已发送请求加入' : '已发送邀请');
+		else toasts.error(j.error || '发送失败');
+	}
+
+	// ---- VRChat favorites (the groups you see in-game / in VRCX)
+	let favOpen = $state(false);
+
+	// ---- VRChat's own per-user note
+	let noteDraft = $state('');
+	let noteSaving = $state(false);
+	$effect(() => {
+		noteDraft = data?.user?.note || '';
+	});
+	async function saveNote() {
+		if (!data?.user?.id || noteSaving) return;
+		noteSaving = true;
+		try {
+			const r = await fetch(`/api/accounts/${opAccountId}/note`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ userId: data.user.id, note: noteDraft })
+			});
+			const j = await r.json().catch(() => ({}));
+			if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+			data.user.note = j.note ?? noteDraft;
+			toasts.success('备注已保存');
+		} catch (err) {
+			toasts.error(err.message);
+		} finally {
+			noteSaving = false;
+		}
+	}
+
 	let editOpen = $state(false);
 	function profileSaved() {
 		loadUser($userDetailRequest.accountId, $userDetailRequest.userId);
@@ -369,6 +423,19 @@ import { vrImage } from '$lib/shared/format.js';
 							{/if}
 						</section>
 
+						{#if !isSelf}
+							<section class="block">
+								<h3>备注 <span class="muted small">VRChat 备注，游戏里也看得到</span></h3>
+								<textarea class="note-input" bind:value={noteDraft} maxlength="256" rows="2" placeholder="给 TA 写点备注…"></textarea>
+								<div class="note-row">
+									<span class="muted small">{noteDraft.length}/256</span>
+									<button class="ghost xs" onclick={saveNote} disabled={noteSaving || noteDraft === (data.user?.note || '')}>
+										{noteSaving ? '保存中…' : '保存备注'}
+									</button>
+								</div>
+							</section>
+						{/if}
+
 						<section class="block">
 							<h3>操作</h3>
 							{#if loggedInAccounts.length > 0}
@@ -386,13 +453,21 @@ import { vrImage } from '$lib/shared/format.js';
 									<button class="primary" onclick={() => (editOpen = true)}>✏️ 编辑个人资料</button>
 								{/if}
 								{#if data.user?.isFriend}
-									{#if data.user?.location && data.user.location !== 'offline' && data.user.location !== 'private'}
-										<button class="primary" onclick={action(opAccountId, 'requestInvite', data.user.id)}>
-											✉️ 请求加入 TA 的实例
-										</button>
-									{/if}
+									<!-- like VRCX: always available for a friend, in game or not -->
+									<button class="primary" onclick={action(opAccountId, 'requestInvite', data.user.id)}>
+										✉️ 请求加入 TA 的实例
+									</button>
+									<button class="ghost" onclick={() => openMessages('request')} title="从 12 条预设消息里选一条一起发送">
+										✉️ 带消息请求加入
+									</button>
 									<button class="ghost" onclick={action(opAccountId, 'invite', data.user.id)} title="邀请 TA 加入你当前所在的实例">
 										📨 邀请 TA 加入我的实例
+									</button>
+									<button class="ghost" onclick={() => openMessages('message')} title="从 12 条预设消息里选一条一起发送">
+										📨 带消息邀请
+									</button>
+									<button class="ghost" onclick={() => (favOpen = true)} title="加入 / 移动 / 取消 VRChat 好友收藏分组">
+										⭐ 好友收藏
 									</button>
 									<button class="ghost" onclick={action(opAccountId, 'mute', data.user.id)}>🔕 静音</button>
 									<button class="ghost danger" onclick={action(opAccountId, 'block', data.user.id)}>🚫 屏蔽</button>
@@ -470,6 +545,21 @@ import { vrImage } from '$lib/shared/format.js';
 {/if}
 
 <EditProfileDialog bind:open={editOpen} accountId={opAccountId} user={data?.user} onSaved={profileSaved} />
+<InviteMessageDialog
+	bind:open={msgOpen}
+	accountId={opAccountId}
+	type={msgKind}
+	title={msgKind === 'request' ? '带消息请求加入' : '带消息邀请'}
+	hint={msgKind === 'request' ? '点一条消息即发送（请求加入 TA 的实例）。✏️ 可以改写后再发。' : '点一条消息即发送（邀请 TA 到你当前所在的实例）。✏️ 可以改写后再发。'}
+	onPick={sendWithMessage}
+/>
+<VrcFavoriteDialog
+	bind:open={favOpen}
+	accountId={opAccountId}
+	kind="friend"
+	objectId={data?.user?.id || ''}
+	title="VRChat 好友收藏"
+/>
 
 <style>
 	.dialog {
@@ -743,6 +833,17 @@ import { vrImage } from '$lib/shared/format.js';
 		line-height: 1.6;
 		white-space: pre-wrap;
 		word-break: break-word;
+	}
+	.note-input {
+		width: 100%;
+		resize: vertical;
+	}
+	.note-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		margin-top: 6px;
 	}
 	.bio-links {
 		margin-top: 8px;

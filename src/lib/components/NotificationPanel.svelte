@@ -7,6 +7,7 @@
 	import { toasts } from '$lib/stores/toast.js';
 	import { parseLocation, shortInstanceLabel } from '$lib/shared/location.js';
 	import { notificationsTick } from '$lib/stores/sse.js';
+	import InviteMessageDialog from './InviteMessageDialog.svelte';
 
 	let { open = $bindable(false) } = $props();
 
@@ -30,22 +31,91 @@
 		if (open && browser) refresh();
 	});
 
-	async function seen(id) {
-		await fetch('/api/notifications', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ action: 'seen', id })
-		});
-		items = items.map((it) => (it.id === id ? { ...it, seenAt: Date.now() } : it));
+	/** Act on a notification through its account: VRChat's side AND the local inbox. */
+	async function act(it, body) {
+		try {
+			const r = await fetch(`/api/accounts/${encodeURIComponent(it.accountId)}/notification`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ notificationId: it.id, ...body })
+			});
+			const j = await r.json().catch(() => ({}));
+			return { ok: r.ok && j.ok, j };
+		} catch (err) {
+			return { ok: false, j: { error: err.message } };
+		}
 	}
 
-	async function dismiss(id) {
-		await fetch('/api/notifications', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ action: 'dismiss', id })
-		});
-		items = items.filter((it) => it.id !== id);
+	async function seen(it) {
+		// also marks it read in-game / in VRCX; falls back to the local inbox only
+		let ok = it.accountId && (await act(it, { action: 'see' })).ok;
+		if (!ok) {
+			await fetch('/api/notifications', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'seen', id: it.id })
+			});
+		}
+		items = items.map((x) => (x.id === it.id ? { ...x, seenAt: Date.now() } : x));
+	}
+
+	async function dismiss(it) {
+		let ok = it.accountId && (await act(it, { action: 'hide' })).ok;
+		if (!ok) {
+			await fetch('/api/notifications', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'dismiss', id: it.id })
+			});
+		}
+		items = items.filter((x) => x.id !== it.id);
+	}
+
+	async function accept(it) {
+		const { ok, j } = await act(it, { action: 'accept' });
+		if (ok) {
+			toasts.success('已接受好友请求');
+			items = items.filter((x) => x.id !== it.id);
+		} else {
+			toasts.error(j.error || '接受失败');
+		}
+	}
+
+	// someone asked to join us: invite them to the instance this account is in
+	async function inviteBack(it) {
+		try {
+			const r = await fetch(`/api/accounts/${encodeURIComponent(it.accountId)}/actions`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'invite', userId: it.senderUserId })
+			});
+			const j = await r.json().catch(() => ({}));
+			if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+			toasts.success('已发送邀请');
+			await act(it, { action: 'hide' });
+			items = items.filter((x) => x.id !== it.id);
+		} catch (err) {
+			toasts.error(err.message);
+		}
+	}
+
+	// decline an invite / request with one of the preset reply messages
+	let respondTarget = $state(/** @type {any} */ (null));
+	let respondOpen = $state(false);
+	function openRespond(it) {
+		respondTarget = it;
+		respondOpen = true;
+	}
+	async function sendRespond(slot) {
+		const it = respondTarget;
+		if (!it) return;
+		const { ok, j } = await act(it, { action: 'respond', responseSlot: slot });
+		if (ok) {
+			toasts.success('已回复');
+			items = items.filter((x) => x.id !== it.id);
+		} else {
+			toasts.error(j.error || '回复失败');
+		}
 	}
 
 	async function dismissAll() {
@@ -197,10 +267,19 @@
 										查看用户
 									</button>
 								{/if}
-								{#if !it.seenAt}
-									<button class="ghost xs" onclick={() => seen(it.id)}>标为已读</button>
+								{#if it.type === 'friendRequest' && it.accountId}
+									<button class="primary xs" onclick={() => accept(it)}>✅ 接受</button>
 								{/if}
-								<button class="ghost xs danger" onclick={() => dismiss(it.id)}>忽略</button>
+								{#if it.type === 'requestInvite' && it.accountId && it.senderUserId}
+									<button class="primary xs" onclick={() => inviteBack(it)} title="邀请 TA 到这个账号当前所在的实例">📨 邀请 TA</button>
+								{/if}
+								{#if (it.type === 'invite' || it.type === 'requestInvite') && it.accountId}
+									<button class="ghost xs" onclick={() => openRespond(it)} title="用预设消息回复并拒绝">✉️ 回复并拒绝</button>
+								{/if}
+								{#if !it.seenAt}
+									<button class="ghost xs" onclick={() => seen(it)}>标为已读</button>
+								{/if}
+								<button class="ghost xs danger" onclick={() => dismiss(it)}>忽略</button>
 							</div>
 						</div>
 					</div>
@@ -209,6 +288,15 @@
 		</div>
 	</aside>
 {/if}
+
+<InviteMessageDialog
+	bind:open={respondOpen}
+	accountId={respondTarget?.accountId || ''}
+	type={respondTarget?.type === 'requestInvite' ? 'requestResponse' : 'response'}
+	title="回复并拒绝"
+	hint="点一条消息即发送，同时拒绝这条邀请。✏️ 可以改写后再发。"
+	onPick={sendRespond}
+/>
 
 <style>
 	.backdrop {
@@ -368,6 +456,7 @@
 	}
 	.actions {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 4px;
 		margin-top: 8px;
 	}

@@ -5,7 +5,9 @@ import { vrImage } from '$lib/shared/format.js';
 	import { openUserDetail } from '$lib/stores/userDetail.js';
 	import { toasts } from '$lib/stores/toast.js';
 	import { browser } from '$app/environment';
+	import VrcFavoriteDialog from './VrcFavoriteDialog.svelte';
 
+	let vrcFavOpen = $state(false);
 	let data = $state(null);
 	let loading = $state(false);
 	let error = $state('');
@@ -235,6 +237,9 @@ import { vrImage } from '$lib/shared/format.js';
 					<button class="ghost" onclick={toggleFavorite}>
 						{data.isFavorite ? '★ 已收藏' : '☆ 收藏'}
 					</button>
+					<button class="ghost" onclick={() => (vrcFavOpen = true)} disabled={!callerId} title="加入 VRChat 的模型收藏分组（游戏里 / VRCX 里都看得到）">
+						⭐ VRChat 收藏
+					</button>
 					<button class="ghost" onclick={() => copy(av.id, '已复制模型 ID')}>📋 ID</button>
 					<button class="ghost" onclick={() => copy(av.name, '已复制模型名')}>📋 名字</button>
 				</div>
@@ -301,6 +306,14 @@ import { vrImage } from '$lib/shared/format.js';
 		</div>
 	</div>
 {/if}
+
+<VrcFavoriteDialog
+	bind:open={vrcFavOpen}
+	accountId={callerId}
+	kind="avatar"
+	objectId={data?.avatar?.id || ''}
+	title="VRChat 模型收藏"
+/>
 
 <style>
 	.modal-backdrop {

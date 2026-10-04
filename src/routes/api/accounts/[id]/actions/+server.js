@@ -4,27 +4,36 @@ import {
 	sendRequestInvite,
 	sendFriendRequest,
 	sendInvite,
-	unfriend
+	unfriend,
+	cancelFriendRequest
 } from '$lib/server/vrchat.js';
 import { getSession } from '$lib/server/accounts.js';
 import { getSelfLocations, removeFriend } from '$lib/server/friends.js';
 import { getWorldMeta } from '$lib/server/worldCache.js';
+import { invalidateUserDetail } from '$lib/server/userDetailCache.js';
 
 const errText = (r) => r.data?.error?.message || r.data?.error || `HTTP ${r.status}`;
 
 /**
  * Generic action endpoint for friend-related actions.
- * body: { action: 'mute'|'unmute'|'block'|'unblock'|'requestInvite'|'friendRequest'|'unfriend'|'invite', userId, location? }
+ * body: { action: 'mute'|'unmute'|'block'|'unblock'|'requestInvite'|'friendRequest'|'cancelFriendRequest'|'unfriend'|'invite',
+ *          userId, location?, requestSlot? (requestInvite), messageSlot? (invite) }
+ * requestSlot / messageSlot pick one of the 12 preset messages (see invite-messages).
  */
 export async function POST({ params, request }) {
 	const body = await request.json().catch(() => ({}));
 	const { action, userId, location } = body || {};
+	const slot = (v) => (Number.isInteger(v) && v >= 0 && v < 12 ? v : undefined);
 	if (!action || !userId) return json({ error: 'action and userId required' }, { status: 400 });
 
 	const sess = getSession(params.id);
 	if (!sess?.user) return json({ error: 'Not logged in' }, { status: 401 });
 
 	try {
+		// whatever the action, the cached detail view of this user is now stale
+		if (['friendRequest', 'cancelFriendRequest', 'unfriend', 'mute', 'unmute', 'block', 'unblock'].includes(action)) {
+			invalidateUserDetail(params.id, userId);
+		}
 		switch (action) {
 			case 'mute':
 			case 'unmute':
@@ -37,7 +46,7 @@ export async function POST({ params, request }) {
 				return json({ ok: false, error: errText(r) }, { status: 400 });
 			}
 			case 'requestInvite': {
-				const r = await sendRequestInvite(params.id, userId);
+				const r = await sendRequestInvite(params.id, userId, { requestSlot: slot(body.requestSlot) });
 				if (r.ok) return json({ ok: true });
 				return json({ ok: false, error: r.error }, { status: 400 });
 			}
@@ -61,7 +70,10 @@ export async function POST({ params, request }) {
 				const meta = worldId.startsWith('wrld_')
 					? await getWorldMeta(params.id, worldId).catch(() => null)
 					: null;
-				const r = await sendInvite(params.id, userId, loc, { worldName: meta?.name });
+				const r = await sendInvite(params.id, userId, loc, {
+					worldName: meta?.name,
+					messageSlot: slot(body.messageSlot)
+				});
 				if (r.ok) return json({ ok: true });
 				return json({ ok: false, error: r.error }, { status: 400 });
 			}
@@ -69,6 +81,11 @@ export async function POST({ params, request }) {
 				const r = await sendFriendRequest(params.id, userId);
 				if (r.ok) return json({ ok: true });
 				return json({ ok: false, error: errText(r) }, { status: 400 });
+			}
+			case 'cancelFriendRequest': {
+				const r = await cancelFriendRequest(params.id, userId);
+				if (r.ok) return json({ ok: true });
+				return json({ ok: false, error: r.error }, { status: 400 });
 			}
 			case 'unfriend': {
 				const r = await unfriend(params.id, userId);

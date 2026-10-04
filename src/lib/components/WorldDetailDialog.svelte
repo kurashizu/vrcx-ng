@@ -12,12 +12,14 @@ import { vrImage } from '$lib/shared/format.js';
 	import { onMount, untrack } from 'svelte';
 	import { timeAgo } from '$lib/shared/format.js';
 	import InviteFriendsDialog from './InviteFriendsDialog.svelte';
+	import VrcFavoriteDialog from './VrcFavoriteDialog.svelte';
 
 	let data = $state(null);
 	let loading = $state(false);
 	let error = $state('');
 	let inflight = null;
 	let tab = $state('info'); // 'info' | 'instances' | 'friends'
+	let vrcFavOpen = $state(false);
 	let favoriteAdding = $state(false);
 	let isFavorite = $state(false);
 	let memo = $state('');
@@ -394,6 +396,9 @@ import { vrImage } from '$lib/shared/format.js';
 					<button class="ghost" onclick={toggleFavorite} disabled={favoriteAdding}>
 						{isFavorite ? '★ 已收藏' : '☆ 收藏'}
 					</button>
+					<button class="ghost" onclick={() => (vrcFavOpen = true)} disabled={!inviterAccountId} title="加入 VRChat 的世界收藏分组（游戏里 / VRCX 里都看得到）">
+						⭐ VRChat 收藏
+					</button>
 					<button class="ghost" onclick={copyId}>📋 ID</button>
 					<button class="ghost" onclick={copyName}>📋 名字</button>
 					<button class="ghost" onclick={copyUrl}>📋 URL</button>
@@ -766,6 +771,14 @@ import { vrImage } from '$lib/shared/format.js';
 		</div>
 	</div>
 {/if}
+
+<VrcFavoriteDialog
+	bind:open={vrcFavOpen}
+	accountId={inviterAccountId}
+	kind="world"
+	objectId={data?.id || ''}
+	title="VRChat 世界收藏"
+/>
 
 {#if inviteTarget}
 	<InviteFriendsDialog

@@ -319,6 +319,12 @@ import { vrImage } from '$lib/shared/format.js';
 				{/if}
 			{:else if entry.type === 'Friend'}
 				<span class="sep">{entry.raw?.subtype === 'friend-delete' ? '解除了好友关系' : '成为了好友'}</span>
+			{:else if entry.type === 'DisplayName'}
+				<span class="sep">改名了</span>
+				<span class="status-flow">{entry.previousDisplayName} → {entry.displayName}</span>
+			{:else if entry.type === 'TrustLevel'}
+				<span class="sep">信任等级变化</span>
+				<span class="status-flow">{entry.previousTrustLevel} → {entry.trustLevel}</span>
 			{:else if entry.type === 'Group'}
 				<span class="sep">群组</span>
 				{#if entry.detail}

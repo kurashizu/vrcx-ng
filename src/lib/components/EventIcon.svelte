@@ -1,6 +1,6 @@
 <script>
 	/**
-	 * @typedef {'Online'|'Offline'|'Active'|'GPS'|'Status'|'Bio'|'Avatar'|'Join'|'Leave'|'FriendRequest'|'Invite'|'Instance.Closed'|'Friend'|'Group'|'Notification'} FeedType
+	 * @typedef {'Online'|'Offline'|'Active'|'GPS'|'Status'|'Bio'|'Avatar'|'Join'|'Leave'|'FriendRequest'|'Invite'|'Instance.Closed'|'Friend'|'DisplayName'|'TrustLevel'|'Group'|'Notification'} FeedType
 	 */
 
 	/** @type {{ type: FeedType, size?: number }} */
@@ -20,6 +20,8 @@
 		Invite: '✉️',
 		'Instance.Closed': '🚪',
 		Friend: '🧑‍🤝‍🧑',
+		DisplayName: '🪪',
+		TrustLevel: '🎖️',
 		Group: '🏷️',
 		Notification: '🔔'
 	};
@@ -38,6 +40,8 @@
 		Invite: 'var(--request)',
 		'Instance.Closed': 'var(--danger)',
 		Friend: 'var(--request)',
+		DisplayName: '#1fb8ff',
+		TrustLevel: '#ffb454',
 		Group: '#7c5cff',
 		Notification: 'var(--text-dim)'
 	};

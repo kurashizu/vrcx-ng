@@ -82,7 +82,8 @@ export async function POST({ params, request }) {
 				if (!body.userId) {
 					return json({ ok: false, error: 'userId required' }, { status: 400 });
 				}
-				const r = await sendRequestInvite(params.id, body.userId);
+				const slot = Number.isInteger(body.requestSlot) && body.requestSlot >= 0 && body.requestSlot < 12 ? body.requestSlot : undefined;
+				const r = await sendRequestInvite(params.id, body.userId, { requestSlot: slot });
 				return r.ok
 					? json({ ok: true })
 					: json({ ok: false, error: r.error || r.data?.error?.message || 'failed' }, { status: 400 });

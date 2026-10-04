@@ -31,7 +31,9 @@ const DEFAULTS = {
 		'Instance.Closed': true,
 		Notification: true,
 		Group: true,
-		Friend: true
+		Friend: true,
+		DisplayName: true,
+		TrustLevel: true
 	},
 
 	// Notifications (browser desktop)

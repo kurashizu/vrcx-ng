@@ -7,40 +7,12 @@ import {
 	getWorld,
 	getAvatar
 } from '$lib/server/vrchat.js';
-
-const TTL = 5 * 60 * 1000; // 5 minutes
-
-/** @type {Map<string, { t: number, data: any }>} */
-const cache = new Map();
-
-function cacheKey(accountId, userId) {
-	return `${accountId}:${userId}`;
-}
-
-function getCached(accountId, userId) {
-	const k = cacheKey(accountId, userId);
-	const entry = cache.get(k);
-	if (!entry) return null;
-	if (Date.now() - entry.t > TTL) {
-		cache.delete(k);
-		return null;
-	}
-	return entry.data;
-}
-
-function setCached(accountId, userId, data) {
-	cache.set(cacheKey(accountId, userId), { t: Date.now(), data });
-	// simple size cap
-	if (cache.size > 200) {
-		const first = cache.keys().next().value;
-		if (first) cache.delete(first);
-	}
-}
+import { getCachedUserDetail, setCachedUserDetail } from '$lib/server/userDetailCache.js';
 
 export async function GET({ params, url }) {
 	const { id, userId } = params;
 	// ?fresh=1 bypasses the cache (the dialog sets it after unfriend / friend request / …)
-	const cached = url.searchParams.get('fresh') ? null : getCached(id, userId);
+	const cached = url.searchParams.get('fresh') ? null : getCachedUserDetail(id, userId);
 	if (cached) return json(cached);
 
 	try {
@@ -91,7 +63,7 @@ export async function GET({ params, url }) {
 			loadedAt: Date.now()
 		};
 		// Don't cache a partial result (a failed avatars/worlds sub-request).
-		if (avatars && worlds) setCached(id, userId, out);
+		if (avatars && worlds) setCachedUserDetail(id, userId, out);
 		return json(out);
 	} catch (err) {
 		return json({ error: err.message }, { status: 500 });

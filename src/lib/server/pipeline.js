@@ -13,6 +13,7 @@ import {
 	getCachedFriend
 } from './friends.js';
 import { getWorldMeta } from './worldCache.js';
+import { trustLabelFromTags } from '../shared/trust.js';
 import {
 	addNotification,
 	hasNotification,
@@ -161,7 +162,9 @@ function baselineOf(state, userId) {
 				bio: f.bio,
 				currentAvatarImageUrl: f.currentAvatarImageUrl || '',
 				currentAvatarThumbnailImageUrl: f.currentAvatarThumbnailImageUrl || '',
-				currentAvatar: f.currentAvatar || ''
+				currentAvatar: f.currentAvatar || '',
+				tags: f.tags || [],
+				developerType: f.developerType || ''
 			};
 			state.userCache.set(userId, b);
 		}
@@ -181,7 +184,9 @@ function cacheUser(state, user) {
 			bio: user.bio,
 			currentAvatarImageUrl: user.currentAvatarImageUrl,
 			currentAvatarThumbnailImageUrl: user.currentAvatarThumbnailImageUrl,
-			currentAvatar: user.currentAvatar
+			currentAvatar: user.currentAvatar,
+			tags: Array.isArray(user.tags) && user.tags.length ? user.tags : undefined,
+			developerType: user.developerType
 		})
 	};
 	if (!next.displayName) next.displayName = lookupDisplayName(user.id) || user.id;
@@ -618,6 +623,29 @@ async function handleMessage(state, msg) {
 						...common,
 						bio: after.bio,
 						previousBio: before.bio
+					})
+				);
+			}
+			// Friend log: renames and trust-rank changes.
+			if (before.displayName && before.displayName !== userId && after.displayName && before.displayName !== after.displayName) {
+				publishFeed(
+					feedEntry(state, {
+						type: 'DisplayName',
+						...common,
+						displayName: after.displayName,
+						previousDisplayName: before.displayName
+					})
+				);
+			}
+			const bTrust = before.tags?.length ? trustLabelFromTags(before.tags, before.developerType) : '';
+			const aTrust = after.tags?.length ? trustLabelFromTags(after.tags, after.developerType) : '';
+			if (bTrust && aTrust && bTrust !== aTrust) {
+				publishFeed(
+					feedEntry(state, {
+						type: 'TrustLevel',
+						...common,
+						trustLevel: aTrust,
+						previousTrustLevel: bTrust
 					})
 				);
 			}
