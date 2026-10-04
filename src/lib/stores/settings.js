@@ -1,103 +1,80 @@
-import { writable, get } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
+import { api } from '$lib/client/api.js';
 import { toasts } from './toast.js';
 
 /**
- * Client-side mirror of server settings. Loaded on startup; updates are
- * debounced and POSTed to /api/settings (a failed save is retried and
- * reported). Other tabs pick changes up on their next load.
+ * Client-side mirror of the server settings. Single edits are debounced and
+ * POSTed to /api/settings (a failed save is retried and reported).
  */
-
 export const settings = writable(/** @type {Record<string, any>} */ ({}));
 export const settingsLoaded = writable(false);
 
-let saveTimer = null;
-const pending = {};
+/** Trust-rank name colours (default on). */
+export const trustColorsOn = derived(settings, ($s) => $s['ui.trustColors'] !== false);
 
-/**
- * Initialize the settings store. Called from +layout.svelte on mount.
- */
 export async function loadSettings() {
 	try {
-		const r = await fetch('/api/settings');
-		const j = await r.json();
+		const j = await api('/api/settings');
 		settings.set(j.settings || {});
 		settingsLoaded.set(true);
-		// React to theme immediately
-		const themeKey = 'ui.theme';
-		applyTheme(get(settings)[themeKey]);
+		applyTheme(get(settings)['ui.theme']);
 	} catch (err) {
 		console.error('load settings failed', err);
 	}
 }
 
-/**
- * Update a single setting. Debounced to avoid hammering the server.
- * @param {string} key
- * @param {any} value
- */
-export function updateSetting(key, value) {
-	settings.update((s) => ({ ...s, [key]: value }));
-
-	// Theme: apply instantly on the client
-	if (key === 'ui.theme') applyTheme(value);
-
-	pending[key] = value;
-	if (saveTimer) clearTimeout(saveTimer);
-	saveTimer = setTimeout(flushSettings, 300);
+export function getSetting(key) {
+	return get(settings)[key];
 }
 
-async function flushSettings() {
-	if (Object.keys(pending).length === 0) return;
-	const updates = { ...pending };
-	for (const k of Object.keys(pending)) delete pending[k];
+let saveTimer = null;
+const pending = {};
+
+/** Update one setting (applied immediately, saved after a short debounce). */
+export function updateSetting(key, value) {
+	settings.update((s) => ({ ...s, [key]: value }));
+	if (key === 'ui.theme') applyTheme(value);
+	pending[key] = value;
+	if (saveTimer) clearTimeout(saveTimer);
+	saveTimer = setTimeout(flush, 300);
+}
+
+async function flush() {
 	saveTimer = null;
+	const updates = { ...pending };
+	if (!Object.keys(updates).length) return;
+	for (const k of Object.keys(updates)) delete pending[k];
 	try {
-		const r = await fetch('/api/settings', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ updates })
-		});
-		if (!r.ok) throw new Error(`HTTP ${r.status}`);
+		await api('/api/settings', { method: 'POST', body: { updates } });
 	} catch (err) {
 		console.error('save settings failed', err);
-		// keep the unsaved values (newer edits win) and try again shortly
+		// keep the unsaved values (newer edits win) and retry shortly
 		for (const [k, v] of Object.entries(updates)) if (!(k in pending)) pending[k] = v;
 		toasts.error('设置保存失败，稍后重试');
-		if (!saveTimer) saveTimer = setTimeout(flushSettings, 5000);
+		if (!saveTimer) saveTimer = setTimeout(flush, 5000);
 	}
 }
 
-/**
- * Reset to defaults. Pass null/empty to reset all, or a key for one.
- */
+/** Save several settings at once (settings import). */
+export async function saveSettings(updates) {
+	await api('/api/settings', { method: 'POST', body: { updates } });
+	settings.update((s) => ({ ...s, ...updates }));
+	if ('ui.theme' in updates) applyTheme(updates['ui.theme']);
+}
+
+/** Reset one key (or everything) to its default. */
 export async function resetSettings(key = null) {
-	const url = '/api/settings' + (key ? `?key=${encodeURIComponent(key)}` : '');
-	const r = await fetch(url, { method: 'DELETE' });
-	const j = await r.json();
+	const j = await api('/api/settings', { method: 'DELETE', query: { key } });
 	settings.set(j.settings || {});
 	applyTheme(j.settings?.['ui.theme'] || 'dark');
 }
 
-/**
- * Apply theme to <html>. 'system' follows prefers-color-scheme.
- * @param {string} theme 'dark' | 'light' | 'system'
- */
+/** Apply the theme to <html>. 'system' follows prefers-color-scheme. */
 export function applyTheme(theme) {
 	if (typeof document === 'undefined') return;
-	const root = document.documentElement;
-	if (theme === 'light') {
-		root.dataset.theme = 'light';
-	} else if (theme === 'system') {
-		const sysDark = matchMedia('(prefers-color-scheme: dark)').matches;
-		root.dataset.theme = sysDark ? 'dark' : 'light';
-	} else {
-		root.dataset.theme = 'dark';
-	}
-}
-
-/**
- * Read the current value of a setting.
- */
-export function getSetting(key) {
-	return get(settings)[key];
+	try {
+		localStorage.setItem('vrcx-ng:theme', theme || 'dark');
+	} catch {}
+	const dark = theme === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches : theme !== 'light';
+	document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 }

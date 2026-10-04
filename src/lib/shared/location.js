@@ -196,26 +196,6 @@ export function accessTypeColor(type) {
 }
 
 /**
- * Compact display label like "邀请 (us_xxx)" — used inline in friend rows.
- * @param {string} location
- * @param {string} [groupName]
- */
-export function locationShort(location, groupName = '') {
-	const L = parseLocation(location);
-	if (L.isOffline) return '离线';
-	if (L.isPrivate) return 'Private';
-	if (L.isTraveling) return 'Traveling';
-	if (!L.isRealInstance) return '';
-	if (groupName && L.accessType.startsWith('group')) {
-		return `${accessTypeLabel(L.accessTypeLabel)}(${groupName})`;
-	}
-	if (L.accessType && L.accessType !== 'public') {
-		return accessTypeLabel(L.accessTypeLabel);
-	}
-	return '';
-}
-
-/**
  * Short, human-readable instance label. Avoids showing the raw instance ID
  * (which is usually a long random hash) wherever possible.
  *
@@ -267,4 +247,36 @@ export function regionOf(L) {
 	if (L.region) return L.region;
 	if (L.instanceId) return 'us';
 	return '';
+}
+
+/**
+ * Everything the UI needs to show a place, in one object.
+ *
+ * kind: 'offline' | 'private' | 'traveling' | 'instance' | 'unknown'
+ * (`private` also covers the literal "undefined" some payloads carry.)
+ *
+ * @param {string} location  VRChat location tag
+ * @param {string} [worldName]  cached world name, when known
+ */
+export function describeLocation(location, worldName = '') {
+	const tag = String(location || '');
+	const L = parseLocation(tag);
+	let kind = 'unknown';
+	if (!tag || L.isOffline) kind = 'offline';
+	else if (L.isPrivate || tag === 'undefined') kind = 'private';
+	else if (L.isTraveling) kind = 'traveling';
+	else if (L.isRealInstance && L.worldId) kind = 'instance';
+	const real = kind === 'instance';
+	return {
+		kind,
+		tag,
+		parsed: L,
+		worldId: real ? L.worldId : '',
+		worldName: worldName || '',
+		accessType: real ? L.accessType : '',
+		accessLabel: real ? accessTypeLabel(L.accessTypeLabel) : '',
+		accessClass: real ? accessTypeColor(L.accessTypeLabel) : '',
+		region: real ? regionOf(L).toUpperCase() : '',
+		instance: real ? shortInstanceLabel(L) : ''
+	};
 }

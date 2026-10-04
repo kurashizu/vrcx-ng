@@ -61,10 +61,6 @@ export function trustColor(f) {
 	return trustFromTags(f.tags, f.developerType).cls || trustClassFromLabel(f.trustRank);
 }
 
-export function trustClassFromTags(tags, developerType) {
-	return trustFromTags(tags, developerType).cls;
-}
-
 /** Fallback for objects that only carry the rank label (e.g. 'Known User'). */
 function trustClassFromLabel(label) {
 	switch (String(label || '').toLowerCase().replace(/\s+/g, '')) {

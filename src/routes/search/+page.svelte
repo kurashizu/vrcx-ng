@@ -1,578 +1,178 @@
 <script>
-import { vrImage } from '$lib/shared/format.js';
-	import { accounts } from '$lib/stores/accounts.js';
-	import { openUserDetail } from '$lib/stores/userDetail.js';
-	import { openWorldDetail } from '$lib/stores/worldDetail.js';
-	import { openAvatarDetail } from '$lib/stores/avatarDetail.js';
-	import { timeAgo } from '$lib/shared/format.js';
-	import { trustClassFromTags } from '$lib/shared/trust.js';
-
-	function comma(n) {
-		if (n == null) return '?';
-		return Number(n).toLocaleString();
-	}
-
-	let query = $state('');
-	let type = $state('friends'); // 'friends' | 'users' | 'worlds' | 'avatars'
-	let busy = $state(false);
-	let results = $state([]);
-	let error = $state('');
-	let lastQuery = '';
-	let lastType = '';
-	let inputEl;
-	let accColorCache = new Map();
-
-	function accColor(id) {
-		if (!id) return '#888';
-		if (accColorCache.has(id)) return accColorCache.get(id);
-		let h = 0;
-		for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
-		const v = `hsl(${h % 360}, 60%, 50%)`;
-		accColorCache.set(id, v);
-		return v;
-	}
+	import { onMount } from 'svelte';
+	import { openUser, openWorld, openAvatar } from '$lib/stores/overlay.js';
+	import { accountById, accountLabel } from '$lib/stores/accounts.js';
+	import { api } from '$lib/client/api.js';
+	import { comma, timeAgo, clip } from '$lib/shared/format.js';
+	import { now } from '$lib/stores/clock.js';
+	import Page from '$lib/components/ui/Page.svelte';
+	import Tabs from '$lib/components/ui/Tabs.svelte';
+	import ListRow from '$lib/components/ui/ListRow.svelte';
+	import UserName from '$lib/components/ui/UserName.svelte';
+	import StatusPill from '$lib/components/ui/StatusPill.svelte';
+	import Avatar from '$lib/components/ui/Avatar.svelte';
+	import Notice from '$lib/components/ui/Notice.svelte';
 
 	const TYPES = [
-		{ id: 'friends', label: '我的好友', icon: '👥', hint: '本地缓存（所有账号，无需 API）' },
-		{ id: 'users', label: '用户', icon: '👤', hint: '通过 VRChat API 搜索' },
-		{ id: 'worlds', label: '世界', icon: '🌍', hint: '通过 VRChat API 搜索' },
-		{ id: 'avatars', label: '模型', icon: '🎭', hint: '通过 VRChat API 搜索' }
+		{ id: 'friends', icon: '👥', label: '我的好友' },
+		{ id: 'users', icon: '👤', label: '用户' },
+		{ id: 'worlds', icon: '🌍', label: '世界' },
+		{ id: 'avatars', icon: '🎭', label: '模型' }
 	];
+	const HINT = { friends: '本地缓存，覆盖所有账号，不走 VRChat API', users: '通过 VRChat API 搜索', worlds: '通过 VRChat API 搜索', avatars: '通过 VRChat API 搜索' };
 
-	let timer;
+	let query = $state('');
+	let type = $state('friends');
+	let input = $state(/** @type {HTMLInputElement | undefined} */ (undefined));
+	onMount(() => input?.focus());
+	let busy = $state(false);
+	let error = $state('');
+	let results = $state(/** @type {any[]} */ ([]));
+	/** the type the current `results` belong to (the tab may already have moved on) */
+	let resultType = $state('friends');
+
+	let seq = 0;
+	// debounced search on every keystroke / tab change
 	$effect(() => {
-		// Re-run (debounced) on every keystroke and on a type change. `query`
-		// must be read here: doSearch() runs inside a timeout, where reads are
-		// not tracked, so without this typing never triggered a search.
-		const t = type;
-		void query;
-		clearTimeout(timer);
-		timer = setTimeout(() => doSearch(), t === 'friends' ? 120 : 350);
-		return () => clearTimeout(timer);
-	});
-
-	async function doSearch() {
 		const q = query.trim();
+		const t = type;
 		if (q.length < 2) {
 			results = [];
 			error = '';
 			busy = false;
-			lastQuery = '';
-			lastType = '';
 			return;
 		}
+		const timer = setTimeout(() => search(q, t), t === 'friends' ? 120 : 350);
+		return () => clearTimeout(timer);
+	});
+
+	async function search(q, t) {
+		const mine = ++seq;
 		busy = true;
 		error = '';
-		lastQuery = q;
-		lastType = type;
 		try {
-			const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=${type}&n=24`);
-			const j = await r.json();
-			if (lastQuery !== q || lastType !== type) return; // stale
-			if (!r.ok || !j.ok) {
-				error = j.error || `HTTP ${r.status}`;
-				results = [];
-			} else {
-				results = j.results || [];
-			}
+			const j = await api('/api/search', { query: { q, type: t, n: 24 } });
+			if (mine !== seq) return;
+			results = j.results || [];
+			resultType = t;
 		} catch (err) {
-			if (lastQuery === q && lastType === type) error = err.message;
+			if (mine !== seq) return;
+			error = err.message;
+			results = [];
 		} finally {
-			// a newer search owns `busy` now
-			if (lastQuery === q && lastType === type) busy = false;
+			if (mine === seq) busy = false;
 		}
-	}
-
-	function openFriend(r) {
-		const aId = r.accountIds?.[0];
-		if (!aId) return;
-		openUserDetail(aId, r.userId);
-	}
-
-	function openUserResult(r) {
-		// r.id is the userId; r.accountId is the API account (caller)
-		if (!r.id) return;
-		openUserDetail(lastType === 'users' ? ($accounts.find((a) => a.loggedIn)?.id || '') : '', r.id);
-	}
-
-	function openWorldResult(r) {
-		if (!r.id) return;
-		openWorldDetail(r.id, $accounts.find((a) => a.loggedIn)?.id || '');
-	}
-
-	function trustRankClass(tags = [], developerType = '') {
-		return trustClassFromTags(tags, developerType);
-	}
-
-	function getTags(r) {
-		if (Array.isArray(r.tags)) return r.tags;
-		return [];
-	}
-
-	function stateDot(state) {
-		if (state === 'online') return '🟢';
-		if (state === 'active') return '🔵';
-		return '⚫';
 	}
 </script>
 
-<svelte:head>
-	<title>搜索 — vrcx-ng</title>
-</svelte:head>
-
-<main class="search-page">
-	<header class="search-header">
-		<div class="search-top">
-			<a href="/" class="back">← 返回</a>
-			<h1>🔍 搜索</h1>
+<Page title="搜索" icon="🔍" width="normal">
+	<div class="stack">
+		<div class="box">
+			<input type="search" bind:this={input} bind:value={query} enterkeyhint="search" placeholder={type === 'friends' ? '搜索好友名字 / ID / 备注…' : '输入关键词…'} />
+			{#if busy}<span class="spinner"></span>{/if}
 		</div>
-		<div class="search-bar">
-			<input
-				bind:this={inputEl}
-				bind:value={query}
-				type="search"
-				placeholder={type === 'friends' ? '搜索好友名字 / ID / 备注…' : '输入搜索关键词…'}
-				autofocus
-				enterkeyhint="search"
-			/>
-			{#if busy}
-				<span class="spinner"></span>
-			{/if}
-		</div>
+		<Tabs variant="pill" bind:value={type} tabs={TYPES.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))} />
+		<div class="faint small">{HINT[type]}</div>
+	</div>
 
-		<div class="type-tabs">
-			{#each TYPES as t (t.id)}
-				<button
-					class:active={type === t.id}
-					onclick={() => (type = t.id)}
-					title={t.hint}
-				>
-					<span class="icn">{t.icon}</span>
-					<span class="lbl">{t.label}</span>
-				</button>
+	{#if error}
+		<Notice kind="error" text={error} />
+	{:else if query.trim().length < 2}
+		<Notice text="至少输入 2 个字符开始搜索" />
+	{:else if busy && !results.length}
+		<Notice kind="loading" text="搜索中…" />
+	{:else if !results.length}
+		<Notice text="没有匹配的结果" />
+	{:else}
+		<div class="faint small">{results.length} 条结果</div>
+		<div class="list">
+			{#each results as r (r.userId || r.id)}
+				{#if resultType === 'friends'}
+					<ListRow
+						thumb={r.userThumbnailUrl}
+						name={r.displayName}
+						accountId={r.accountId}
+						presence={r.state}
+						status={r.status}
+						onclick={() => openUser(r.userId, { accountId: r.accountIds?.[0] })}
+					>
+						{#snippet title()}
+							<UserName user={r} />
+							<StatusPill status={r.status} />
+						{/snippet}
+						{#snippet meta()}
+							<span class="mono">{r.userId}</span>
+							{#if r.note}<span>备注：{r.note}</span>{/if}
+							{#if r.location && r.location !== 'offline' && r.worldName}<span>📍 {r.worldName}</span>{/if}
+							{#if r.lastSeen}<span>{timeAgo(r.lastSeen, $now)}</span>{/if}
+						{/snippet}
+						{#snippet trailing()}
+							{#each (r.accountIds || []).slice(0, 3) as aid (aid)}
+								<Avatar name={accountLabel($accountById.get(aid))} size={22} />
+							{/each}
+							{#if (r.accountIds || []).length > 3}<span class="faint small">+{r.accountIds.length - 3}</span>{/if}
+						{/snippet}
+					</ListRow>
+				{:else if resultType === 'users'}
+					<ListRow thumb={r.currentAvatarThumbnailImageUrl || `https://api.vrchat.cloud/api/1/image/${r.id}/1/256.jpg`} name={r.displayName} accountId={r.accountId} onclick={() => openUser(r.id)}>
+						{#snippet title()}
+							<UserName user={r} />
+							<StatusPill status={r.status} />
+							{#if r.developerType && r.developerType !== 'none'}<span class="badge warn">{r.developerType}</span>{/if}
+						{/snippet}
+						{#snippet meta()}
+							<span class="mono">{r.id}</span>
+							{#if r.bio}<span>{clip(r.bio, 80)}</span>{/if}
+							{#if r.last_login}<span>{timeAgo(r.last_login, $now)}上线</span>{/if}
+						{/snippet}
+					</ListRow>
+				{:else if resultType === 'worlds'}
+					<ListRow thumb={r.imageUrl || r.thumbnailImageUrl} name={r.name} accountId={r.accountId} square onclick={() => openWorld(r.id)}>
+						{#snippet title()}
+							{r.name}
+							{#if r.releaseStatus && r.releaseStatus !== 'public'}<span class="badge warn">{r.releaseStatus}</span>{/if}
+						{/snippet}
+						{#snippet meta()}
+							<span>by {r.authorName || r.authorId || '?'}</span>
+							<span>👥 {comma(r.occupants || 0)}{r.capacity ? `/${r.capacity}` : ''}</span>
+							<span>⭐ {comma(r.favorites || 0)}</span>
+							<span>👁 {comma(r.visits || 0)}</span>
+						{/snippet}
+					</ListRow>
+				{:else}
+					<ListRow thumb={r.thumbnailImageUrl || r.imageUrl} name={r.name} accountId={r.accountId} square onclick={() => openAvatar(r.id)}>
+						{#snippet title()}
+							{r.name}
+							{#if r.releaseStatus && r.releaseStatus !== 'public'}<span class="badge warn">{r.releaseStatus}</span>{/if}
+						{/snippet}
+						{#snippet meta()}
+							<span>by {r.authorName || r.authorId || '?'}</span>
+							{#if r.description}<span>{clip(r.description, 80)}</span>{/if}
+						{/snippet}
+					</ListRow>
+				{/if}
 			{/each}
 		</div>
-	</header>
-
-	<section class="results">
-		{#if error}
-			<div class="banner error">⚠ {error}</div>
-		{:else if query.trim().length < 2}
-			<div class="banner hint">至少输入 2 个字符开始搜索</div>
-		{:else if busy && results.length === 0}
-			<div class="banner hint">搜索中…</div>
-		{:else if results.length === 0}
-			<div class="banner hint">没有匹配的结果</div>
-		{:else}
-			<div class="count">共 {results.length} 条结果</div>
-
-			{#if type === 'friends'}
-				<ul class="list friends">
-					{#each results as r (r.userId)}
-						<li>
-							<button class="row" onclick={() => openFriend(r)}>
-								{#if r.userThumbnailUrl}
-									<img
-										class="avatar"
-										src={vrImage(r.userThumbnailUrl, r.accountId)}
-										alt=""
-										loading="lazy"
-									/>
-								{:else}
-									<!-- private avatars have no thumbnail: show the initial like the friend grid -->
-									<div class="avatar initial">{String(r.displayName || '?').slice(0, 1).toUpperCase()}</div>
-								{/if}
-								<div class="info">
-									<div class="name-line">
-										<span class="dot {r.state}"></span>
-										<span class="name {trustRankClass(getTags(r), r.developerType)}">{r.displayName}</span>
-										{#if r.status && r.status !== 'active'}
-											<span class="status-pill status-{r.status.replace(/\s+/g, '-')}">{r.status}</span>
-										{/if}
-									</div>
-									<div class="meta">
-										<span>{r.userId}</span>
-										{#if r.note}<span>· 备注: {r.note}</span>{/if}
-										{#if r.location && r.location !== 'offline'}
-											{#if r.worldName}<span>· 📍 {r.worldName}</span>{/if}
-										{/if}
-										{#if r.lastSeen}
-											<span class="faint">· {timeAgo(new Date(r.lastSeen).toISOString())}</span>
-										{/if}
-									</div>
-								</div>
-								{#if r.accountIds?.length > 0}
-									<div class="acc-pips">
-										{#each r.accountIds.slice(0, 3) as aid (aid)}
-											{@const a = $accounts.find((x) => x.id === aid)}
-											<span
-												class="acc-pip"
-												style:--pip-color={accColor(aid)}
-												title={a?.displayName || aid}
-											>{a?.displayName?.slice(0, 1).toUpperCase() || '?'}</span>
-										{/each}
-										{#if r.accountIds.length > 3}
-											<span class="more">+{r.accountIds.length - 3}</span>
-										{/if}
-									</div>
-								{/if}
-							</button>
-						</li>
-					{/each}
-				</ul>
-
-			{:else if type === 'users'}
-				<ul class="list users">
-					{#each results as r (r.id)}
-						<li>
-							<button class="row" onclick={() => openUserResult(r)}>
-								<img
-									class="avatar"
-									src={vrImage(r.currentAvatarThumbnailImageUrl || `https://api.vrchat.cloud/api/1/image/${r.id}/1/256.jpg`, r.accountId)}
-									alt=""
-									loading="lazy"
-								/>
-								<div class="info">
-									<div class="name-line">
-										<span class="name {trustRankClass(getTags(r), r.developerType)}">{r.displayName}</span>
-										{#if r.status && r.status !== 'active'}
-											<span class="status-pill status-{r.status.replace(/\s+/g, '-')}">{r.status}</span>
-										{/if}
-										{#if r.developerType && r.developerType !== 'none'}
-											<span class="dev-badge">{r.developerType}</span>
-										{/if}
-									</div>
-									<div class="meta">
-										<span>{r.id}</span>
-										{#if r.bio}<span class="bio">· {r.bio.slice(0, 80)}{r.bio.length > 80 ? '…' : ''}</span>{/if}
-										{#if r.last_login}
-											<span class="faint">· {timeAgo(r.last_login)} 上线</span>
-										{/if}
-									</div>
-								</div>
-							</button>
-						</li>
-					{/each}
-				</ul>
-
-			{:else if type === 'worlds'}
-				<ul class="list worlds">
-					{#each results as r (r.id)}
-						<li>
-							<button class="row" onclick={() => openWorldResult(r)}>
-								{#if r.imageUrl || r.thumbnailImageUrl}
-									<img class="thumb" src={vrImage(r.imageUrl || r.thumbnailImageUrl, r.accountId)} alt="" loading="lazy" />
-								{:else}
-									<div class="thumb placeholder">🌍</div>
-								{/if}
-								<div class="info">
-									<div class="name-line">
-										<span class="name">{r.name}</span>
-										{#if r.releaseStatus && r.releaseStatus !== 'public'}
-											<span class="rel-badge rel-{r.releaseStatus}">{r.releaseStatus}</span>
-										{/if}
-									</div>
-									<div class="meta">
-										<span>by {r.authorName || r.authorId || '?'}</span>
-										<span>· 👥 {comma(r.occupants || 0)}{r.capacity ? `/${r.capacity}` : ''}</span>
-										<span>· ⭐ {comma(r.favorites || 0)}</span>
-										<span>· 👁 {comma(r.visits || 0)}</span>
-									</div>
-								</div>
-							</button>
-						</li>
-					{/each}
-				</ul>
-
-			{:else if type === 'avatars'}
-				<ul class="list avatars">
-					{#each results as r (r.id)}
-						<li>
-							<button class="row" onclick={() => openAvatarDetail(r.id, $accounts.find((a) => a.loggedIn)?.id || '')}>
-								{#if r.thumbnailImageUrl || r.imageUrl}
-									<img class="thumb" src={vrImage(r.thumbnailImageUrl || r.imageUrl, r.accountId)} alt="" loading="lazy" />
-								{:else}
-									<div class="thumb placeholder">🎭</div>
-								{/if}
-								<div class="info">
-									<div class="name-line">
-										<span class="name">{r.name}</span>
-										{#if r.releaseStatus && r.releaseStatus !== 'public'}
-											<span class="rel-badge rel-{r.releaseStatus}">{r.releaseStatus}</span>
-										{/if}
-									</div>
-									<div class="meta">
-										<span>by {r.authorName || r.authorId || '?'}</span>
-										{#if r.description}
-											<span class="bio">· {r.description.slice(0, 80)}{r.description.length > 80 ? '…' : ''}</span>
-										{/if}
-									</div>
-								</div>
-							</button>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		{/if}
-	</section>
-</main>
+	{/if}
+</Page>
 
 <style>
-	.search-page {
-		max-width: 760px;
-		margin: 0 auto;
-		padding: 24px 18px 80px;
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-	}
-	.search-header h1 {
-		margin: 0;
-		font-size: 22px;
-	}
-	.search-top {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-	}
-	.back {
-		color: var(--text-dim);
-		font-size: 13px;
-		text-decoration: none;
-		padding: 4px 10px;
-		border-radius: 6px;
-		background: var(--bg-2);
-		border: 1px solid var(--border);
-	}
-	.back:hover {
-		background: var(--bg-3);
-		color: var(--text);
-		text-decoration: none;
-	}
-	.search-bar {
-		display: flex;
-		align-items: center;
-		gap: 10px;
+	.box {
 		position: relative;
 	}
-	.search-bar input {
-		flex: 1;
+	.box input {
+		padding: 11px 14px;
 		font-size: 15px;
-		padding: 10px 14px;
-		background: var(--bg-2);
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		color: var(--text);
 	}
-	.search-bar input:focus {
-		outline: none;
-		border-color: var(--accent);
-	}
-	.spinner {
-		width: 16px;
-		height: 16px;
-		border: 2px solid var(--border);
-		border-top-color: var(--accent);
-		border-radius: 50%;
-		animation: spin 0.7s linear infinite;
-		flex-shrink: 0;
-	}
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-	.type-tabs {
-		display: flex;
-		gap: 6px;
-		flex-wrap: wrap;
-	}
-	.type-tabs button {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 7px 12px;
-		font-size: 13px;
-		background: var(--bg-2);
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		color: var(--text-dim);
-		cursor: pointer;
-	}
-	.type-tabs button.active {
-		background: var(--accent);
-		border-color: var(--accent);
-		color: white;
-	}
-	.type-tabs .icn {
-		font-size: 14px;
-	}
-
-	.banner {
-		padding: 16px;
-		border-radius: 10px;
-		text-align: center;
-		font-size: 13px;
-	}
-	.banner.hint {
-		background: var(--bg-2);
-		color: var(--text-dim);
-	}
-	.banner.error {
-		background: rgba(255, 93, 108, 0.1);
-		color: var(--danger);
-	}
-	.count {
-		font-size: 12px;
-		color: var(--text-dim);
+	.box .spinner {
+		position: absolute;
+		right: 14px;
+		top: 50%;
+		margin-top: -9px;
 	}
 	.list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-	}
-	.list li {
-		margin: 0;
-	}
-	.row {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		width: 100%;
-		padding: 8px 10px;
-		background: var(--bg-2);
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		text-align: left;
-		cursor: pointer;
-		min-width: 0;
-	}
-	.row:hover {
-		background: var(--bg-3);
-		border-color: var(--border-strong);
-	}
-	.avatar,
-	.thumb {
-		flex-shrink: 0;
-		width: 48px;
-		height: 48px;
-		border-radius: 8px;
-		object-fit: cover;
-		background: var(--bg-3);
-	}
-	.avatar.initial {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 20px;
-		font-weight: 600;
-		color: var(--text-dim);
-	}
-	.thumb.placeholder {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 24px;
-	}
-	.info {
-		flex: 1;
-		min-width: 0;
-	}
-	.name-line {
-		display: flex;
-		align-items: center;
 		gap: 6px;
-		flex-wrap: wrap;
-	}
-	.dot {
-		display: inline-block;
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
-	.dot.online { background: var(--online); }
-	.dot.active { background: var(--active); }
-	.dot.offline { background: var(--offline); }
-	.name {
-		font-weight: 600;
-		font-size: 14px;
-	}
-	.name.trust-visitor { color: var(--trust-visitor); }
-	.name.trust-newuser { color: var(--trust-newuser); }
-	.name.trust-user    { color: var(--trust-user); }
-	.name.trust-known   { color: var(--trust-known); }
-	.name.trust-trusted { color: var(--trust-trusted); }
-	.name.trust-troll { color: var(--trust-troll); }
-	.name.trust-vip  { color: var(--trust-vip); }
-	.status-pill {
-		font-size: 10px;
-		padding: 1px 6px;
-		border-radius: 6px;
-		background: var(--bg-3);
-		color: var(--text-dim);
-	}
-	.status-pill.status-join-me { background: rgba(108, 182, 255, 0.15); color: var(--joinme, #6cb6ff); }
-	.status-pill.status-busy { background: rgba(255, 93, 108, 0.15); color: var(--danger); }
-	.status-pill.status-ask-me { background: rgba(255, 180, 84, 0.15); color: var(--warn); }
-	.dev-badge {
-		font-size: 10px;
-		padding: 1px 6px;
-		border-radius: 6px;
-		background: rgba(124, 92, 255, 0.18);
-		color: var(--accent);
-	}
-	.meta {
-		display: flex;
-		gap: 4px;
-		flex-wrap: wrap;
-		font-size: 11px;
-		color: var(--text-dim);
-		margin-top: 2px;
-		overflow: hidden;
-	}
-	.meta > * {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.bio {
-		font-style: italic;
-	}
-	.faint {
-		color: var(--text-faint);
-	}
-	.rel-badge {
-		font-size: 10px;
-		padding: 1px 6px;
-		border-radius: 6px;
-	}
-	.rel-badge.rel-public { background: rgba(61, 220, 151, 0.15); color: var(--online); }
-	.rel-badge.rel-private { background: rgba(255, 180, 84, 0.15); color: var(--warn); }
-	.acc-pips {
-		display: flex;
-		gap: 3px;
-		align-items: center;
-		flex-shrink: 0;
-	}
-	.acc-pip {
-		width: 22px;
-		height: 22px;
-		border-radius: 50%;
-		background: var(--pip-color);
-		color: white;
-		font-size: 11px;
-		font-weight: 700;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		border: 2px solid var(--bg-1);
-		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
-	}
-	.more {
-		font-size: 10px;
-		color: var(--text-dim);
 	}
 </style>

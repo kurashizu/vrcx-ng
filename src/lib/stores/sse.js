@@ -1,102 +1,100 @@
-import { writable, get } from 'svelte/store';
+import { get } from 'svelte/store';
 import { toasts } from './toast.js';
 import { setInitial, pushEntry } from './feed.js';
 import { accounts, accountsLoaded, refreshAccounts } from './accounts.js';
 import { setFriendsSnapshot } from './friends.js';
 import { settings } from './settings.js';
-
-/** Bumped whenever the server reports a notification change (new / seen / dismissed). */
-export const notificationsTick = writable(0);
+import { notificationsTick } from './notifications.js';
 
 let es = null;
 let reconnectTimer = null;
-let outage = false; // a "connection lost" toast is already showing for this outage
+let outage = false; // a "connection lost" toast is already showing
 let retryDelay = 3000;
+let accountsTimer = null;
 
-/**
- * Connect to the SSE feed endpoint. Auto-reconnects on close.
- */
+/** Connect to the SSE endpoint (reconnects on its own). */
 export function connectSSE() {
 	if (es) return;
 	es = new EventSource('/api/feed/events');
 
-	es.addEventListener('hello', (e) => {
+	/** JSON-parse an event and hand it to `fn`; a bad payload is logged, not fatal. */
+	const on = (name, fn) =>
+		es.addEventListener(name, (e) => {
+			try {
+				fn(JSON.parse(/** @type {MessageEvent} */ (e).data));
+			} catch (err) {
+				console.error(`sse ${name}`, err);
+			}
+		});
+
+	on('hello', (data) => {
 		retryDelay = 3000;
 		if (outage) {
 			outage = false;
-			toasts.push('已重新连接', 'success');
+			toasts.success('已重新连接');
 		}
-		try {
-			const data = JSON.parse(e.data);
-			setInitial(data.entries || []);
-			if (data.accounts) applyAccountState(data.accounts);
-			if (data.friends) setFriendsSnapshot(data.friends);
-		} catch (err) {
-			console.error('hello parse', err);
-		}
+		setInitial(data.entries || []);
+		if (data.accounts) applyConnectionState(data.accounts);
+		if (data.friends) setFriendsSnapshot(data.friends);
 	});
 
-	es.addEventListener('feed', (e) => {
-		try {
-			const entry = JSON.parse(e.data);
-			pushEntry(entry);
-			desktopNotify(entry);
-		} catch (err) {
-			console.error('feed parse', err);
-		}
+	on('feed', (entry) => {
+		pushEntry(entry);
+		desktopNotify(entry);
 	});
 
-	es.addEventListener('accounts', (e) => {
-		try {
-			const data = JSON.parse(e.data);
-			if (data.accounts) applyAccountState(data.accounts);
-			// The SSE accounts payload only carries {connected}; refresh the
-			// full account list so the bar picks up currentUser.location
-			// (and other session-derived fields) after a user-location event.
-			scheduleAccountsRefresh();
-		} catch (err) {
-			console.error('accounts parse', err);
-		}
+	on('accounts', (data) => {
+		if (data.accounts) applyConnectionState(data.accounts);
+		// the SSE payload only carries {connected}; re-read the list so the
+		// sidebar picks up each account's current location / status too
+		scheduleAccountsRefresh();
 	});
 
+	on('friends', setFriendsSnapshot);
 	es.addEventListener('notifications', () => notificationsTick.update((n) => n + 1));
 
-	es.addEventListener('friends', (e) => {
-		try {
-			const data = JSON.parse(e.data);
-			setFriendsSnapshot(data);
-		} catch (err) {
-			console.error('friends parse', err);
-		}
-	});
-
 	es.addEventListener('error', () => {
-		// EventSource auto-reconnects, but if it permanently closes (readyState CLOSED), we fall back
-		if (es?.readyState === EventSource.CLOSED) {
-			es = null;
-			if (!outage) {
-				outage = true;
-				toasts.push('连接已断开，正在重试…', 'error');
-			}
-			reconnectTimer = setTimeout(connectSSE, retryDelay);
-			retryDelay = Math.min(retryDelay * 2, 30000);
+		// EventSource retries transient drops by itself; only a permanent close needs us
+		if (es?.readyState !== EventSource.CLOSED) return;
+		es = null;
+		if (!outage) {
+			outage = true;
+			toasts.error('连接已断开，正在重试…');
 		}
+		reconnectTimer = setTimeout(connectSSE, retryDelay);
+		retryDelay = Math.min(retryDelay * 2, 30000);
 	});
+}
 
-	// EventSource has a built-in auto-reconnect on transient drops, but
-	// it doesn't emit a fresh event when it does — we still get a
-	// subsequent 'hello' on the new socket. No extra work needed here.
+export function disconnectSSE() {
+	clearTimeout(reconnectTimer);
+	reconnectTimer = null;
+	es?.close();
+	es = null;
+}
+
+function scheduleAccountsRefresh() {
+	if (accountsTimer) return;
+	accountsTimer = setTimeout(() => {
+		accountsTimer = null;
+		refreshAccounts().catch((err) => console.error('accounts refresh', err));
+	}, 800);
+}
+
+function applyConnectionState(stateMap) {
+	accounts.update((arr) => arr.map((a) => (stateMap[a.id] ? { ...a, connected: !!stateMap[a.id].connected } : a)));
+	accountsLoaded.set(true);
 }
 
 /**
- * Browser notification for an incoming feed entry, per the "通知" settings.
- * Only for a tab the user isn't looking at, and only where the browser allows
- * the Notification API (https or localhost — not plain http on the LAN).
+ * Browser notification for an incoming entry, per the "通知" settings. Only for
+ * a tab nobody is looking at, and only where the browser offers the
+ * Notification API (https or localhost — not plain http on the LAN).
  */
 function desktopNotify(entry) {
 	try {
 		if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-		if (typeof document !== 'undefined' && document.visibilityState === 'visible') return;
+		if (document.visibilityState === 'visible') return;
 		const s = get(settings);
 		if (!s['notification.desktop']) return;
 		const who = entry.displayName || entry.userId || '';
@@ -115,32 +113,4 @@ function desktopNotify(entry) {
 		}
 		new Notification(title, { body, tag: entry.id });
 	} catch {}
-}
-
-let accountsRefreshTimer = null;
-function scheduleAccountsRefresh() {
-	if (accountsRefreshTimer) return;
-	accountsRefreshTimer = setTimeout(() => {
-		accountsRefreshTimer = null;
-		refreshAccounts().catch((err) => console.error('accounts refresh', err));
-	}, 800);
-}
-
-function applyAccountState(stateMap) {
-	accounts.update((arr) =>
-		arr.map((a) => {
-			const s = stateMap[a.id];
-			return s ? { ...a, connected: !!s.connected } : a;
-		})
-	);
-	accountsLoaded.set(true);
-}
-
-export function disconnectSSE() {
-	if (reconnectTimer) clearTimeout(reconnectTimer);
-	reconnectTimer = null;
-	if (es) {
-		es.close();
-		es = null;
-	}
 }

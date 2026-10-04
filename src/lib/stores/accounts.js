@@ -1,4 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
+import { api, accountPath } from '$lib/client/api.js';
 import { toasts } from './toast.js';
 
 /**
@@ -8,7 +9,7 @@ import { toasts } from './toast.js';
  * @property {string} displayName
  * @property {boolean} loggedIn
  * @property {boolean} connected
- * @property {{id:string,displayName:string,currentAvatarThumbnailImageUrl?:string}|null} currentUser
+ * @property {any} currentUser   session user (id, displayName, location, status, avatar thumbnail…)
  * @property {string|null} lastError
  * @property {number|null} lastLoginAt
  */
@@ -16,81 +17,88 @@ import { toasts } from './toast.js';
 export const accounts = writable(/** @type {AccountView[]} */ ([]));
 export const accountsLoaded = writable(false);
 
-export const onlineCount = derived(accounts, ($a) => $a.filter((x) => x.connected).length);
-export const loggedInCount = derived(accounts, ($a) => $a.filter((x) => x.loggedIn).length);
+export const accountById = derived(accounts, ($a) => new Map($a.map((a) => [a.id, a])));
+export const loggedInAccounts = derived(accounts, ($a) => $a.filter((a) => a.loggedIn));
+export const accountSummary = derived(accounts, ($a) => ({
+	total: $a.length,
+	loggedIn: $a.filter((a) => a.loggedIn).length,
+	live: $a.filter((a) => a.connected).length
+}));
+
+/** Set when a login needs a 2FA code; the layout shows the dialog. */
+export const twofaRequest = writable(/** @type {{ accountId: string, methods: string[] } | null} */ (null));
+
+/**
+ * Name to show for an account: a nickname given when adding it, else the VRChat
+ * display name once logged in, else the login name.
+ * @param {{ displayName?: string, username?: string, currentUser?: { displayName?: string } | null } | undefined} a
+ */
+export function accountLabel(a) {
+	const nickname = a?.displayName && a.displayName !== a.username ? a.displayName : '';
+	return nickname || a?.currentUser?.displayName || a?.displayName || a?.username || '';
+}
+
+/** `accountLabel` by account id (short id as a fallback). */
+export function accountName(id) {
+	return accountLabel(get(accountById).get(id)) || String(id || '').slice(0, 6);
+}
 
 export async function refreshAccounts() {
-	const r = await fetch('/api/accounts');
-	const j = await r.json();
+	const j = await api('/api/accounts');
 	accounts.set(j.accounts || []);
 	accountsLoaded.set(true);
 	return j.accounts || [];
 }
 
 export async function addAccount(username, password, displayName) {
-	const r = await fetch('/api/accounts', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ username, password, displayName })
-	});
-	const j = await r.json();
-	if (!r.ok) {
-		toasts.error(j.error || 'Failed to add account');
-		throw new Error(j.error);
-	}
+	const j = await api('/api/accounts', { method: 'POST', body: { username, password, displayName } });
 	await refreshAccounts();
 	return j.account;
 }
 
 export async function removeAccount(id) {
-	const r = await fetch(`/api/accounts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-	if (!r.ok) {
-		const j = await r.json().catch(() => ({}));
-		toasts.error(j.error || 'Delete failed');
-		return;
+	try {
+		await api('/api/accounts', { method: 'DELETE', query: { id } });
+		await refreshAccounts();
+		toasts.success('账号已删除');
+	} catch (err) {
+		toasts.error(err.message || '删除失败');
 	}
-	await refreshAccounts();
-	toasts.success('Account removed');
 }
 
 /**
- * @returns {Promise<{ ok: boolean, requires2fa?: string[], user?: any, error?: string }>}
+ * Log an account in. When VRChat asks for a second factor the 2FA dialog is
+ * raised through `twofaRequest`.
+ * @returns {Promise<{ ok: boolean, requires2fa?: string[], error?: string }>}
  */
 export async function loginAccount(id, opts = {}) {
-	const r = await fetch(`/api/accounts/${id}/login`, {
+	const res = await fetch(`${accountPath(id)}/login`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(opts)
 	});
-	const j = await r.json();
-	if (!r.ok && !j.requires2fa) {
-		toasts.error(j.error || 'Login failed');
-	}
-	await refreshAccounts();
-	return j;
+	const j = await res.json().catch(() => ({}));
+	if (j.requires2fa) twofaRequest.set({ accountId: id, methods: j.requires2fa });
+	else if (!res.ok) toasts.error(j.error || '登录失败');
+	await refreshAccounts().catch(() => {});
+	return { ok: res.ok && !j.requires2fa, requires2fa: j.requires2fa, error: j.error };
 }
 
 export async function logoutAccount(id) {
-	const r = await fetch(`/api/accounts/${id}/logout`, { method: 'POST' });
-	if (!r.ok) {
-		const j = await r.json().catch(() => ({}));
-		toasts.error(j.error || 'Logout failed');
-		return;
+	try {
+		await api(`${accountPath(id)}/logout`, { method: 'POST' });
+		await refreshAccounts();
+		toasts.success('已登出');
+	} catch (err) {
+		toasts.error(err.message || '登出失败');
 	}
-	await refreshAccounts();
-	toasts.success('Logged out');
 }
 
 export async function reconnectAccount(id) {
-	const r = await fetch(`/api/accounts/${id}/reconnect`, { method: 'POST' });
-	const j = await r.json();
-	if (!r.ok || !j.ok) {
-		toasts.error(j.error || 'Reconnect failed');
-		return;
+	try {
+		await api(`${accountPath(id)}/reconnect`, { method: 'POST' });
+		toasts.success('已请求重连');
+	} catch (err) {
+		toasts.error(err.message || '重连失败');
 	}
-	toasts.success('Reconnect requested');
-}
-
-export function findAccount(id) {
-	return get(accounts).find((a) => a.id === id);
 }

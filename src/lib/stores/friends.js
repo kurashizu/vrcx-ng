@@ -1,157 +1,109 @@
 import { writable, derived } from 'svelte/store';
+import { api } from '$lib/client/api.js';
 
 /**
- * @typedef {{
- *   id: string,
- *   displayName: string,
- *   currentAvatarThumbnailImageUrl?: string,
- *   status?: string,
- *   statusDescription?: string,
- *   state?: 'online'|'active'|'offline',
- *   location?: string,
- *   platform?: string,
- *   last_platform?: string,
- *   lastSeen?: number,
- *   accountIds: string[]
- * }} FriendEntry
+ * @typedef {Object} Friend
+ * @property {string} id
+ * @property {string} displayName
+ * @property {'online'|'active'|'offline'} state
+ * @property {string} [status]
+ * @property {string} [statusDescription]
+ * @property {string} [location]
+ * @property {string} [worldId]
+ * @property {string} [worldName]
+ * @property {string} [platform]
+ * @property {string} [currentAvatar]
+ * @property {string} [currentAvatarThumbnailImageUrl]
+ * @property {number} [lastSeen]
+ * @property {boolean} [vrcPlus]
+ * @property {string[]} [tags]
+ * @property {string} [developerType]
+ * @property {string} [trustRank]
+ * @property {string|null} [groupName]   local friend group
+ * @property {string[]} accountIds       accounts that have this user as a friend
  */
 
-/** @type {import('svelte/store').Writable<{ online: FriendEntry[], active: FriendEntry[], offline: FriendEntry[], total: number, byAccount: Record<string, number> }>} */
-export const friendsData = writable({
-	online: [],
-	active: [],
-	offline: [],
-	total: 0,
-	byAccount: {}
-});
+const EMPTY = { online: [], active: [], offline: [], total: 0, byAccount: {}, self: [] };
 
-export const friendSearch = writable('');
+/** Aggregated friend snapshot across all accounts (pushed over SSE). */
+export const friendsData = writable(/** @type {{ online: Friend[], active: Friend[], offline: Friend[], total: number, byAccount: Record<string, number>, self: any[] }} */ (EMPTY));
 
-/** which group is selected: 'all' | 'online' | 'active' | 'offline' */
-export const friendGroupFilter = writable('all');
+export const friendList = derived(friendsData, ($d) => [...$d.online, ...$d.active, ...$d.offline]);
 
-/** which account to filter friends by (null = all) */
-export const friendAccountFilter = writable(/** @type {string|null} */ (null));
-
-/**
- * userId -> displayName, built from the current snapshot. Lets feed items
- * (and anything else) resolve a name when an entry only carries a raw usr_id.
- * @type {import('svelte/store').Readable<Map<string, string>>}
- */
-export const friendNameById = derived(friendsData, ($data) => {
+/** userId → friend; lets feed items, dialogs and menus resolve names / thumbnails / accounts. */
+export const friendIndex = derived(friendList, ($list) => {
+	/** @type {Map<string, Friend>} */
 	const m = new Map();
-	for (const list of [$data.online, $data.active, $data.offline]) {
-		for (const f of list) {
-			if (f?.displayName && f.displayName !== f.id && !m.has(f.id)) {
-				m.set(f.id, f.displayName);
-			}
-		}
-	}
+	for (const f of $list) if (!m.has(f.id)) m.set(f.id, f);
 	return m;
 });
 
-/**
- * userId → { displayName, thumbnail, platform, location, worldName } resolved
- * from the aggregated friend snapshot (used as client-side fallbacks).
- * @type {import('svelte/store').Readable<Map<string, {displayName:string, thumbnail:string, platform:string, location:string, worldName:string}>>}
- */
-export const friendInfoById = derived(friendsData, ($data) => {
+/** worldId → name, learned from friends that stand in the world (for places that only know the id). */
+export const worldNames = derived(friendList, ($list) => {
+	/** @type {Map<string, string>} */
 	const m = new Map();
-	for (const list of [$data.online, $data.active, $data.offline]) {
-		for (const f of list) {
-			if (m.has(f.id)) continue;
-			m.set(f.id, {
-				displayName: f.displayName || '',
-				thumbnail: f.currentAvatarThumbnailImageUrl || '',
-				platform: f.platform || '',
-				location: f.location || '',
-				worldName: f.worldName || '',
-				// needed for the trust-rank colour (trustColor reads these)
-				tags: f.tags || [],
-				developerType: f.developerType || '',
-				trustRank: f.trustRank || ''
-			});
-		}
-	}
+	for (const f of $list) if (f.worldId && f.worldName && !m.has(f.worldId)) m.set(f.worldId, f.worldName);
 	return m;
 });
-
-export const filteredFriends = derived(
-	[friendsData, friendSearch, friendGroupFilter, friendAccountFilter],
-	([$data, $search, $group, $account]) => {
-		const q = $search.trim().toLowerCase();
-		const matches = (f) => {
-			if ($account && !f.accountIds.includes($account)) return false;
-			if (!q) return true;
-			return (
-				(f.displayName || '').toLowerCase().includes(q) ||
-				(f.location || '').toLowerCase().includes(q)
-			);
-		};
-		const out = {
-			online: $data.online.filter(matches),
-			active: $data.active.filter(matches),
-			offline: $data.offline.filter(matches)
-		};
-		out.total = out.online.length + out.active.length + out.offline.length;
-		return out;
-	}
-);
 
 export function setFriendsSnapshot(data) {
-	friendsData.set(
-		data || { online: [], active: [], offline: [], total: 0, byAccount: {} }
-	);
+	friendsData.set(data ? { ...EMPTY, ...data } : EMPTY);
 }
 
-/**
- * One-shot HTTP fetch of the current friend snapshot. Useful as a fallback
- * when SSE has not delivered any data yet (e.g. after a server restart
- * killed the prior EventSource and the page just mounted).
- *
- * Returns the data on success, throws on failure.
- */
+/** One-shot HTTP fetch of the snapshot (fallback while SSE has not delivered yet). */
 export async function fetchFriendsSnapshot() {
-	const r = await fetch('/api/friends');
-	if (!r.ok) throw new Error(`HTTP ${r.status}`);
-	const j = await r.json();
+	const j = await api('/api/friends');
 	setFriendsSnapshot(j);
 	return j;
 }
 
 /**
- * Start a watchdog that refetches the friend snapshot while the store is
- * still empty (e.g. right after a server restart). It starts at 3 s, backs
- * off to 30 s and gives up after ~10 minutes, so an account with no friends
- * (or nobody logged in) doesn't poll forever. It stops as soon as the store
- * contains data.
- *
- * Returns a stop() function to cancel the watchdog.
+ * Re-fetch the snapshot while the store is still empty (right after a server
+ * restart): starts at 3 s, backs off to 30 s, gives up after ~10 minutes so an
+ * account without friends doesn't poll forever. Returns a stop function.
  */
-export function startEmptyFriendsWatchdog() {
-	let cancelled = false;
+export function startFriendsWatchdog() {
+	let stopped = false;
 	let delay = 3000;
+	let empty = true;
+	const unsub = friendsData.subscribe((d) => (empty = !(d.total > 0)));
 	const giveUpAt = Date.now() + 10 * 60 * 1000;
+	let timer;
 	const tick = async () => {
-		if (cancelled || Date.now() > giveUpAt) return;
-		let empty = true;
-		const unsub = friendsData.subscribe((d) => {
-			empty = !(d?.total > 0);
-		});
-		unsub();
-		if (!empty) return;
-		try {
-			await fetchFriendsSnapshot();
-		} catch {
-			/* keep trying */
-		}
-		if (!cancelled) {
-			setTimeout(tick, delay);
-			delay = Math.min(Math.round(delay * 1.5), 30000);
-		}
+		if (stopped || !empty || Date.now() > giveUpAt) return;
+		await fetchFriendsSnapshot().catch(() => {});
+		if (stopped) return;
+		timer = setTimeout(tick, delay);
+		delay = Math.min(Math.round(delay * 1.5), 30000);
 	};
-	setTimeout(tick, 500);
+	timer = setTimeout(tick, 500);
 	return () => {
-		cancelled = true;
+		stopped = true;
+		clearTimeout(timer);
+		unsub();
 	};
+}
+
+// ---- local friend groups (VIP buckets) ----
+
+/** @type {import('svelte/store').Writable<{ groups: any[], members: Record<string, string[]> }>} */
+export const friendGroups = writable({ groups: [], members: {} });
+
+export async function loadFriendGroups() {
+	try {
+		const j = await api('/api/friend-groups');
+		const members = {};
+		for (const g of j.groups || []) members[g.name] = (j.members?.[g.name] || []).map((m) => m.userId);
+		friendGroups.set({ groups: j.groups || [], members });
+	} catch (err) {
+		console.error('load friend groups', err);
+	}
+}
+
+export async function setFriendGroupMember(groupName, userId, member) {
+	await api('/api/friend-groups', {
+		method: 'POST',
+		body: { action: member ? 'addMember' : 'removeMember', groupName, userId }
+	});
+	await loadFriendGroups();
 }

@@ -21,11 +21,13 @@
   - 👤 切换模型 (带 before / after 对比)
   - 🤝 好友请求 / ✉️ 邀请 / 🚪 实例关闭
   - 🏢 群组事件 / 🎟️ 加入实例队列 / 🔔 通知 v1 / v2
-- **好友列表** — 在线 / Active / 离线分组，按世界聚合，显示
-  Trust Rank 颜色
-- **右键菜单** — 查看详情、复制实例链接（启动 VRChat）、请求加入实例、
-  静音 / 屏蔽、复制 ID、打开主页
-- **用户详情面板** — 头像 / Bio / 当前世界 / 模型 / 世界 / 徽章
+- **好友列表** — 右侧栏按世界 / 分组 / 平铺三种方式展示在线好友，附带「同实例」和
+  VIP 分组置顶；`/friends` 是同一份数据的全屏网格总览。显示 Trust Rank 颜色
+- **右键菜单** — 查看详情、请求加入、邀请自己到 TA 的实例、复制实例链接、
+  静音 / 屏蔽、加入本地分组、复制 ID、打开主页（多账号时先选操作账号）
+- **详情弹窗** — 用户 / 世界 / 模型三种弹窗可以层层叠开、逐层返回（Esc 关最上面一层）：
+  用户（Bio / 位置 / 模型 / 世界 / 徽章 / 备注 / 各种操作）、世界（实例列表、邀请自己 /
+  邀请好友 / 请求房主邀请、创建实例）、模型（换装、收藏）
 - **OSC Chatbox** — 浏览器里发消息到 VRChat chatbox（自带 OSC 编码，
   不需要 Python 桥接）。目标地址在 UI 里可改
 - **邀请 / 请求** — 对好友永远可以「请求加入」（不管 TA 在不在游戏里）；也可以从
@@ -66,6 +68,30 @@ Browser ──SSE──> SvelteKit (Node)
 5. 同时写 SQLite（feed_events、friends、notifications、world_cache…）
 
 Cookie 401 时自动用本地加密的密码重新登录。
+
+## 前端结构
+
+SvelteKit + Svelte 5（runes），纯 SPA（`ssr = false`），全局状态用 `svelte/store`，
+`src/lib` 下按职责分层：
+
+```
+shared/      纯函数：格式化、location 解析、trust rank、feed 类型注册表、presence 颜色
+client/      浏览器侧逻辑：api()/run() 请求封装、动作（复制 / 自邀 / 屏蔽…）、好友分组与
+             排序、好友右键菜单、createResource（带过期保护的异步加载）
+stores/      accounts · friends · feed · settings · notifications · overlay（弹窗栈 / 确认框 /
+             右键菜单）· sse（事件流）
+components/
+  ui/        无业务的积木：Modal · Avatar · UserName · Place · AccessBadge · StatusPill ·
+             Tabs · Section · Toggle · ListRow · Notice · Page · ContextMenu · Toasts…
+  layout/    侧栏、账号列表与账号操作、弹窗宿主 OverlayHost
+  friends/   好友栏（FriendRail / FriendRow）与总览卡片（FriendCard）
+  feed/      FeedItem · FeedToolbar
+  dialogs/   用户 / 世界 / 模型详情，通知，邀请消息，收藏，邀请好友，资料编辑，登录 / 2FA
+routes/      动态 · 好友总览 · 搜索 · 统计 · 屏蔽 · Chatbox · 设置
+```
+
+约定：裸 `<button>` 无样式，需要按钮外观时用 `.btn`（`primary / ghost / danger / sm / xs / icon`）；
+颜色、圆角、阴影都来自 `app.css` 里的设计 token（深色 / 浅色两套）。
 
 ## 启动
 
