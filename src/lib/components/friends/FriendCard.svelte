@@ -1,4 +1,5 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { platformLabel } from '$lib/shared/presence.js';
 	import { openUser, openAvatar } from '$lib/stores/overlay.js';
 	import { openFriendMenu } from '$lib/client/friendMenu.js';
@@ -33,11 +34,11 @@
 		<div class="meta">
 			<StatusPill status={f.status} />
 			{#if f.platform}<span class="faint">{platformLabel(f.platform)}</span>{/if}
-			{#if f.accountIds?.length > 1}<span class="faint" title="{f.accountIds.length} 个账号都是 TA 的好友">×{f.accountIds.length}</span>{/if}
+			{#if f.accountIds?.length > 1}<span class="faint" title="Friends with {f.accountIds.length} of your accounts">×{f.accountIds.length}</span>{/if}
 		</div>
 	</div>
 	{#if f.currentAvatar}
-		<button class="av" title="查看当前模型" onclick={(e) => (e.stopPropagation(), openAvatar(f.currentAvatar, accountId))}>🧍</button>
+		<button class="av" title="View current avatar" onclick={(e) => (e.stopPropagation(), openAvatar(f.currentAvatar, accountId))}><Icon name="user" /></button>
 	{/if}
 </div>
 

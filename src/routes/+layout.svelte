@@ -1,4 +1,5 @@
 <script>
+	import Icon from '$lib/components/ui/Icon.svelte';
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { afterNavigate } from '$app/navigation';
@@ -60,10 +61,10 @@
 
 <div class="shell" class:no-rail={!hasRail}>
 	<div class="topbar">
-		<button class="btn ghost icon" onclick={() => ((navOpen = !navOpen), (railOpen = false))} aria-label="菜单">☰</button>
+		<button class="btn ghost icon" onclick={() => ((navOpen = !navOpen), (railOpen = false))} aria-label="Menu"><Icon name="menu" /></button>
 		<span class="title">vrcx-ng</span>
 		{#if hasRail}
-			<button class="btn ghost icon" onclick={() => ((railOpen = !railOpen), (navOpen = false))} aria-label="好友">👥</button>
+			<button class="btn ghost icon" onclick={() => ((railOpen = !railOpen), (navOpen = false))} aria-label="Friends"><Icon name="users" /></button>
 		{:else}
 			<span class="ph"></span>
 		{/if}

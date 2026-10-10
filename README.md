@@ -1,52 +1,67 @@
 # vrcx-ng
 
-一个基于 SvelteKit 的多账号 VRChat 动态聚合 + Chatbox 转发 Web App，
-参考 [VRCX](https://github.com/vrcx-team/VRCX) 的 API 实现。
+A multi-account VRChat feed aggregator and chatbox relay built on SvelteKit,
+modelled on the API usage of [VRCX](https://github.com/vrcx-team/VRCX).
 
-> 名字由来：`VRCX` (Next Generation) — 在 VRCX 的 API 基础上做一个
-> 轻量、纯 Web 的多账号客户端。
+> The name: `VRCX` (Next Generation) — a lightweight, web-only, multi-account
+> client built on top of VRCX's API knowledge.
 
-> ⚠️ **免责声明**：本项目仅做 API 客户端 / 转发，不参与任何 VRChat 服务端逻辑。
-> 使用前请遵守 [VRChat 服务条款](https://hello.vrchat.com/legal)，
-> 不要用本工具绕过任何速率限制或反作弊措施。
+> **Disclaimer**: this project is only an API client / relay and takes no part
+> in any VRChat server logic. Follow the [VRChat Terms of Service](https://hello.vrchat.com/legal)
+> and do not use this tool to bypass rate limits or anti-cheat measures.
 
-## 功能
+## Features
 
-- **多账号管理** — 同时添加 / 登录多个 VRChat 账号，密码用
-  AES-256-GCM 本地加密存储
-- **实时动态 feed** — 统一聚合所有账号的好友动态：
-  - 🟢 上线 / ⚫ 离线 / 🔵 Active
-  - 📍 移动世界 (GPS，可点击启动 VRChat)
-  - 💬 状态变更 / ✏️ Bio 变更
-  - 👤 切换模型 (带 before / after 对比)
-  - 🤝 好友请求 / ✉️ 邀请 / 🚪 实例关闭
-  - 🏢 群组事件 / 🎟️ 加入实例队列 / 🔔 通知 v1 / v2
-- **好友列表** — 右侧栏按世界 / 分组 / 平铺三种方式展示在线好友，附带「同实例」和
-  VIP 分组置顶；`/friends` 是同一份数据的全屏网格总览。显示 Trust Rank 颜色
-- **右键菜单** — 查看详情、请求加入、邀请自己到 TA 的实例、复制实例链接、
-  静音 / 屏蔽、加入本地分组、复制 ID、打开主页（多账号时先选操作账号）
-- **详情弹窗** — 用户 / 世界 / 模型三种弹窗可以层层叠开、逐层返回（Esc 关最上面一层）：
-  用户（Bio / 位置 / 模型 / 世界 / 徽章 / 备注 / 各种操作）、世界（实例列表、邀请自己 /
-  邀请好友 / 请求房主邀请、创建实例）、模型（换装、收藏）
-- **OSC Chatbox** — 浏览器里发消息到 VRChat chatbox（自带 OSC 编码，
-  不需要 Python 桥接）。目标地址在 UI 里可改
-- **邀请 / 请求** — 对好友永远可以「请求加入」（不管 TA 在不在游戏里）；也可以从
-  VRChat 的 12 条预设消息里选一条一起发送，或改写后再发
-- **通知操作** — 在通知面板里直接接受好友请求、邀请 TA 进你的实例、用预设消息
-  回复并拒绝；「已读 / 忽略」会同步到 VRChat（游戏里和 VRCX 里也跟着变）
-- **备注与收藏** — 用户备注（VRChat 的 `userNotes`，游戏里也看得到）；好友 / 世界 /
-  模型可以加入 VRChat 自己的收藏分组（与游戏、VRCX 共用）
-- **好友日志** — 好友改名、信任等级变化会进 feed
-- **统计** — `/stats`：好友在线时长排行、上线时段分布、热门世界（来自已落库的 feed，
-  从开始记录的那天起逐渐完整）
-- **持久化** — SQLite (better-sqlite3)：feed 历史、通知、收藏、分组、设置
-  重启后都在。feed 按「设置 → 动态 → 保留天数」清理（默认 30 天，0 = 永久）
-- **自动同步** — pipeline 断线重连后、以及每小时，都会全量重新同步好友列表
-  （VRChat 的 websocket 偶尔会丢事件）；重连采用 5 s → 5 min 指数退避
-- **离线判定** — 好友的 Offline 事件会延迟 170 s 再进 feed，期间重新上线则两条
-  都不记（与 VRCX 一致，过滤切换实例时的瞬时掉线）
+- **Multi-account management** — add and log in to several VRChat accounts at
+  once; passwords are stored locally with AES-256-GCM encryption
+- **Live feed** — friend activity of all accounts in one stream:
+  - online / offline / active
+  - world changes (GPS)
+  - status and bio changes
+  - avatar switches (with before / after comparison)
+  - friend requests, invites, instance closures
+  - group events, instance queue joins, notifications v1 / v2
+- **Friend list** — the right rail shows online friends by world, by group or
+  flat, with a "same instance" section and pinned VIP groups; `/friends` is a
+  full-screen grid of the same data. Trust rank colors are shown
+- **Context menu** — view details, request invite, invite yourself to their
+  instance, copy instance link, mute / block, add to a local group, copy ID,
+  open the vrchat.com profile (with several accounts you pick the acting one)
+- **Detail dialogs** — user, world and avatar dialogs stack on top of each
+  other and unwind one level at a time (Esc closes the top one):
+  user (bio / location / avatars / worlds / badges / note / actions), world
+  (instance list, invite yourself / friends, ask the owner for an invite,
+  create an instance), avatar (wear, favorite)
+- **OSC chatbox** — send messages to the VRChat chatbox from the browser (OSC
+  encoding is built in, no Python bridge needed). The target address can be
+  changed in the UI
+- **Invites / requests** — you can always "request invite" for a friend (even
+  when they are not in game); you can also attach one of VRChat's 12 preset
+  messages, or rewrite one before sending
+- **Notification actions** — accept friend requests, invite them to your
+  instance, or reply and decline with a preset message right from the
+  notification panel; "seen / dismiss" is synced to VRChat (so the game and
+  VRCX follow)
+- **Notes and favorites** — user notes (VRChat's `userNotes`, also visible in
+  game); friends / worlds / avatars can be added to VRChat's own favorite
+  groups (shared with the game and VRCX)
+- **Friend log** — friend renames and trust rank changes appear in the feed
+- **Stats** — `/stats`: online time ranking, sign-on hours, popular worlds
+  (computed from the stored feed, so it fills in from the day recording began)
+- **Persistence** — SQLite (better-sqlite3): feed history, notifications,
+  favorites, groups and settings survive restarts. The feed is pruned by
+  "Settings → Feed → History retention" (default 30 days, 0 = forever)
+- **Auto sync** — after a pipeline reconnect, and every hour, the friend list
+  is fully re-synced (VRChat's websocket occasionally drops events);
+  reconnects use exponential backoff from 5 s to 5 min
+- **Offline detection** — a friend's Offline event is held back for 170 s
+  before it enters the feed; if they come back in that window neither event is
+  recorded (same as VRCX, filters out the brief drop while switching instances)
 
-## 架构
+This app is a message display panel: it never launches the VRChat client
+(no `vrchat://` links); joining an instance goes through invites.
+
+## Architecture
 
 ```
 Browser ──SSE──> SvelteKit (Node)
@@ -55,129 +70,134 @@ Browser ──SSE──> SvelteKit (Node)
                   ├── dgram UDP       →  VRChat OSC chatbox
                   │
                   └── WebSocket per account → wss://pipeline.vrchat.cloud
-                                              (×N 账号并行)
+                                              (×N accounts in parallel)
 ```
 
-每个账号登录后：
-1. 用 Basic Auth 调 `auth/user` 拿 cookie jar
-2. 调 `auth` 拿 pipeline token
-3. 打开 `wss://pipeline.vrchat.cloud/?auth=…`
-4. 把 `friend-online/offline/location/update`、`user-location/update`、
-   `notification-v2`、`group-*`、`instance-queue-*` 等事件转为
-   `FeedEntry` 推给所有 SSE 订阅者
-5. 同时写 SQLite（feed_events、friends、notifications、world_cache…）
+After login, for every account:
+1. Call `auth/user` with Basic Auth to get the cookie jar
+2. Call `auth` to get the pipeline token
+3. Open `wss://pipeline.vrchat.cloud/?auth=…`
+4. Turn `friend-online/offline/location/update`, `user-location/update`,
+   `notification-v2`, `group-*`, `instance-queue-*` and similar events into
+   `FeedEntry` objects and push them to every SSE subscriber
+5. Write to SQLite as well (feed_events, friends, notifications, world_cache…)
 
-Cookie 401 时自动用本地加密的密码重新登录。
+On a cookie 401 the app logs in again with the locally encrypted password.
 
-## 前端结构
+## Frontend structure
 
-SvelteKit + Svelte 5（runes），纯 SPA（`ssr = false`），全局状态用 `svelte/store`，
-`src/lib` 下按职责分层：
+SvelteKit + Svelte 5 (runes), a pure SPA (`ssr = false`), global state with
+`svelte/store`. `src/lib` is layered by responsibility:
 
 ```
-shared/      纯函数：格式化、location 解析、trust rank、feed 类型注册表、presence 颜色
-client/      浏览器侧逻辑：api()/run() 请求封装、动作（复制 / 自邀 / 屏蔽…）、好友分组与
-             排序、好友右键菜单、createResource（带过期保护的异步加载）
-stores/      accounts · friends · feed · settings · notifications · overlay（弹窗栈 / 确认框 /
-             右键菜单）· sse（事件流）
+shared/      pure functions: formatting, location parsing, trust rank, feed type registry, presence colors
+client/      browser logic: api()/run() request wrappers, actions (copy / self-invite / block…),
+             friend grouping and sorting, friend context menu, createResource (async loading with stale guard)
+stores/      accounts · friends · feed · settings · notifications · overlay (dialog stack / confirm /
+             context menu) · sse (event stream)
 components/
-  ui/        无业务的积木：Modal · Avatar · UserName · Place · AccessBadge · StatusPill ·
-             Tabs · Section · Toggle · ListRow · Notice · Page · ContextMenu · Toasts…
-  layout/    侧栏、账号列表与账号操作、弹窗宿主 OverlayHost
-  friends/   好友栏（FriendRail / FriendRow）与总览卡片（FriendCard）
+  ui/        business-free building blocks: Modal · Avatar · UserName · Place · AccessBadge · StatusPill ·
+             Tabs · Section · Toggle · ListRow · Notice · Page · ContextMenu · Toasts · Icon…
+  layout/    sidebar, account list and account actions, the dialog host OverlayHost
+  friends/   friend rail (FriendRail / FriendRow) and overview card (FriendCard)
   feed/      FeedItem · FeedToolbar
-  dialogs/   用户 / 世界 / 模型详情，通知，邀请消息，收藏，邀请好友，资料编辑，登录 / 2FA
-routes/      动态 · 好友总览 · 搜索 · 统计 · 屏蔽 · Chatbox · 设置
+  dialogs/   user / world / avatar details, notifications, invite messages, favorites, invite friends,
+             profile editor, login / 2FA
+routes/      feed · friends overview · search · stats · moderation · chatbox · settings
 ```
 
-约定：裸 `<button>` 无样式，需要按钮外观时用 `.btn`（`primary / ghost / danger / sm / xs / icon`）；
-颜色、圆角、阴影都来自 `app.css` 里的设计 token（深色 / 浅色两套）。
+Conventions: a bare `<button>` is unstyled; use `.btn` (`primary / ghost / danger / sm / xs / icon`)
+for the button look; colors, radii and shadows come from the design tokens in `app.css`
+(dark and light sets). Icons are inline SVGs from `components/ui/Icon.svelte`
+(`<Icon name="user" />`); the UI contains no emoji.
 
-## 启动
+## Getting started
 
-### 1. 装依赖
+### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2. 配置
+### 2. Configure
 
 ```bash
 cp .env.example .env
 ```
 
-编辑 `.env`，**至少**把 `ACCOUNT_ENCRYPTION_KEY` 换成你自己的 32 字节
-随机 hex：
+Edit `.env` and **at least** replace `ACCOUNT_ENCRYPTION_KEY` with your own
+random 32-byte hex string:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-`.env` 是 gitignored 的，所以不会进版本库。
+`.env` is gitignored, so it never enters version control.
 
-### 3. 启动
+### 3. Run
 
 ```bash
-# 开发模式
+# development
 npm run dev
 
-# 生产模式
+# production
 npm run build
 node build
 # => http://0.0.0.0:3333
 ```
 
-### 4. (可选) Chatbox OSC 目标
+### 4. (Optional) Chatbox OSC target
 
-默认 `127.0.0.1:9000`（VRChat 本机）。在 chatbox 页面的右上角输入新地址
-保存即可，存到 SQLite `settings` 表。
+Defaults to `127.0.0.1:9000` (VRChat on the same machine). Enter a new address
+at the top right of the chatbox page and save it; it is stored in the SQLite
+`settings` table.
 
-> 💡 VRChat 默认只允许本机 OSC 输入。如果你的 VRChat 跑在另一台机器
-> 上，把 `VRChat → Settings → OSC → Network` 设成允许，然后把
-> chatbox 目标 IP 改成那台机器的局域网 IP。
+> Note: VRChat only accepts OSC input from the local machine by default. If
+> your VRChat runs on another machine, allow it under
+> `VRChat → Settings → OSC → Network` and change the chatbox target IP to that
+> machine's LAN IP.
 >
-> ⚠️ **强烈不建议把 OSC 监听端口暴露到公网**。
+> **Exposing the OSC listening port to the internet is strongly discouraged.**
 
-## API 概览
+## API overview
 
-| 路由 | 说明 |
+| Route | Description |
 | --- | --- |
-| `GET /api/accounts` | 列出所有账号（不含密码） |
-| `POST /api/accounts` | 添加账号（加密存密码；同用户名重复添加会更新原账号） |
-| `DELETE /api/accounts?id=…` | 删除账号（连同它在 SQLite 里的 feed / 通知 / 收藏等数据） |
-| `POST /api/accounts/:id/login` | 登录（可带 `twoFactorCode`，恢复码自动格式化为 `XXXX-XXXX`） |
-| `POST /api/accounts/:id/logout` | 登出 |
-| `POST /api/accounts/:id/reconnect` | 强制重连 pipeline 并重新同步好友 |
-| `GET /api/accounts/:id/friends` | 该账号的好友原始列表（`n` 1–100） |
-| `GET /api/accounts/:id/user/:userId` | 用户详情（bio / 头像 / 世界 / 徽章，5 分钟缓存，`?fresh=1` 跳过缓存） |
-| `POST /api/accounts/:id/actions` | mute / unmute / block / unblock / requestInvite（可带 `requestSlot`）/ invite（可带 `messageSlot`）/ friendRequest / cancelFriendRequest / unfriend |
+| `GET /api/accounts` | List all accounts (without passwords) |
+| `POST /api/accounts` | Add an account (password stored encrypted; adding the same username again updates the existing account) |
+| `DELETE /api/accounts?id=…` | Remove an account (together with its feed / notifications / favorites in SQLite) |
+| `POST /api/accounts/:id/login` | Log in (accepts `twoFactorCode`; recovery codes are formatted to `XXXX-XXXX` automatically) |
+| `POST /api/accounts/:id/logout` | Log out |
+| `POST /api/accounts/:id/reconnect` | Force a pipeline reconnect and re-sync friends |
+| `GET /api/accounts/:id/friends` | Raw friend list of that account (`n` 1–100) |
+| `GET /api/accounts/:id/user/:userId` | User details (bio / avatars / worlds / badges, cached 5 min, `?fresh=1` skips the cache) |
+| `POST /api/accounts/:id/actions` | mute / unmute / block / unblock / requestInvite (optional `requestSlot`) / invite (optional `messageSlot`) / friendRequest / cancelFriendRequest / unfriend |
 | `POST /api/accounts/:id/instance-action` | createInstance / selfInvite / requestInvite |
-| `GET /api/accounts/:id/moderations?type=mute\|block` | 当前生效的静音 / 屏蔽列表 |
-| `POST /api/accounts/:id/profile` | 修改自己的 bio / bioLinks（`PUT profile/:id`）与状态 / 代词（`PUT users/:id`） |
-| `GET/PUT /api/accounts/:id/invite-messages?type=message\|request\|response\|requestResponse` | 12 条预设消息（读取 / 修改，修改后该槽冷却约 60 分钟） |
-| `POST /api/accounts/:id/notification` | accept（好友请求）/ hide / see / respond（预设消息回复并拒绝），同时作用于 VRChat 与本地收件箱 |
-| `POST /api/accounts/:id/note` | 保存用户备注 |
-| `GET/POST/DELETE /api/accounts/:id/vrc-favorites` | VRChat 收藏分组与条目（好友 / 世界 / 模型） |
-| `GET /api/stats?days=1\|7\|30\|90` | 活跃度统计 |
-| `GET /api/friends` | 多账号去重后的聚合好友列表 |
-| `GET /api/notifications` / `POST` | 通知收件箱 / 标记已读、忽略 |
-| `GET /api/feed?limit&before&type&accountId&userId` | feed 历史（SQLite，向前翻页） |
-| `GET /api/feed/events` | SSE 实时流（`hello` / `feed` / `accounts` / `friends` / `notifications` / `ping`） |
-| `GET /api/search?q&type=friends\|users\|worlds\|avatars` | 搜索（friends 为本地缓存） |
-| `GET /api/worlds/:id` | 世界详情 + 在这个世界里的好友 + 各实例 |
-| `GET /api/avatars/:id` / `POST /api/avatars/:id/actions` | 模型详情 / 换装、本地收藏 |
-| `GET/POST/DELETE /api/favorites` | 本地收藏（好友 / 模型 / 世界） |
-| `/api/friend-groups` | 本地好友分组（一个好友同时只属于一个分组） |
-| `GET/POST/DELETE /api/settings` | 设置 |
-| `POST /api/chatbox/send` | 发 chatbox 消息（服务端保证两次发送间隔 ≥ 1.5 s，排队而不丢） |
-| `POST /api/chatbox/typing` | 切换 typing 指示 |
-| `GET /api/chatbox/health` | chatbox 目标地址（UDP 无握手，仅解析主机名） |
-| `GET /api/img-proxy?u=…` | 带账号 cookie 的 VRChat 图片代理 |
+| `GET /api/accounts/:id/moderations?type=mute\|block` | Currently active mute / block list |
+| `POST /api/accounts/:id/profile` | Edit your own bio / bioLinks (`PUT profile/:id`) and status / pronouns (`PUT users/:id`) |
+| `GET/PUT /api/accounts/:id/invite-messages?type=message\|request\|response\|requestResponse` | The 12 preset messages (read / edit; an edited slot cools down for about 60 minutes) |
+| `POST /api/accounts/:id/notification` | accept (friend request) / hide / see / respond (reply and decline with a preset message); applies to VRChat and the local inbox |
+| `POST /api/accounts/:id/note` | Save a user note |
+| `GET/POST/DELETE /api/accounts/:id/vrc-favorites` | VRChat favorite groups and entries (friends / worlds / avatars) |
+| `GET /api/stats?days=1\|7\|30\|90` | Activity statistics |
+| `GET /api/friends` | Aggregated friend list, de-duplicated across accounts |
+| `GET /api/notifications` / `POST` | Notification inbox / mark seen, dismiss |
+| `GET /api/feed?limit&before&type&accountId&userId` | Feed history (SQLite, paged backwards) |
+| `GET /api/feed/events` | Live SSE stream (`hello` / `feed` / `accounts` / `friends` / `notifications` / `ping`) |
+| `GET /api/search?q&type=friends\|users\|worlds\|avatars` | Search (friends uses the local cache) |
+| `GET /api/worlds/:id` | World details + friends in that world + its instances |
+| `GET /api/avatars/:id` / `POST /api/avatars/:id/actions` | Avatar details / wear, local favorite |
+| `GET/POST/DELETE /api/favorites` | Local favorites (friends / avatars / worlds) |
+| `/api/friend-groups` | Local friend groups (a friend belongs to one group at a time) |
+| `GET/POST/DELETE /api/settings` | Settings |
+| `POST /api/chatbox/send` | Send a chatbox message (the server keeps sends ≥ 1.5 s apart, queueing instead of dropping) |
+| `POST /api/chatbox/typing` | Toggle the typing indicator |
+| `GET /api/chatbox/health` | Chatbox target address (UDP has no handshake; only resolves the hostname) |
+| `GET /api/img-proxy?u=…` | VRChat image proxy using the account cookie |
 
-## systemd 部署
+## systemd deployment
 
-参考 `vrcx-ng.service`：
+See `vrcx-ng.service`:
 
 ```ini
 [Unit]
@@ -200,32 +220,33 @@ WantedBy=default.target
 mkdir -p ~/.config/systemd/user
 cp vrcx-ng.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-loginctl enable-linger $USER      # 开机自启
+loginctl enable-linger $USER      # start at boot
 systemctl --user enable --now vrcx-ng
 journalctl --user -u vrcx-ng -f
 ```
 
-## 安全 / 隐私
+## Security / privacy
 
-- 密码用 AES-256-GCM + `ACCOUNT_ENCRYPTION_KEY` 加密后存 SQLite
-  `accounts.password_enc` 字段
-- Cookie 只在服务端使用，**绝不会**通过 API 返回给前端
-- `data/vrcx-ng.db` 含敏感数据 — gitignored，请勿提交
-- `.env` 也是 gitignored
-- 部署前请确保 `AccountEncryptionKey` 是你自己生成的随机值（不要用示例值）
+- Passwords are encrypted with AES-256-GCM + `ACCOUNT_ENCRYPTION_KEY` and stored
+  in the SQLite `accounts.password_enc` column
+- Cookies are only used on the server and are **never** returned to the frontend through the API
+- `data/vrcx-ng.db` contains sensitive data — it is gitignored, do not commit it
+- `.env` is gitignored as well
+- Before deploying, make sure `ACCOUNT_ENCRYPTION_KEY` is a random value you generated yourself (not the example value)
 
-## 与 VRCX 的差异
+## Differences from VRCX
 
 | | VRCX | vrcx-ng |
 | --- | --- | --- |
-| 平台 | Electron 桌面 | Web（任何浏览器） |
-| 多账号 | ✅ | ✅ |
-| 存储 | sql.js（内存 + WASM） | better-sqlite3（文件） |
-| Chatbox 转发 | ✅（内置） | ✅（集成） |
-| VR 模式 | ✅ | ❌（暂未实现） |
-| Dashboard / Charts | ✅ | 部分（`/stats` 统计页） |
-| i18n | 多语言 | 中文 |
+| Platform | Electron desktop | Web (any browser) |
+| Multi-account | yes | yes |
+| Storage | sql.js (in memory + WASM) | better-sqlite3 (file) |
+| Chatbox relay | yes (built in) | yes (integrated) |
+| Launching VRChat | yes | no (display panel only) |
+| VR mode | yes | no (not implemented) |
+| Dashboard / charts | yes | partial (`/stats` page) |
+| i18n | many languages | English |
 
-## 许可证
+## License
 
 MIT

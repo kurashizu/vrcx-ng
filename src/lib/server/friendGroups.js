@@ -7,17 +7,17 @@ import { getDb } from './db.js';
  * `group_0`..`group_3` slots.
  *
  * Default groups (VRCX-compatible keys):
- *   group_0 — Friends / 朋友
- *   group_1 — Acquaintance / 熟人
- *   group_2 — Work / 工作
- *   group_3 — Other / 其他
+ *   group_0 — Friends
+ *   group_1 — Acquaintance
+ *   group_2 — Work
+ *   group_3 — Other
  */
 
 const DEFAULTS = [
-	{ name: 'group_0', displayName: '朋友', sortOrder: 0, color: '#3ddc97' },
-	{ name: 'group_1', displayName: '熟人', sortOrder: 1, color: '#1fb8ff' },
-	{ name: 'group_2', displayName: '工作', sortOrder: 2, color: '#ffb454' },
-	{ name: 'group_3', displayName: '其他', sortOrder: 3, color: '#b27cff' }
+	{ name: 'group_0', displayName: 'Friends', sortOrder: 0, color: '#3ddc97' },
+	{ name: 'group_1', displayName: 'Acquaintances', sortOrder: 1, color: '#1fb8ff' },
+	{ name: 'group_2', displayName: 'Work', sortOrder: 2, color: '#ffb454' },
+	{ name: 'group_3', displayName: 'Other', sortOrder: 3, color: '#b27cff' }
 ];
 
 /**
@@ -58,7 +58,7 @@ export function getGroup(name) {
 
 export function createGroup({ name, displayName, color = '#7c5cff' }) {
 	if (!name || !displayName) throw new Error('name and displayName required');
-	if (getGroup(name)) throw new Error('分组已存在');
+	if (getGroup(name)) throw new Error('Group already exists');
 	const db = getDb();
 	const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM friend_groups').get().m;
 	db.prepare(

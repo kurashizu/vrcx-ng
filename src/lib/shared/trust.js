@@ -78,16 +78,3 @@ function trustClassFromLabel(label) {
 			return '';
 	}
 }
-
-/**
- * Build a vrchat:// launch URL for a given world/instance (the same format
- * VRCX uses). Sentinels (offline/private/traveling/local:*) have no URL.
- * @param {string} location  e.g. "wrld_xxx:12345~private(usr_x)"
- * @param {string} [shortName]
- * @returns {string|null}
- */
-export function vrcLaunchUrl(location, shortName = '') {
-	if (!location || !String(location).startsWith('wrld_')) return null;
-	const sn = shortName ? `&shortName=${encodeURIComponent(shortName)}` : '';
-	return `vrchat://launch?ref=vrcx-ng&id=${location}${sn}`;
-}

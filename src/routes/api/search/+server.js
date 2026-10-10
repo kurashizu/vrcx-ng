@@ -42,7 +42,7 @@ export async function GET({ url }) {
 		}
 
 		if (!accountId) {
-			return json({ ok: false, error: '需要至少一个已登录账号才能搜索 VRChat API' }, { status: 400 });
+			return json({ ok: false, error: 'At least one logged-in account is needed to search the VRChat API' }, { status: 400 });
 		}
 
 		const params = { search: q, n, offset };

@@ -11,10 +11,10 @@ export const MAX_LINES = 9;
  */
 export function validateChatText(text) {
 	if (typeof text !== 'string') throw new Error('text must be a string');
-	if (text.length === 0) throw new Error('text 不能为空');
-	if (text.length > MAX_CHARS) throw new Error(`text 过长: ${text.length} > ${MAX_CHARS} 字符`);
+	if (text.length === 0) throw new Error('text must not be empty');
+	if (text.length > MAX_CHARS) throw new Error(`text too long: ${text.length} > ${MAX_CHARS} characters`);
 	const nlines = text.split('\n').length;
-	if (nlines > MAX_LINES) throw new Error(`text 换行过多: ${nlines} > ${MAX_LINES} 行`);
+	if (nlines > MAX_LINES) throw new Error(`text has too many line breaks: ${nlines} > ${MAX_LINES} lines`);
 	return text;
 }
 
@@ -38,7 +38,7 @@ let lastSentAt = 0;
 let queued = 0;
 
 function spaced(fn) {
-	if (queued >= MAX_QUEUED) return Promise.reject(new Error('发送过于频繁，请稍后再试'));
+	if (queued >= MAX_QUEUED) return Promise.reject(new Error('Sending too fast, try again shortly'));
 	queued++;
 	const run = sendChain.then(async () => {
 		try {

@@ -1,4 +1,5 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { untrack } from 'svelte';
 	import { closeOverlay, openUser } from '$lib/stores/overlay.js';
 	import { accountById, accountLabel } from '$lib/stores/accounts.js';
@@ -22,8 +23,8 @@
 	const avatarId = untrack(() => request.avatarId);
 	let accountId = $state(untrack(() => request.accountId));
 
-	const RATING = { Excellent: '极佳', Good: '良好', Medium: '中等', Poor: '较差', VeryPoor: '很差' };
-	const RELEASE = { public: '公开', private: '私有' };
+	const RATING = { Excellent: 'Excellent', Good: 'Good', Medium: 'Medium', Poor: 'Poor', VeryPoor: 'Very poor' };
+	const RELEASE = { public: 'Public', private: 'Private' };
 
 	const res = createResource(() => api(`/api/avatars/${encodeURIComponent(avatarId)}`));
 	$effect(() => {
@@ -45,7 +46,7 @@
 	let wearing = $state(false);
 	async function wear() {
 		wearing = true;
-		await run(() => api(`/api/avatars/${encodeURIComponent(avatarId)}/actions`, { method: 'POST', body: { action: 'select', accountId } }), '已换上这个模型');
+		await run(() => api(`/api/avatars/${encodeURIComponent(avatarId)}/actions`, { method: 'POST', body: { action: 'select', accountId } }), 'Avatar changed');
 		wearing = false;
 	}
 
@@ -55,7 +56,7 @@
 
 <Modal size="md" flush onclose={closeOverlay}>
 	{#if res.loading && !av}
-		<Notice kind="loading" text="加载模型详情…" />
+		<Notice kind="loading" text="Loading avatar…" />
 	{:else if res.error}
 		<Notice kind="error" text={res.error} onretry={() => res.load()} />
 	{:else if av}
@@ -73,40 +74,40 @@
 							{platformLabel(p.platform)}{#if p.performanceRating} · {RATING[p.performanceRating] || p.performanceRating}{/if}{#if p.fileSizeInBytes} · {size(p.fileSizeInBytes)}{/if}
 						</span>
 					{/each}
-					{#if av.featured}<span class="badge warn">🔥 精选</span>{/if}
+					{#if av.featured}<span class="badge warn"><Icon name="flame" /> Featured</span>{/if}
 				</div>
 			</div>
 		</Hero>
 
 		<div class="bar">
-			<button class="btn primary sm" disabled={wearing || !accountId} onclick={wear}>{wearing ? '切换中…' : '🎭 换装'}</button>
+			<button class="btn primary sm" disabled={wearing || !accountId} onclick={wear}>{wearing ? 'Switching…' : 'Wear'}</button>
 			{#if res.data.selectableAccounts?.length > 1}
-				<select class="acc-select" bind:value={accountId} title="用哪个账号换装 / 收藏">
+				<select class="acc-select" bind:value={accountId} title="Account used to wear / favorite">
 					{#each res.data.selectableAccounts as a (a.id)}<option value={a.id}>{accountLabel($accountById.get(a.id) || a)}</option>{/each}
 				</select>
 			{/if}
-			<button class="btn sm" disabled={!accountId} onclick={() => (favOpen = true)}>⭐ 收藏</button>
-			<button class="btn ghost sm" onclick={() => copyText(av.id, '模型 ID')}>📋 ID</button>
-			<button class="btn ghost sm" onclick={() => copyText(av.name, '模型名')}>📋 名字</button>
+			<button class="btn sm" disabled={!accountId} onclick={() => (favOpen = true)}><Icon name="star" /> Favorite</button>
+			<button class="btn ghost sm" onclick={() => copyText(av.id, 'avatar ID')}><Icon name="copy" /> ID</button>
+			<button class="btn ghost sm" onclick={() => copyText(av.name, 'avatar name')}><Icon name="copy" /> Name</button>
 		</div>
 
 		<div class="pane">
 			{#if av.description}<Block><p class="desc">{av.description}</p></Block>{/if}
 			{#if styles.length || tags.length}
-				<Block title="标签">
+				<Block title="Tags">
 					<div class="tags">
-						{#each styles as s (s)}<span class="badge accent">🎨 {s}</span>{/each}
+						{#each styles as s (s)}<span class="badge accent"><Icon name="palette" /> {s}</span>{/each}
 						{#each contentTags as t (t)}<span class="badge warn">{prettyTag(t)}</span>{/each}
 						{#each authorTags as t (t)}<span class="badge accent">{prettyTag(t)}</span>{/each}
 						{#each otherTags as t (t)}<span class="badge">{t}</span>{/each}
 					</div>
 				</Block>
 			{/if}
-			<Block title="信息">
+			<Block title="Info">
 				<Facts min={180}>
-					<Fact label="版本">{av.version ?? '—'}</Fact>
-					<Fact label="创建">{formatDateTime(av.created_at) || '—'}</Fact>
-					<Fact label="更新">{formatDateTime(av.updated_at) || '—'}</Fact>
+					<Fact label="Version">{av.version ?? '—'}</Fact>
+					<Fact label="Created">{formatDateTime(av.created_at) || '—'}</Fact>
+					<Fact label="Updated">{formatDateTime(av.updated_at) || '—'}</Fact>
 					<Fact label="ID" wide><code class="mono">{av.id}</code></Fact>
 				</Facts>
 			</Block>
@@ -114,7 +115,7 @@
 	{/if}
 </Modal>
 
-<VrcFavoriteDialog bind:open={favOpen} {accountId} kind="avatar" objectId={avatarId} title="VRChat 模型收藏" />
+<VrcFavoriteDialog bind:open={favOpen} {accountId} kind="avatar" objectId={avatarId} title="VRChat avatar favorites" />
 
 <style>
 	.who {

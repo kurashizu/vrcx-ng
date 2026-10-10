@@ -1,6 +1,6 @@
 <script>
 	/**
-	 * Instance access type (邀请 / 好友+ / 群组…) and region as small badges.
+	 * Instance access type (Invite / Friends+ / Group…) and region as small badges.
 	 * Public instances show nothing unless `showPublic`.
 	 *
 	 * @type {{ place: ReturnType<typeof import('$lib/shared/location.js').describeLocation>, showPublic?: boolean }}

@@ -22,11 +22,11 @@
 
 	const sections = $derived(
 		[
-			{ key: 'game', title: '在游戏中', dot: 'var(--online)', list: inGame },
-			{ key: 'traveling', title: '🧳 旅行中', dot: 'var(--online)', list: grouped.traveling },
-			{ key: 'incognito', title: '🙈 隐身中', dot: 'var(--online)', list: grouped.incognito },
-			{ key: 'active', title: '在线（未在游戏中）', dot: 'var(--active)', list: active },
-			{ key: 'offline', title: '离线', dot: 'var(--offline)', list: offline }
+			{ key: 'game', title: 'In game', dot: 'var(--online)', list: inGame },
+			{ key: 'traveling', icon: 'plane', title: 'Traveling', dot: 'var(--online)', list: grouped.traveling },
+			{ key: 'incognito', icon: 'eye-off', title: 'Hidden', dot: 'var(--online)', list: grouped.incognito },
+			{ key: 'active', title: 'Online (not in game)', dot: 'var(--active)', list: active },
+			{ key: 'offline', title: 'Offline', dot: 'var(--offline)', list: offline }
 		].filter((s) => s.list.length)
 	);
 	const shown = $derived(sections.reduce((n, s) => n + s.list.length, 0));
@@ -39,19 +39,19 @@
 	}
 </script>
 
-<Page title="好友总览" icon="▦" subtitle="所有账号的好友合并后的网格视图" width="wide">
+<Page title="Friends" icon="grid" subtitle="Friends of all accounts merged into one grid" width="wide">
 	{#snippet actions()}
-		<span class="muted small">{shown} 人</span>
-		<input type="search" class="search" placeholder="筛选好友 / 世界…" bind:value={query} />
+		<span class="muted small">{shown} friends</span>
+		<input type="search" class="search" placeholder="Filter friends / worlds…" bind:value={query} />
 	{/snippet}
 
 	{#if shown === 0}
-		<Notice icon="👥" text={$friendsData.total ? '没有匹配的好友' : '还没有好友数据'} />
+		<Notice icon="users" text={$friendsData.total ? 'No matching friends' : 'No friend data yet'} />
 	{/if}
 
 	{#each sections as s (s.key)}
 		<div class="block">
-			<Section title={s.title} count={s.list.length} dot={s.dot} open={!$collapsed[s.key]} ontoggle={(o) => setOpen(s.key, o)}>
+			<Section icon={s.icon} title={s.title} count={s.list.length} dot={s.dot} open={!$collapsed[s.key]} ontoggle={(o) => setOpen(s.key, o)}>
 				<div class="grid">
 					{#each s.list as f (f.id)}
 						<FriendCard friend={f} />

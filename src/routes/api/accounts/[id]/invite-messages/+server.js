@@ -20,7 +20,7 @@ export async function PUT({ params, request }) {
 	const body = await request.json().catch(() => ({}));
 	const message = typeof body.message === 'string' ? body.message.trim() : '';
 	if (!message || message.length > 64) {
-		return json({ ok: false, error: '消息不能为空，且最多 64 个字符' }, { status: 400 });
+		return json({ ok: false, error: 'Message must not be empty and at most 64 characters' }, { status: 400 });
 	}
 	const r = await editInviteMessage(params.id, body.type, Number(body.slot), message);
 	return json(r, { status: r.ok ? 200 : 400 });

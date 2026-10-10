@@ -1,4 +1,5 @@
 <script>
+	import Icon from '$lib/components/ui/Icon.svelte';
 	import { onMount } from 'svelte';
 	import { openUser, openWorld, openAvatar } from '$lib/stores/overlay.js';
 	import { accountById, accountLabel } from '$lib/stores/accounts.js';
@@ -14,12 +15,12 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 
 	const TYPES = [
-		{ id: 'friends', icon: '👥', label: '我的好友' },
-		{ id: 'users', icon: '👤', label: '用户' },
-		{ id: 'worlds', icon: '🌍', label: '世界' },
-		{ id: 'avatars', icon: '🎭', label: '模型' }
+		{ id: 'friends', icon: 'users', label: 'My friends' },
+		{ id: 'users', icon: 'user', label: 'Users' },
+		{ id: 'worlds', icon: 'globe', label: 'Worlds' },
+		{ id: 'avatars', icon: 'shirt', label: 'Avatars' }
 	];
-	const HINT = { friends: '本地缓存，覆盖所有账号，不走 VRChat API', users: '通过 VRChat API 搜索', worlds: '通过 VRChat API 搜索', avatars: '通过 VRChat API 搜索' };
+	const HINT = { friends: 'Local cache across all accounts; no VRChat API', users: 'Searched through the VRChat API', worlds: 'Searched through the VRChat API', avatars: 'Searched through the VRChat API' };
 
 	let query = $state('');
 	let type = $state('friends');
@@ -65,10 +66,10 @@
 	}
 </script>
 
-<Page title="搜索" icon="🔍" width="normal">
+<Page title="Search" icon="search" width="normal">
 	<div class="stack">
 		<div class="box">
-			<input type="search" bind:this={input} bind:value={query} enterkeyhint="search" placeholder={type === 'friends' ? '搜索好友名字 / ID / 备注…' : '输入关键词…'} />
+			<input type="search" bind:this={input} bind:value={query} enterkeyhint="search" placeholder={type === 'friends' ? 'Search friend name / ID / note…' : 'Enter keywords…'} />
 			{#if busy}<span class="spinner"></span>{/if}
 		</div>
 		<Tabs variant="pill" bind:value={type} tabs={TYPES.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))} />
@@ -78,13 +79,13 @@
 	{#if error}
 		<Notice kind="error" text={error} />
 	{:else if query.trim().length < 2}
-		<Notice text="至少输入 2 个字符开始搜索" />
+		<Notice text="Type at least 2 characters to search" />
 	{:else if busy && !results.length}
-		<Notice kind="loading" text="搜索中…" />
+		<Notice kind="loading" text="Searching…" />
 	{:else if !results.length}
-		<Notice text="没有匹配的结果" />
+		<Notice text="No matching results" />
 	{:else}
-		<div class="faint small">{results.length} 条结果</div>
+		<div class="faint small">{results.length} results</div>
 		<div class="list">
 			{#each results as r (r.userId || r.id)}
 				{#if resultType === 'friends'}
@@ -102,8 +103,8 @@
 						{/snippet}
 						{#snippet meta()}
 							<span class="mono">{r.userId}</span>
-							{#if r.note}<span>备注：{r.note}</span>{/if}
-							{#if r.location && r.location !== 'offline' && r.worldName}<span>📍 {r.worldName}</span>{/if}
+							{#if r.note}<span>Note: {r.note}</span>{/if}
+							{#if r.location && r.location !== 'offline' && r.worldName}<span><Icon name="pin" /> {r.worldName}</span>{/if}
 							{#if r.lastSeen}<span>{timeAgo(r.lastSeen, $now)}</span>{/if}
 						{/snippet}
 						{#snippet trailing()}
@@ -123,7 +124,7 @@
 						{#snippet meta()}
 							<span class="mono">{r.id}</span>
 							{#if r.bio}<span>{clip(r.bio, 80)}</span>{/if}
-							{#if r.last_login}<span>{timeAgo(r.last_login, $now)}上线</span>{/if}
+							{#if r.last_login}<span>last online {timeAgo(r.last_login, $now)}</span>{/if}
 						{/snippet}
 					</ListRow>
 				{:else if resultType === 'worlds'}
@@ -134,9 +135,9 @@
 						{/snippet}
 						{#snippet meta()}
 							<span>by {r.authorName || r.authorId || '?'}</span>
-							<span>👥 {comma(r.occupants || 0)}{r.capacity ? `/${r.capacity}` : ''}</span>
-							<span>⭐ {comma(r.favorites || 0)}</span>
-							<span>👁 {comma(r.visits || 0)}</span>
+							<span><Icon name="users" /> {comma(r.occupants || 0)}{r.capacity ? `/${r.capacity}` : ''}</span>
+							<span><Icon name="star" /> {comma(r.favorites || 0)}</span>
+							<span><Icon name="eye" /> {comma(r.visits || 0)}</span>
 						{/snippet}
 					</ListRow>
 				{:else}

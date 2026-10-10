@@ -40,23 +40,23 @@
  * Object order is the display order of the type chips.
  */
 export const FEED_META = {
-	Online: { icon: '🟢', color: 'var(--online)', label: '上线', verb: '上线了' },
-	Offline: { icon: '⚫', color: 'var(--offline)', label: '离线', verb: '离线了' },
-	Active: { icon: '🔵', color: 'var(--active)', label: 'Active', verb: '变成了 Active' },
-	GPS: { icon: '📍', color: 'var(--warn)', label: '移动', verb: '移动到了' },
-	Status: { icon: '💬', color: 'var(--accent-2)', label: '状态', verb: '更改了状态' },
-	Bio: { icon: '✏️', color: 'var(--accent)', label: 'Bio', verb: '更新了 Bio' },
-	Avatar: { icon: '👤', color: '#ff8ec6', label: '模型', verb: '切换了模型' },
-	Join: { icon: '➡️', color: 'var(--join)', label: '加入', verb: '加入了' },
-	Leave: { icon: '⬅️', color: 'var(--leave)', label: '离开', verb: '离开了' },
-	FriendRequest: { icon: '🤝', color: 'var(--request)', label: '好友请求', verb: '发来好友请求' },
-	Invite: { icon: '✉️', color: 'var(--request)', label: '邀请', verb: '发来邀请' },
-	'Instance.Closed': { icon: '🚪', color: 'var(--danger)', label: '实例关闭', verb: '实例已关闭' },
-	Friend: { icon: '🧑‍🤝‍🧑', color: 'var(--request)', label: '好友', verb: '成为了好友' },
-	DisplayName: { icon: '🪪', color: 'var(--accent-2)', label: '改名', verb: '改名了' },
-	TrustLevel: { icon: '🎖️', color: 'var(--warn)', label: '信任等级', verb: '信任等级变化' },
-	Group: { icon: '🏷️', color: 'var(--accent)', label: '群组', verb: '群组' },
-	Notification: { icon: '🔔', color: 'var(--text-dim)', label: '通知', verb: '通知' }
+	Online: { icon: 'dot', color: 'var(--online)', label: 'Online', verb: 'came online' },
+	Offline: { icon: 'dot', color: 'var(--offline)', label: 'Offline', verb: 'went offline' },
+	Active: { icon: 'dot', color: 'var(--active)', label: 'Active', verb: 'is now Active' },
+	GPS: { icon: 'pin', color: 'var(--warn)', label: 'Moved', verb: 'moved to' },
+	Status: { icon: 'message', color: 'var(--accent-2)', label: 'Status', verb: 'changed status' },
+	Bio: { icon: 'pencil', color: 'var(--accent)', label: 'Bio', verb: 'updated bio' },
+	Avatar: { icon: 'user', color: '#ff8ec6', label: 'Avatar', verb: 'switched avatar' },
+	Join: { icon: 'log-in', color: 'var(--join)', label: 'Join', verb: 'joined' },
+	Leave: { icon: 'log-out', color: 'var(--leave)', label: 'Leave', verb: 'left' },
+	FriendRequest: { icon: 'user-plus', color: 'var(--request)', label: 'Friend request', verb: 'sent a friend request' },
+	Invite: { icon: 'mail', color: 'var(--request)', label: 'Invite', verb: 'sent an invite' },
+	'Instance.Closed': { icon: 'door', color: 'var(--danger)', label: 'Instance closed', verb: 'instance was closed' },
+	Friend: { icon: 'users', color: 'var(--request)', label: 'Friend', verb: 'became friends' },
+	DisplayName: { icon: 'id-card', color: 'var(--accent-2)', label: 'Rename', verb: 'changed name' },
+	TrustLevel: { icon: 'award', color: 'var(--warn)', label: 'Trust rank', verb: 'trust rank changed' },
+	Group: { icon: 'tag', color: 'var(--accent)', label: 'Group', verb: 'group' },
+	Notification: { icon: 'bell', color: 'var(--text-dim)', label: 'Notification', verb: 'notification' }
 };
 
 export const FEED_TYPES = Object.keys(FEED_META);
@@ -66,10 +66,10 @@ export function feedMeta(type) {
 	return FEED_META[type] || { icon: '•', color: 'var(--text-dim)', label: type, verb: type };
 }
 
-/** The verb phrase of an entry ("上线了", "移动到了", …). */
+/** The verb phrase of an entry ("came online", "moved to", …). */
 export function entryVerb(entry) {
-	if (entry.type === 'Friend') return entry.raw?.subtype === 'friend-delete' ? '解除了好友关系' : '成为了好友';
-	if (entry.type === 'Invite') return '发送了邀请';
-	if (entry.type === 'FriendRequest') return '发送了好友请求';
+	if (entry.type === 'Friend') return entry.raw?.subtype === 'friend-delete' ? 'unfriended' : 'became friends';
+	if (entry.type === 'Invite') return 'sent an invite';
+	if (entry.type === 'FriendRequest') return 'sent a friend request';
 	return feedMeta(entry.type).verb;
 }

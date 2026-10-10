@@ -60,9 +60,9 @@ export async function removeAccount(id) {
 	try {
 		await api('/api/accounts', { method: 'DELETE', query: { id } });
 		await refreshAccounts();
-		toasts.success('账号已删除');
+		toasts.success('Account removed');
 	} catch (err) {
-		toasts.error(err.message || '删除失败');
+		toasts.error(err.message || 'Remove failed');
 	}
 }
 
@@ -79,7 +79,7 @@ export async function loginAccount(id, opts = {}) {
 	});
 	const j = await res.json().catch(() => ({}));
 	if (j.requires2fa) twofaRequest.set({ accountId: id, methods: j.requires2fa });
-	else if (!res.ok) toasts.error(j.error || '登录失败');
+	else if (!res.ok) toasts.error(j.error || 'Login failed');
 	await refreshAccounts().catch(() => {});
 	return { ok: res.ok && !j.requires2fa, requires2fa: j.requires2fa, error: j.error };
 }
@@ -88,17 +88,17 @@ export async function logoutAccount(id) {
 	try {
 		await api(`${accountPath(id)}/logout`, { method: 'POST' });
 		await refreshAccounts();
-		toasts.success('已登出');
+		toasts.success('Logged out');
 	} catch (err) {
-		toasts.error(err.message || '登出失败');
+		toasts.error(err.message || 'Logout failed');
 	}
 }
 
 export async function reconnectAccount(id) {
 	try {
 		await api(`${accountPath(id)}/reconnect`, { method: 'POST' });
-		toasts.success('已请求重连');
+		toasts.success('Reconnect requested');
 	} catch (err) {
-		toasts.error(err.message || '重连失败');
+		toasts.error(err.message || 'Reconnect failed');
 	}
 }

@@ -41,7 +41,7 @@ export async function run(task, success = '') {
 		if (success) toasts.success(success);
 		return result ?? /** @type {any} */ (true);
 	} catch (err) {
-		toasts.error(err?.message || '操作失败');
+		toasts.error(err?.message || 'Action failed');
 		return undefined;
 	}
 }

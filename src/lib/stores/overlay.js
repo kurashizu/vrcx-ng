@@ -72,7 +72,7 @@ export const hideContextMenu = () => contextMenu.set(null);
 export const confirmRequest = writable(/** @type {null | { message: string, okLabel: string, danger: boolean, resolve: (ok: boolean) => void }} */ (null));
 
 /** @returns {Promise<boolean>} */
-export function askConfirm(message, { okLabel = '确定', danger = false } = {}) {
+export function askConfirm(message, { okLabel = 'OK', danger = false } = {}) {
 	get(confirmRequest)?.resolve(false);
 	return new Promise((resolve) => confirmRequest.set({ message, okLabel, danger, resolve }));
 }

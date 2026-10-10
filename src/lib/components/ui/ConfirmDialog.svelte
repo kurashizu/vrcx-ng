@@ -7,7 +7,7 @@
 	<Modal size="sm" onclose={() => answerConfirm(false)}>
 		<p class="msg">{$confirmRequest.message}</p>
 		{#snippet footer()}
-			<button class="btn ghost" onclick={() => answerConfirm(false)}>取消</button>
+			<button class="btn ghost" onclick={() => answerConfirm(false)}>Cancel</button>
 			<button class="btn" class:danger={$confirmRequest.danger} class:primary={!$confirmRequest.danger} onclick={() => answerConfirm(true)}>
 				{$confirmRequest.okLabel}
 			</button>

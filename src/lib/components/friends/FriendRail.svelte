@@ -1,4 +1,5 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { onMount } from 'svelte';
 	import { friendsData, friendGroups, loadFriendGroups } from '$lib/stores/friends.js';
 	import { accounts, accountLabel } from '$lib/stores/accounts.js';
@@ -6,8 +7,8 @@
 	import { persisted } from '$lib/stores/persisted.js';
 	import { matchFriend, sortFriends, byName, byLastSeen, groupByWorld, groupByFriendGroup, inSameInstance, SORTS } from '$lib/client/friends.js';
 	import { describeLocation } from '$lib/shared/location.js';
+	import { connecting } from '$lib/stores/connecting.js';
 	import { openWorld } from '$lib/stores/overlay.js';
-	import { launchInstance } from '$lib/client/actions.js';
 	import { STATUS_COLOR } from '$lib/shared/presence.js';
 	import Section from '../ui/Section.svelte';
 	import AccessBadge from '../ui/AccessBadge.svelte';
@@ -21,16 +22,16 @@
 	const collapsed = persisted('rail.collapsed', /** @type {Record<string, boolean>} */ ({ offline: true }));
 
 	const VIEWS = [
-		{ id: 'smart', icon: '🌍', label: '按世界分组' },
-		{ id: 'flat', icon: '☰', label: '平铺' },
-		{ id: 'group', icon: '🗂', label: '按分组' }
+		{ id: 'smart', icon: 'globe', label: 'By world' },
+		{ id: 'flat', icon: 'menu', label: 'Flat' },
+		{ id: 'group', icon: 'folder', label: 'By group' }
 	];
 	const STATUS_CHIPS = [
-		{ id: '', label: '全部' },
-		{ id: 'join me', label: '加入我' },
-		{ id: 'active', label: '在线' },
-		{ id: 'ask me', label: '询问我' },
-		{ id: 'busy', label: '忙碌' }
+		{ id: '', label: 'All' },
+		{ id: 'join me', label: 'Join Me' },
+		{ id: 'active', label: 'Online' },
+		{ id: 'ask me', label: 'Ask Me' },
+		{ id: 'busy', label: 'Busy' }
 	];
 	const OFFLINE_CAP = 200;
 
@@ -87,16 +88,16 @@
 <div class="rail">
 	<header>
 		<div class="title">
-			<h2>好友</h2>
+			<h2>Friends</h2>
 			<span class="total">{$friendsData.total}</span>
-			<span class="live" title="在线 {$friendsData.online.length} · 加入我 {joinMe} · 离线 {$friendsData.offline.length}">
+			<span class="live" title="Online {$friendsData.online.length} · Join Me {joinMe} · Offline {$friendsData.offline.length}">
 				<i style:--c="var(--online)"></i>{$friendsData.online.length}
 				<i style:--c="var(--st-join)"></i>{joinMe}
 			</span>
 			<span class="spacer"></span>
-			<a class="btn ghost icon sm" href="/friends" title="好友总览（网格）">⛶</a>
+			<a class="btn ghost icon sm" href="/friends" title="Friends overview (grid)"><Icon name="maximize" /></a>
 		</div>
-		<input type="search" placeholder="搜索名字 / 世界 / ID…" bind:value={query} />
+		<input type="search" placeholder="Search name / world / ID…" bind:value={query} />
 		<div class="chips">
 			{#each STATUS_CHIPS as c (c.id)}
 				<button class="chip" class:on={status === c.id} onclick={() => (status = c.id)}>
@@ -107,21 +108,21 @@
 		<div class="tools">
 			<div class="seg">
 				{#each VIEWS as v (v.id)}
-					<button class:on={$view === v.id} title={v.label} onclick={() => view.set(v.id)}>{v.icon}</button>
+					<button class:on={$view === v.id} title={v.label} aria-label={v.label} aria-pressed={$view === v.id} onclick={() => view.set(v.id)}><Icon name={v.icon} /></button>
 				{/each}
 			</div>
-			<select bind:value={$sortBy} title="排序（在线 / 活跃好友）">
+			<select bind:value={$sortBy} title="Sort (online / active friends)">
 				{#each Object.entries(SORTS) as [id, s] (id)}
 					<option value={id}>{s.label}</option>
 				{/each}
 			</select>
-			<button class="btn ghost icon sm" title="排序方向" onclick={() => sortDir.set($sortDir === 'asc' ? 'desc' : 'asc')}>
-				{$sortDir === 'asc' ? '↑' : '↓'}
+			<button class="btn ghost icon sm" title={$sortDir === 'asc' ? 'Ascending (click for descending)' : 'Descending (click for ascending)'} aria-label="Sort direction" onclick={() => sortDir.set($sortDir === 'asc' ? 'desc' : 'asc')}>
+				<Icon name={$sortDir === 'asc' ? 'arrow-up' : 'arrow-down'} />
 			</button>
 		</div>
 		{#if $accounts.length > 1}
 			<select bind:value={accountId}>
-				<option value="">所有账号</option>
+				<option value="">All accounts</option>
 				{#each $accounts as a (a.id)}
 					<option value={a.id}>{accountLabel(a)}</option>
 				{/each}
@@ -131,13 +132,13 @@
 
 	<div class="scroll">
 		{#if sameInstance.length}
-			<Section title="🧩 同实例" count={sameInstance.length} open={open('same')} ontoggle={(o) => setOpen('same', o)}>
+			<Section icon="users" title="Same instance" count={sameInstance.length} open={open('same')} ontoggle={(o) => setOpen('same', o)}>
 				{@render people(sameInstance)}
 			</Section>
 		{/if}
 
 		{#each vipGroups as g (g.key)}
-			<Section title="⭐ {g.label}" count={g.friends.length} open={open(`vip:${g.key}`)} ontoggle={(o) => setOpen(`vip:${g.key}`, o)}>
+			<Section icon="star" title={g.label} count={g.friends.length} open={open(`vip:${g.key}`)} ontoggle={(o) => setOpen(`vip:${g.key}`, o)}>
 				{@render people(g.friends)}
 			</Section>
 		{/each}
@@ -150,11 +151,6 @@
 						<button class="world ellipsis" title={w.label} onclick={(e) => (e.stopPropagation(), openWorld(w.worldId))}>{w.label}</button>
 						{#if single}<AccessBadge place={single} />{/if}
 					{/snippet}
-					{#snippet actions()}
-						{#if single}
-							<button class="go" title="加入该实例" onclick={(e) => (e.stopPropagation(), launchInstance(w.instances[0].location))}>↗</button>
-						{/if}
-					{/snippet}
 					<!-- the header already names the world; with several instances each row says which one -->
 					{#if single}
 						{@render people(w.friends, 'none')}
@@ -164,12 +160,12 @@
 				</Section>
 			{/each}
 			{#if worlds.traveling.length}
-				<Section title="🧳 旅行中" count={worlds.traveling.length} open={open('traveling')} ontoggle={(o) => setOpen('traveling', o)}>
+				<Section icon="plane" title="Traveling" count={worlds.traveling.length} open={open('traveling')} ontoggle={(o) => setOpen('traveling', o)}>
 					{@render people(worlds.traveling, 'none')}
 				</Section>
 			{/if}
 			{#if worlds.incognito.length}
-				<Section title="🙈 隐身中" count={worlds.incognito.length} dot="var(--online)" open={open('incognito')} ontoggle={(o) => setOpen('incognito', o)}>
+				<Section icon="eye-off" title="Hidden" count={worlds.incognito.length} dot="var(--online)" open={open('incognito')} ontoggle={(o) => setOpen('incognito', o)}>
 					{@render people(worlds.incognito, 'none')}
 				</Section>
 			{/if}
@@ -180,30 +176,32 @@
 				</Section>
 			{/each}
 		{:else if rest.length}
-			<Section title="在线" count={rest.length} dot="var(--online)" open={open('online')} ontoggle={(o) => setOpen('online', o)}>
+			<Section title="Online" count={rest.length} dot="var(--online)" open={open('online')} ontoggle={(o) => setOpen('online', o)}>
 				{@render people(rest)}
 			</Section>
 		{/if}
 
 		{#if active.length}
-			<Section title="在线（未在游戏中）" count={active.length} dot="var(--active)" open={open('active')} ontoggle={(o) => setOpen('active', o)}>
+			<Section title="Online (not in game)" count={active.length} dot="var(--active)" open={open('active')} ontoggle={(o) => setOpen('active', o)}>
 				{@render people(active)}
 			</Section>
 		{/if}
 
 		{#if offline.length}
-			<Section title="离线" count={offline.length} dot="var(--offline)" open={open('offline')} ontoggle={(o) => setOpen('offline', o)}>
+			<Section title="Offline" count={offline.length} dot="var(--offline)" open={open('offline')} ontoggle={(o) => setOpen('offline', o)}>
 				{@render people(showAllOffline ? offline : offline.slice(0, OFFLINE_CAP))}
 				{#if offline.length > OFFLINE_CAP && !showAllOffline}
-					<button class="more" onclick={() => (showAllOffline = true)}>显示全部 {offline.length} 位离线好友</button>
+					<button class="more" onclick={() => (showAllOffline = true)}>Show all {offline.length} offline friends</button>
 				{/if}
 			</Section>
 		{/if}
 
-		{#if $friendsData.total === 0}
-			<Notice icon="👥" text="还没有好友数据。登录账号后会自动拉取。" />
+		{#if $friendsData.total === 0 && $connecting}
+			<Notice kind="loading" text="Connecting to your accounts…" />
+		{:else if $friendsData.total === 0}
+			<Notice icon="users" text="No friend data yet. It loads automatically after you log in." />
 		{:else if nothing}
-			<Notice text="没有匹配的好友" />
+			<Notice text="No matching friends" />
 		{/if}
 	</div>
 </div>

@@ -54,28 +54,28 @@
 		}
 		busy = false;
 		const ok = ids.length - failed.length;
-		if (ok) toasts.success(`已向 ${ok} 位好友发送邀请`);
+		if (ok) toasts.success(`Invited ${ok} friend(s)`);
 		if (failed.length) {
 			const names = failed.map((id) => friends.find((f) => f.id === id)?.displayName).filter(Boolean);
-			toasts.error(`${failed.length} 位邀请失败（${names.slice(0, 3).join('、')}${names.length > 3 ? '…' : ''}）`);
+			toasts.error(`${failed.length} invite(s) failed (${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''})`);
 		}
 		onclose();
 	}
 </script>
 
-<Modal title="邀请好友加入实例" size="sm" onclose={onclose}>
+<Modal title="Invite friends to the instance" size="sm" onclose={onclose}>
 	<div class="stack">
 		<div class="row">
-			<input type="search" placeholder="按名字 / 世界搜索…" bind:value={query} />
-			<span class="faint small nowrap">已选 {selected.size}</span>
+			<input type="search" placeholder="Search by name / world…" bind:value={query} />
+			<span class="faint small nowrap">{selected.size} selected</span>
 		</div>
 		<div class="list">
 			{#if shown.length === 0}
-				<Notice text="没有匹配的好友" />
+				<Notice text="No matching friends" />
 			{:else}
 				<label class="item all">
 					<input type="checkbox" checked={allSelected} onchange={toggleAll} />
-					<span class="muted">全选当前结果（{shown.length}）</span>
+					<span class="muted">Select all results ({shown.length})</span>
 				</label>
 				{#each shown as f (f.id)}
 					<label class="item">
@@ -83,7 +83,7 @@
 						<Avatar src={f.currentAvatarThumbnailImageUrl} name={f.displayName} size={30} {accountId} presence={f.state} status={f.status} />
 						<span class="who">
 							<UserName user={f} />
-							<span class="faint small ellipsis">{f.state === 'online' ? f.worldName || f.statusDescription || '在线' : f.state === 'active' ? '在线（未在游戏中）' : '离线'}</span>
+							<span class="faint small ellipsis">{f.state === 'online' ? f.worldName || f.statusDescription || 'Online' : f.state === 'active' ? 'Online (not in game)' : 'Offline'}</span>
 						</span>
 					</label>
 				{/each}
@@ -92,8 +92,8 @@
 		<div class="faint small mono ellipsis" title={location}>{shortId(location)}</div>
 	</div>
 	{#snippet footer()}
-		<button class="btn ghost" onclick={onclose}>取消</button>
-		<button class="btn primary" disabled={!selected.size || busy} onclick={invite}>{busy ? '邀请中…' : `邀请所选（${selected.size}）`}</button>
+		<button class="btn ghost" onclick={onclose}>Cancel</button>
+		<button class="btn primary" disabled={!selected.size || busy} onclick={invite}>{busy ? 'Inviting…' : `Invite selected (${selected.size})`}</button>
 	{/snippet}
 </Modal>
 

@@ -12,7 +12,7 @@ export function toMs(t) {
 }
 
 /**
- * Relative time in Chinese ("5 分钟前"). Pass the `now` store value to make it
+ * Relative time ("5 min ago"). Pass the `now` store value to make it
  * tick; defaults to the current time.
  * @param {string|number|Date} t
  * @param {number} [now]
@@ -21,14 +21,14 @@ export function timeAgo(t, now = Date.now()) {
 	const ms = toMs(t);
 	if (Number.isNaN(ms)) return '';
 	const s = Math.floor((now - ms) / 1000);
-	if (s < 5) return '刚刚';
-	if (s < 60) return `${s} 秒前`;
+	if (s < 5) return 'just now';
+	if (s < 60) return `${s}s ago`;
 	const m = Math.floor(s / 60);
-	if (m < 60) return `${m} 分钟前`;
+	if (m < 60) return `${m} min ago`;
 	const h = Math.floor(m / 60);
-	if (h < 24) return `${h} 小时前`;
+	if (h < 24) return `${h} h ago`;
 	const d = Math.floor(h / 24);
-	if (d < 30) return `${d} 天前`;
+	if (d < 30) return `${d} d ago`;
 	return new Date(ms).toLocaleDateString();
 }
 

@@ -1,4 +1,5 @@
 <script>
+	import Icon from './Icon.svelte';
 	/**
 	 * The one way to show "loading…", "failed (retry)" and "nothing here".
 	 * @type {{ kind?: 'loading'|'error'|'empty', text?: string, onretry?: () => void, icon?: string }}
@@ -9,13 +10,13 @@
 <div class="notice {kind}">
 	{#if kind === 'loading'}
 		<span class="spinner"></span>
-		<span>{text || '加载中…'}</span>
+		<span>{text || 'Loading…'}</span>
 	{:else if kind === 'error'}
-		<span class="error-text">⚠ {text || '加载失败'}</span>
-		{#if onretry}<button class="btn sm" onclick={onretry}>重试</button>{/if}
+		<span class="error-text"><Icon name="alert" /> {text || 'Failed to load'}</span>
+		{#if onretry}<button class="btn sm" onclick={onretry}>Retry</button>{/if}
 	{:else}
-		{#if icon}<span class="icon">{icon}</span>{/if}
-		<span class="muted">{text || '暂无内容'}</span>
+		{#if icon}<span class="icon"><Icon name={icon} size="1.6em" /></span>{/if}
+		<span class="muted">{text || 'Nothing here'}</span>
 	{/if}
 </div>
 

@@ -63,7 +63,7 @@ export async function POST({ params, request }) {
 					}
 				}
 				if (!loc) {
-					return json({ ok: false, error: '该账号当前不在任何实例中' }, { status: 400 });
+					return json({ ok: false, error: 'This account is not in any instance' }, { status: 400 });
 				}
 				// VRChat shows the world name in the invite notification (VRCX sends it).
 				const worldId = String(loc).split(':')[0];

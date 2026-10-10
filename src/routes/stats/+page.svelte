@@ -1,4 +1,5 @@
 <script>
+	import Icon from '$lib/components/ui/Icon.svelte';
 	import { api } from '$lib/client/api.js';
 	import { createResource } from '$lib/client/resource.svelte.js';
 	import { openUser, openWorld } from '$lib/stores/overlay.js';
@@ -9,10 +10,10 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 
 	const RANGES = [
-		{ id: '1', label: '24 小时' },
-		{ id: '7', label: '7 天' },
-		{ id: '30', label: '30 天' },
-		{ id: '90', label: '90 天' }
+		{ id: '1', label: '24 hours' },
+		{ id: '7', label: '7 days' },
+		{ id: '30', label: '30 days' },
+		{ id: '90', label: '90 days' }
 	];
 
 	let days = $state('7');
@@ -34,7 +35,7 @@
 	const total = $derived(Object.values(data?.totals || {}).reduce((a, b) => a + b, 0));
 </script>
 
-<Page title="统计" icon="📊" subtitle="根据已保存的动态统计，数据从部署之日起累积">
+<Page title="Stats" icon="chart" subtitle="Computed from the stored feed; data accumulates from the day of deployment">
 	{#snippet actions()}
 		<Tabs variant="pill" bind:value={days} tabs={RANGES} />
 	{/snippet}
@@ -45,20 +46,20 @@
 		<Notice kind="error" text={res.error} onretry={() => res.load(days)} />
 	{:else if data}
 		<p class="muted small">
-			{#if data.since}从 {formatDateTime(data.since)}（{timeAgo(data.since)}）开始记录{:else}还没有记录{/if} · 共 {total} 条动态
+			{#if data.since}Recording since {formatDateTime(data.since)} ({timeAgo(data.since)}){:else}Nothing recorded yet{/if} · {total} feed entries
 		</p>
 
 		<section class="card">
-			<h2>👥 好友在线时长 <span class="faint small">按完整的「上线→下线」计</span></h2>
+			<h2><Icon name="users" /> Online time per friend <span class="faint small">counted from complete online → offline pairs</span></h2>
 			{#if data.topOnline.length === 0}
-				<Notice text="暂无数据：需要有好友完整地上线再下线一次" />
+				<Notice text="No data yet: a friend must come online and go offline once" />
 			{:else}
 				<ul class="bars">
 					{#each data.topOnline as f (f.userId)}
 						<li>
 							<button class="name ellipsis" title={f.userId} onclick={() => openUser(f.userId)}>{f.displayName || f.userId}</button>
 							<div class="track"><div class="fill" style:width="{(f.totalMs / onlineMax) * 100}%"></div></div>
-							<span class="val">{formatDuration(f.totalMs)} <span class="faint small">· {f.sessions} 次</span></span>
+							<span class="val">{formatDuration(f.totalMs)} <span class="faint small">· {f.sessions} sessions</span></span>
 						</li>
 					{/each}
 				</ul>
@@ -66,10 +67,10 @@
 		</section>
 
 		<section class="card">
-			<h2>🕒 好友上线时段 <span class="faint small">本地时间，每小时的上线人次</span></h2>
+			<h2><Icon name="clock" /> Online hours <span class="faint small">local time, sign-ons per hour</span></h2>
 			<div class="hours">
 				{#each hourly as x (x.h)}
-					<div class="col" title="{String(x.h).padStart(2, '0')}:00 · {x.c} 次">
+					<div class="col" title="{String(x.h).padStart(2, '0')}:00 · {x.c}×">
 						<div class="bar" style:height="{(x.c / hourMax) * 100}%"></div>
 						<span class="hl">{x.h % 3 === 0 ? x.h : ''}</span>
 					</div>
@@ -78,16 +79,16 @@
 		</section>
 
 		<section class="card">
-			<h2>🌍 热门世界 <span class="faint small">按去过的好友人数</span></h2>
+			<h2><Icon name="globe" /> Popular worlds <span class="faint small">by number of friends who went there</span></h2>
 			{#if data.topWorlds.length === 0}
-				<Notice text="暂无数据" />
+				<Notice text="No data yet" />
 			{:else}
 				<ul class="bars">
 					{#each data.topWorlds as w (w.worldId)}
 						<li>
 							<button class="name ellipsis" title={w.worldId} onclick={() => openWorld(w.worldId)}>{w.worldName || w.worldId}</button>
 							<div class="track"><div class="fill alt" style:width="{(w.people / worldMax) * 100}%"></div></div>
-							<span class="val">{w.people} 人 <span class="faint small">· {w.visits} 次</span></span>
+							<span class="val">{w.people} friends <span class="faint small">· {w.visits} visits</span></span>
 						</li>
 					{/each}
 				</ul>
@@ -95,10 +96,10 @@
 		</section>
 
 		<section class="card">
-			<h2>🧾 动态类型</h2>
+			<h2><Icon name="file" /> Feed types</h2>
 			<div class="chips">
 				{#each Object.entries(data.totals).sort((a, b) => b[1] - a[1]) as [type, c] (type)}
-					<span class="chip">{feedMeta(type).icon} {FEED_META[type]?.label || type} <strong>{c}</strong></span>
+					<span class="chip"><Icon name={feedMeta(type).icon} /> {FEED_META[type]?.label || type} <strong>{c}</strong></span>
 				{/each}
 			</div>
 		</section>

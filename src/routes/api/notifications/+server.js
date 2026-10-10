@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { list, markSeen, dismiss, dismissAll, unseenCounts } from '$lib/server/notifications.js';
+import { bus } from '$lib/server/bus.js';
 import { bulkLookup } from '$lib/server/worldCache.js';
 
 export async function GET({ url }) {
@@ -28,11 +29,13 @@ export async function POST({ request }) {
 	const action = body?.action;
 	if (action === 'seen') {
 		if (body.id) markSeen(body.id);
+		bus.emit('notifications');
 		return json({ ok: true });
 	}
 	if (action === 'dismiss') {
 		if (body.id) dismiss(body.id);
 		else dismissAll(body.accountId || null);
+		bus.emit('notifications');
 		return json({ ok: true });
 	}
 	return json({ error: 'unknown action' }, { status: 400 });

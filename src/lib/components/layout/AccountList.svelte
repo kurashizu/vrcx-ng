@@ -1,4 +1,5 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { accounts, accountSummary, accountLabel } from '$lib/stores/accounts.js';
@@ -21,16 +22,16 @@
 
 <div class="accounts">
 	<div class="head">
-		<span class="h">账号</span>
-		<span class="faint small">{$accountSummary.live}/{$accountSummary.total} 在线</span>
+		<span class="h">Accounts</span>
+		<span class="faint small">{$accountSummary.live}/{$accountSummary.total} online</span>
 		<span class="spacer"></span>
-		<button class="btn ghost icon sm" onclick={() => addAccountOpen.set(true)} title="添加账号">＋</button>
+		<button class="btn ghost icon sm" onclick={() => addAccountOpen.set(true)} title="Add account"><Icon name="plus" /></button>
 	</div>
 
 	<div class="list">
 		<button class="acc all" class:on={!$accountFilter} onclick={() => accountFilter.set(null)}>
-			<span class="glyph">◎</span>
-			<span class="name">全部账号</span>
+			<span class="glyph"><Icon name="account" /></span>
+			<span class="name">All accounts</span>
 		</button>
 
 		{#each $accounts as a (a.id)}
@@ -46,16 +47,16 @@
 								{#if d.kind === 'instance' || d.kind === 'private'}
 									<Place location={u?.location} accountId={a.id} link={false} />
 								{:else if u?.status && u.status !== 'offline'}
-									<span class="faint">{STATUS_LABEL[u.status] || u.status} · 未加入世界</span>
+									<span class="faint">{STATUS_LABEL[u.status] || u.status} · Not in a world</span>
 								{:else}
-									<span class="faint">离线</span>
+									<span class="faint">Offline</span>
 								{/if}
 							{:else if a.loggedIn}
-								<span class="warn" title={a.lastError || ''}>已登录 · 连接中…</span>
+								<span class="warn" title={a.lastError || ''}>Logged in · connecting…</span>
 							{:else if a.lastError}
-								<span class="err" title={a.lastError}>登录失败</span>
+								<span class="err" title={a.lastError}>Login failed</span>
 							{:else}
-								<span class="faint">未登录</span>
+								<span class="faint">Not logged in</span>
 							{/if}
 						</span>
 					</span>
@@ -66,8 +67,8 @@
 
 		{#if $accounts.length === 0}
 			<div class="none">
-				<p class="muted small">还没有账号</p>
-				<button class="btn primary sm" onclick={() => addAccountOpen.set(true)}>＋ 添加账号</button>
+				<p class="muted small">No accounts yet</p>
+				<button class="btn primary sm" onclick={() => addAccountOpen.set(true)}><Icon name="plus" /> Add account</button>
 			</div>
 		{/if}
 	</div>

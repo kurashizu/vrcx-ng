@@ -21,7 +21,7 @@ export async function POST({ params, request }) {
 		const logged = Object.entries(sessions).find(([, s]) => s?.cookie);
 		caller = logged?.[0] || null;
 	}
-	if (!caller) return json({ error: '没有已登录的账号' }, { status: 400 });
+	if (!caller) return json({ error: 'No logged-in account' }, { status: 400 });
 
 	try {
 		if (action === 'select') {

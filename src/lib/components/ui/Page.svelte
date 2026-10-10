@@ -1,4 +1,5 @@
 <script>
+	import Icon from './Icon.svelte';
 	/**
 	 * Standard frame for a full-page route: heading, optional actions on the
 	 * right, scrolling body.
@@ -15,7 +16,7 @@
 	<div class="inner {width}">
 		<header>
 			<div class="titles">
-				<h1>{#if icon}<span class="ico">{icon}</span>{/if}{title}</h1>
+				<h1>{#if icon}<span class="ico"><Icon name={icon} /></span>{/if}{title}</h1>
 				{#if subtitle}<p class="muted">{subtitle}</p>{/if}
 			</div>
 			<span class="spacer"></span>

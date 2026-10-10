@@ -1,10 +1,12 @@
 <script>
+	import Icon from './Icon.svelte';
 	/**
 	 * Collapsible block with a header line. Controlled when `ontoggle` is given
 	 * (state kept by the parent, e.g. persisted), otherwise it remembers itself.
 	 *
 	 * @type {{
 	 *   title?: string,
+	 *   icon?: string,
 	 *   count?: number | null,
 	 *   dot?: string,
 	 *   open?: boolean,
@@ -14,7 +16,7 @@
 	 *   children: import('svelte').Snippet
 	 * }}
 	 */
-	let { title = '', count = null, dot = '', open: openProp = true, ontoggle, header, actions, children } = $props();
+	let { title = '', icon = '', count = null, dot = '', open: openProp = true, ontoggle, header, actions, children } = $props();
 
 	let local = $state(true);
 	const open = $derived(ontoggle ? openProp : local);
@@ -34,11 +36,12 @@
 		onclick={toggle}
 		onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggle())}
 	>
-		<span class="chev" class:open>▸</span>
+		<span class="chev" class:open><Icon name="chevron-right" size="12px" /></span>
 		{#if dot}<span class="dot" style:--c={dot}></span>{/if}
 		{#if header}
 			{@render header()}
 		{:else}
+			{#if icon}<Icon name={icon} />{/if}
 			<span class="title ellipsis">{title}</span>
 		{/if}
 		{#if count != null}<span class="count">{count}</span>{/if}

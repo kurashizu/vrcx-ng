@@ -1,4 +1,5 @@
 <script>
+	import Icon from './Icon.svelte';
 	/**
 	 * @type {{
 	 *   tabs: { id: string, label: string, count?: number | null, icon?: string }[],
@@ -22,7 +23,7 @@
 				onchange?.(t.id);
 			}}
 		>
-			{#if t.icon}<span class="ico">{t.icon}</span>{/if}
+			{#if t.icon}<span class="ico"><Icon name={t.icon} /></span>{/if}
 			{t.label}
 			{#if t.count != null}<span class="count">{t.count}</span>{/if}
 		</button>

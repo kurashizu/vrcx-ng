@@ -14,10 +14,10 @@ export async function GET({ params, url }) {
 		const logged = Object.entries(sessions).find(([, s]) => s?.cookie);
 		caller = logged?.[0] || null;
 	}
-	if (!caller) return json({ error: '没有已登录的账号' }, { status: 400 });
+	if (!caller) return json({ error: 'No logged-in account' }, { status: 400 });
 
 	const avatar = await getAvatar(caller, id).catch(() => null);
-	if (!avatar) return json({ error: 'Avatar 不存在或不可见' }, { status: 404 });
+	if (!avatar) return json({ error: 'Avatar does not exist or is not visible' }, { status: 404 });
 
 	// Which accounts can select (change to) this avatar: any logged-in account
 	// that owns it or is friends with the author can use private ones.

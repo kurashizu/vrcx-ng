@@ -1,11 +1,11 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { timeAgo } from '$lib/shared/format.js';
 	import { platformLabel } from '$lib/shared/presence.js';
 	import { describeLocation } from '$lib/shared/location.js';
 	import { openUser, openAvatar } from '$lib/stores/overlay.js';
 	import { openFriendMenu } from '$lib/client/friendMenu.js';
-	import { launchInstance } from '$lib/client/actions.js';
-	import { settings } from '$lib/stores/settings.js';
+		import { settings } from '$lib/stores/settings.js';
 	import { now } from '$lib/stores/clock.js';
 	import Avatar from '../ui/Avatar.svelte';
 	import UserName from '../ui/UserName.svelte';
@@ -33,7 +33,7 @@
 	class="row"
 	role="button"
 	tabindex="0"
-	title={f.accountIds?.length ? `via ${f.accountIds.length} 个账号` : ''}
+	title={f.accountIds?.length ? `via ${f.accountIds.length} accounts` : ''}
 	onclick={open}
 	onkeydown={(e) => e.key === 'Enter' && open()}
 	oncontextmenu={(e) => openFriendMenu(e, f)}
@@ -44,7 +44,7 @@
 			<UserName user={f} />
 			<StatusPill status={f.status} />
 			{#if f.platform && f.state === 'online'}<span class="plat">{platformLabel(f.platform)}</span>{/if}
-			{#if f.accountIds?.length > 1}<span class="plat" title="{f.accountIds.length} 个账号都是 TA 的好友">×{f.accountIds.length}</span>{/if}
+			{#if f.accountIds?.length > 1}<span class="plat" title="Friends with {f.accountIds.length} of your accounts">×{f.accountIds.length}</span>{/if}
 		</div>
 		<div class="line sub">
 			{#if f.state === 'online'}
@@ -56,12 +56,12 @@
 				{:else if place.kind === 'instance' || place.kind === 'traveling'}
 					<Place location={f.location} worldName={f.worldName} {accountId} />
 				{:else}
-					<span class="faint">🙈 隐身中</span>
+					<span class="faint"><Icon name="eye-off" /> Hidden</span>
 				{/if}
 			{:else if f.state === 'active'}
-				<span class="faint">在线（未在游戏中）</span>
+				<span class="faint">Online (not in game)</span>
 			{:else}
-				<span class="faint">{f.lastSeen && $settings['friend.showLastSeen'] !== false ? `${timeAgo(f.lastSeen, $now)}离线` : '离线'}</span>
+				<span class="faint">{f.lastSeen && $settings['friend.showLastSeen'] !== false ? `Offline ${timeAgo(f.lastSeen, $now)}` : 'Offline'}</span>
 			{/if}
 		</div>
 		{#if f.statusDescription && f.state !== 'offline' && show === 'full'}
@@ -70,10 +70,7 @@
 	</div>
 	<div class="tools">
 		{#if f.currentAvatar}
-			<button class="tool" title="查看当前模型" onclick={(e) => (e.stopPropagation(), openAvatar(f.currentAvatar, accountId))}>🧍</button>
-		{/if}
-		{#if inInstance}
-			<button class="tool" title="在 VRChat 中打开该实例" onclick={(e) => (e.stopPropagation(), launchInstance(f.location))}>↗</button>
+			<button class="tool" title="View current avatar" onclick={(e) => (e.stopPropagation(), openAvatar(f.currentAvatar, accountId))}><Icon name="user" /></button>
 		{/if}
 	</div>
 </div>

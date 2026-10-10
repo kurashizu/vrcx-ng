@@ -1,6 +1,7 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { notificationsOpen, openUser, openWorld, askConfirm } from '$lib/stores/overlay.js';
-	import { notificationsTick } from '$lib/stores/notifications.js';
+	import { notificationsTick, unseenCount, refreshUnseen } from '$lib/stores/notifications.js';
 	import { accounts, accountName, accountLabel } from '$lib/stores/accounts.js';
 	import { now } from '$lib/stores/clock.js';
 	import { api, run, accountPath } from '$lib/client/api.js';
@@ -13,17 +14,17 @@
 	import InviteMessageDialog from './InviteMessageDialog.svelte';
 
 	const KINDS = {
-		friendRequest: ['🤝', '好友请求'],
-		invite: ['✉️', '实例邀请'],
-		requestInvite: ['✋', '请求加入'],
-		message: ['💬', '消息'],
-		groupAnnouncement: ['📢', '群公告'],
-		inviteResponse: ['📨', '邀请回应'],
-		requestInviteResponse: ['📨', '请求回应'],
-		groupInvite: ['👥', '群邀请'],
-		groupJoinRequest: ['👥', '入群申请'],
-		boop: ['👋', 'Boop'],
-		moderation: ['🛡️', '管理通知']
+		friendRequest: ['user-plus', 'Friend request'],
+		invite: ['mail', 'Invite'],
+		requestInvite: ['hand', 'Invite request'],
+		message: ['message', 'Message'],
+		groupAnnouncement: ['megaphone', 'Group announcement'],
+		inviteResponse: ['send', 'Invite response'],
+		requestInviteResponse: ['send', 'Request response'],
+		groupInvite: ['users', 'Group invite'],
+		groupJoinRequest: ['users', 'Group join request'],
+		boop: ['hand', 'Boop'],
+		moderation: ['shield', 'Moderation']
 	};
 
 	let items = $state(/** @type {any[]} */ ([]));
@@ -34,7 +35,9 @@
 	async function refresh() {
 		loading = true;
 		try {
-			items = (await api('/api/notifications', { query: { limit: 200, accountId } })).notifications || [];
+			const j = await api('/api/notifications', { query: { limit: 200, accountId } });
+			items = j.notifications || [];
+			if (!accountId) unseenCount.set(Object.values(j.unseen || {}).reduce((a, b) => a + b, 0));
 			error = '';
 		} catch (err) {
 			error = err.message;
@@ -56,7 +59,10 @@
 		return () => clearInterval(id);
 	});
 
-	const drop = (it) => (items = items.filter((x) => x.id !== it.id));
+	const drop = (it) => {
+		items = items.filter((x) => x.id !== it.id);
+		refreshUnseen();
+	};
 
 	/** act on a notification through its account (VRChat side + local inbox) */
 	const act = (it, body) => api(`${accountPath(it.accountId)}/notification`, { method: 'POST', body: { notificationId: it.id, ...body } });
@@ -71,6 +77,7 @@
 			await local('seen', it.id).catch(() => {});
 		}
 		items = items.map((x) => (x.id === it.id ? { ...x, seenAt: Date.now() } : x));
+		refreshUnseen();
 	}
 
 	async function dismiss(it) {
@@ -84,7 +91,7 @@
 	}
 
 	async function accept(it) {
-		if (await run(() => act(it, { action: 'accept' }), '已接受好友请求')) drop(it);
+		if (await run(() => act(it, { action: 'accept' }), 'Friend request accepted')) drop(it);
 	}
 
 	// someone asked to join us → invite them to where this account is
@@ -103,13 +110,14 @@
 	}
 	async function sendReply(slot) {
 		const it = replyTo;
-		if (it && (await run(() => act(it, { action: 'respond', responseSlot: slot }), '已回复'))) drop(it);
+		if (it && (await run(() => act(it, { action: 'respond', responseSlot: slot }), 'Replied'))) drop(it);
 	}
 
 	async function clearAll() {
-		if (!(await askConfirm(accountId ? '清空这个账号的所有通知？' : '清空所有通知？', { okLabel: '清空', danger: true }))) return;
+		if (!(await askConfirm(accountId ? 'Clear all notifications for this account?' : 'Clear all notifications?', { okLabel: 'Clear', danger: true }))) return;
 		await run(() => api('/api/notifications', { method: 'POST', body: { action: 'dismiss', accountId: accountId || undefined } }));
 		items = [];
+		refreshUnseen();
 	}
 
 	const close = () => notificationsOpen.set(false);
@@ -117,15 +125,15 @@
 </script>
 
 {#if $notificationsOpen}
-	<Modal title="通知" size="md" onclose={close}>
+	<Modal title="Notifications" size="md" onclose={close}>
 		<div class="tools">
 			<select bind:value={accountId}>
-				<option value="">所有账号</option>
+				<option value="">All accounts</option>
 				{#each $accounts as a (a.id)}<option value={a.id}>{accountLabel(a)}</option>{/each}
 			</select>
-			<span class="faint small nowrap">{items.length} 条</span>
-			<button class="btn ghost sm" onclick={refresh} disabled={loading}>↻ 刷新</button>
-			<button class="btn danger sm" onclick={clearAll} disabled={!items.length}>清空</button>
+			<span class="faint small nowrap">{items.length} total</span>
+			<button class="btn ghost sm" onclick={refresh} disabled={loading}><Icon name="refresh" /> Refresh</button>
+			<button class="btn danger sm" onclick={clearAll} disabled={!items.length}>Clear</button>
 		</div>
 
 		{#if error}
@@ -133,46 +141,49 @@
 		{:else if loading && !items.length}
 			<Notice kind="loading" />
 		{:else if !items.length}
-			<Notice icon="🔔" text="暂无通知" />
+			<Notice icon="bell" text="No notifications" />
 		{:else}
 			<ul>
 				{#each items as it (it.id)}
-					{@const [icon, label] = KINDS[it.type] || ['🔔', it.type]}
+					{@const [icon, label] = KINDS[it.type] || ['bell', it.type]}
 					{@const d = it.worldId ? describeLocation(`${it.worldId}:${it.instanceId || ''}`) : null}
 					<li class:unseen={!it.seenAt}>
 						<div class="head">
-							<span>{icon}</span>
+							<span><Icon name={icon} /></span>
 							<strong>{label}</strong>
-							{#if !it.seenAt}<span class="badge accent">新</span>{/if}
+							{#if !it.seenAt}<span class="badge accent">New</span>{/if}
 							<span class="spacer"></span>
 							<span class="faint small">{timeAgo(it.createdAt, $now)}</span>
 						</div>
 						<div class="from">
-							来自 <strong>{sender(it)}</strong>
+							From <strong>{sender(it)}</strong>
 							{#if it.accountId}<span class="faint small">via {accountName(it.accountId)}</span>{/if}
 						</div>
 						{#if d}
 							<div class="place">
-								<button class="world" onclick={() => openWorld(it.worldId, it.accountId)}>🌍 {it.worldName || '世界'}</button>
-								{#if d.kind === 'instance'}<AccessBadge place={d} />{/if}
+								<button class="world" onclick={() => openWorld(it.worldId, it.accountId)}><Icon name="globe" /> {it.worldName || 'World'}</button>
+								{#if d.kind === 'instance'}
+									{#if d.parsed.instanceName}<span class="inst" title={d.tag}>#{d.parsed.instanceName}</span>{/if}
+									<AccessBadge place={d} showPublic />
+								{/if}
 							</div>
 						{/if}
 						{#if it.message}<div class="msg">{it.message}</div>{/if}
 						<div class="acts">
 							{#if it.senderUserId && it.accountId}
-								<button class="btn ghost xs" onclick={() => openUser(it.senderUserId, { accountId: it.accountId, name: sender(it) })}>查看用户</button>
+								<button class="btn ghost xs" onclick={() => openUser(it.senderUserId, { accountId: it.accountId, name: sender(it) })}>View user</button>
 							{/if}
 							{#if it.type === 'friendRequest' && it.accountId}
-								<button class="btn primary xs" onclick={() => accept(it)}>✓ 接受</button>
+								<button class="btn primary xs" onclick={() => accept(it)}><Icon name="check" /> Accept</button>
 							{/if}
 							{#if it.type === 'requestInvite' && it.accountId && it.senderUserId}
-								<button class="btn primary xs" title="邀请 TA 到这个账号当前所在的实例" onclick={() => inviteBack(it)}>📨 邀请 TA</button>
+								<button class="btn primary xs" title="Invite them to the instance this account is in" onclick={() => inviteBack(it)}><Icon name="send" /> Invite them</button>
 							{/if}
 							{#if (it.type === 'invite' || it.type === 'requestInvite') && it.accountId}
-								<button class="btn xs" title="用预设消息回复并拒绝" onclick={() => reply(it)}>✉️ 回复并拒绝</button>
+								<button class="btn xs" title="Reply with a preset message and decline" onclick={() => reply(it)}><Icon name="mail" /> Reply &amp; decline</button>
 							{/if}
-							{#if !it.seenAt}<button class="btn ghost xs" onclick={() => seen(it)}>标为已读</button>{/if}
-							<button class="btn ghost danger xs" onclick={() => dismiss(it)}>忽略</button>
+							{#if !it.seenAt}<button class="btn ghost xs" onclick={() => seen(it)}>Mark as read</button>{/if}
+							<button class="btn ghost danger xs" onclick={() => dismiss(it)}>Dismiss</button>
 						</div>
 					</li>
 				{/each}
@@ -185,8 +196,8 @@
 	bind:open={replyOpen}
 	accountId={replyTo?.accountId || ''}
 	type={replyTo?.type === 'requestInvite' ? 'requestResponse' : 'response'}
-	title="回复并拒绝"
-	hint="点一条消息即发送，同时拒绝这条邀请。"
+	title="Reply & decline"
+	hint="Pick a message to send it and decline this invite."
 	onPick={sendReply}
 />
 
@@ -231,6 +242,11 @@
 		align-items: center;
 		gap: 6px;
 		flex-wrap: wrap;
+	}
+	.inst {
+		font-size: 12px;
+		font-weight: 650;
+		color: var(--text-dim);
 	}
 	.world {
 		color: var(--link);

@@ -149,21 +149,21 @@ export function parseLocation(tag) {
 export function accessTypeLabel(type) {
 	switch (type) {
 		case 'public':
-			return '公开';
+			return 'Public';
 		case 'invite':
-			return '邀请';
+			return 'Invite';
 		case 'invite+':
-			return '邀请+';
+			return 'Invite+';
 		case 'friends':
-			return '好友';
+			return 'Friends';
 		case 'friends+':
-			return '好友+';
+			return 'Friends+';
 		case 'group':
-			return '群组';
+			return 'Group';
 		case 'groupPublic':
-			return '群组公开';
+			return 'Group Public';
 		case 'groupPlus':
-			return '群组Plus';
+			return 'Group Plus';
 		default:
 			return type || '';
 	}
@@ -200,12 +200,12 @@ export function accessTypeColor(type) {
  * (which is usually a long random hash) wherever possible.
  *
  * Returns something like:
- *   - '邀请'                 → invite-only
- *   - '邀请+'                → invite+ (canRequestInvite)
- *   - '好友'                 → friends-only
- *   - '好友+ 赵某'           → friends+ with owner name
- *   - '群组 clubX'           → group instance
- *   - '公开 #abc1234'        → public with short hash
+ *   - 'Invite'               → invite-only
+ *   - 'Invite+'              → invite+ (canRequestInvite)
+ *   - 'Friends'              → friends-only
+ *   - 'Friends+ Alice'        → friends+ with owner name
+ *   - 'Group clubX'          → group instance
+ *   - 'Public #abc1234'      → public with short hash
  *   - '~eu'                  → public with region only
  *   - 'shortName'            → custom shortName if present
  *
@@ -214,7 +214,7 @@ export function accessTypeColor(type) {
  */
 export function shortInstanceLabel(L, ownerName = '') {
 	if (!L) return '';
-	if (L.isOffline) return '离线';
+	if (L.isOffline) return 'Offline';
 	if (L.isPrivate) return 'Private';
 	if (L.isTraveling) return 'Traveling';
 	if (!L.isRealInstance) return '';

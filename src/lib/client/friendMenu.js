@@ -12,7 +12,7 @@ import { copyText, selfInvite, requestInvite, muteUser, blockUser, openVrcProfil
  */
 function perAccount(accts, base, fn) {
 	if (accts.length <= 1) return { ...base, disabled: base.disabled || !accts.length, action: () => fn(accts[0]?.id) };
-	return { ...base, sub: accts.map((a) => ({ icon: '👤', label: accountLabel(a), action: () => fn(a.id) })) };
+	return { ...base, sub: accts.map((a) => ({ icon: 'user', label: accountLabel(a), action: () => fn(a.id) })) };
 }
 
 /**
@@ -27,35 +27,35 @@ export function friendMenuItems(f) {
 	const { groups, members } = get(friendGroups);
 
 	return [
-		{ icon: '👤', label: '查看详情', action: () => openUser(f.id, { accountId: f.accountIds?.[0], name: f.displayName }) },
+		{ icon: 'user', label: 'View details', action: () => openUser(f.id, { accountId: f.accountIds?.[0], name: f.displayName }) },
 		{ divider: true },
-		perAccount(accts, { icon: '✉️', label: '请求加入 TA 的实例' }, (id) => requestInvite(id, f.id)),
-		perAccount(accts, { icon: '🎯', label: '邀请自己到 TA 的实例' }, (id) => selfInvite(id, f.location)),
-		{ icon: '🔗', label: '复制实例链接', disabled: !inInstance, action: () => copyText(instanceLink(f.location), '实例链接') },
+		perAccount(accts, { icon: 'mail', label: 'Request invite' }, (id) => requestInvite(id, f.id)),
+		perAccount(accts, { icon: 'target', label: 'Invite myself to their instance' }, (id) => selfInvite(id, f.location)),
+		{ icon: 'link', label: 'Copy instance link', disabled: !inInstance, action: () => copyText(instanceLink(f.location), 'instance link') },
 		{ divider: true },
-		perAccount(accts, { icon: '🔕', label: '静音' }, (id) => muteUser(id, f.id)),
-		perAccount(accts, { icon: '🚫', label: '屏蔽', danger: true }, (id) => blockUser(id, f.id, f.displayName)),
+		perAccount(accts, { icon: 'bell-off', label: 'Mute' }, (id) => muteUser(id, f.id)),
+		perAccount(accts, { icon: 'ban', label: 'Block', danger: true }, (id) => blockUser(id, f.id, f.displayName)),
 		...(groups.length
 			? [
 					{ divider: true },
 					{
-						icon: '🗂',
-						label: '分组',
+						icon: 'folder',
+						label: 'Group',
 						sub: groups.map((g) => {
 							const member = !!members[g.name]?.includes(f.id);
 							return {
-								icon: member ? '✓' : '＋',
+								icon: member ? 'check' : 'plus',
 								label: g.displayName,
-								action: () => run(() => setFriendGroupMember(g.name, f.id, !member), member ? '已移出分组' : '已加入分组')
+								action: () => run(() => setFriendGroupMember(g.name, f.id, !member), member ? 'Removed from group' : 'Added to group')
 							};
 						})
 					}
 				]
 			: []),
 		{ divider: true },
-		{ icon: '📋', label: '复制显示名', action: () => copyText(f.displayName || f.id, '显示名') },
-		{ icon: '🆔', label: '复制用户 ID', action: () => copyText(f.id, '用户 ID') },
-		{ icon: '🌐', label: '在 VRChat 网站打开', action: () => openVrcProfile(f.id) }
+		{ icon: 'copy', label: 'Copy display name', action: () => copyText(f.displayName || f.id, 'display name') },
+		{ icon: 'hash', label: 'Copy user ID', action: () => copyText(f.id, 'user ID') },
+		{ icon: 'globe', label: 'Open on vrchat.com', action: () => openVrcProfile(f.id) }
 	];
 }
 

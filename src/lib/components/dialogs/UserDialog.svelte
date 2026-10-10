@@ -1,4 +1,5 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { untrack } from 'svelte';
 	import { accountById, accountLabel, loggedInAccounts } from '$lib/stores/accounts.js';
 	import { friendIndex } from '$lib/stores/friends.js';
@@ -56,7 +57,7 @@
 	});
 	async function saveNote() {
 		noteBusy = true;
-		const r = await run(() => api(`${accountPath(accountId)}/note`, { method: 'POST', body: { userId, note } }), '备注已保存');
+		const r = await run(() => api(`${accountPath(accountId)}/note`, { method: 'POST', body: { userId, note } }), 'Note saved');
 		noteBusy = false;
 		if (r && user) user.note = r.note ?? note;
 	}
@@ -65,8 +66,8 @@
 	const doAction = (action, message, extra = {}) => run(() => act(accountId, action, userId, extra), message);
 
 	async function unfriend() {
-		if (!(await askConfirm(`确定删除好友 ${user.displayName}？`, { okLabel: '删除好友', danger: true }))) return;
-		if (await doAction('unfriend', '已删除好友')) reload(true);
+		if (!(await askConfirm(`Remove ${user.displayName} from your friends?`, { okLabel: 'Unfriend', danger: true }))) return;
+		if (await doAction('unfriend', 'Friend removed')) reload(true);
 	}
 
 	let editOpen = $state(false);
@@ -82,29 +83,29 @@
 	}
 
 	const tabs = $derived([
-		{ id: 'about', label: '关于' },
-		{ id: 'avatars', label: '模型', count: res.data?.avatars?.length ?? 0 },
-		{ id: 'worlds', label: '世界', count: res.data?.worlds?.length ?? 0 },
-		{ id: 'badges', label: '徽章', count: res.data?.badges?.length ?? 0 }
+		{ id: 'about', label: 'About' },
+		{ id: 'avatars', label: 'Avatars', count: res.data?.avatars?.length || null },
+		{ id: 'worlds', label: 'Worlds', count: res.data?.worlds?.length || null },
+		{ id: 'badges', label: 'Badges', count: res.data?.badges?.length || null }
 	]);
 </script>
 
 <Modal size="lg" flush onclose={closeOverlay}>
 	{#if res.loading && !res.data}
-		<Notice kind="loading" text="加载用户详情…" />
+		<Notice kind="loading" text="Loading user…" />
 	{:else if res.error}
 		<Notice kind="error" text={res.error} onretry={() => reload()} />
 	{:else if user}
 		<Hero bg={user.bannerUrl} {accountId}>
-			<button class="pic" disabled={!user.currentAvatar} title={user.currentAvatar ? '查看当前模型' : ''} onclick={() => openAvatar(user.currentAvatar, accountId)}>
+			<button class="pic" disabled={!user.currentAvatar} title={user.currentAvatar ? 'View current avatar' : ''} onclick={() => openAvatar(user.currentAvatar, accountId)}>
 				<Avatar src={pic} name={user.displayName} size={76} {accountId} square />
 			</button>
 			<div class="who">
 				<div class="name"><UserName {user} /></div>
 				{#if user.username}<div class="faint">@{user.username}</div>{/if}
 				<div class="badges">
-					{#if user.developerType && user.developerType !== 'none'}<span class="badge warn">⭐ {user.developerType}</span>{/if}
-					{#if user.isFriend}<span class="badge ok">好友</span>{/if}
+					{#if user.developerType && user.developerType !== 'none'}<span class="badge warn"><Icon name="star" /> {user.developerType}</span>{/if}
+					{#if user.isFriend}<span class="badge ok">Friend</span>{/if}
 					<StatusPill status={user.status} all />
 					{#if user.pronouns}<span class="badge">{user.pronouns}</span>{/if}
 				</div>
@@ -116,25 +117,25 @@
 		<div class="pane">
 			{#if tab === 'about'}
 				<Facts>
-					<Fact label="状态">
-						{#if user.statusDescription}{user.statusDescription}{:else}<span class="faint">无</span>{/if}
+					<Fact label="Status">
+						{#if user.statusDescription}{user.statusDescription}{:else}<span class="faint">None</span>{/if}
 					</Fact>
-					<Fact label="所在位置">
+					<Fact label="Location">
 						{#if user.location && user.location !== 'offline'}
 							<Place location={user.location} worldName={res.data.currentWorld?.name} {accountId} showPublic />
-							{#if res.data.currentWorld?.occupants != null}<span class="faint small">👥 {res.data.currentWorld.occupants}</span>{/if}
+							{#if res.data.currentWorld?.occupants != null}<span class="faint small"><Icon name="users" /> {res.data.currentWorld.occupants}</span>{/if}
 						{:else}
-							<span class="faint">离线</span>
+							<span class="faint">Offline</span>
 						{/if}
 					</Fact>
-					<Fact label="上次登录">{#if user.last_login}{timeAgo(user.last_login)}{:else}<span class="faint">未知</span>{/if}</Fact>
-					<Fact label="最后活动">{#if user.last_activity}{timeAgo(user.last_activity)}{:else}<span class="faint">未知</span>{/if}</Fact>
-					<Fact label="注册时间">{#if user.date_joined}{formatDate(user.date_joined)}{:else}<span class="faint">未知</span>{/if}</Fact>
-					<Fact label="最后平台">{platformLabel(user.last_platform) || '—'}</Fact>
+					<Fact label="Last login">{#if user.last_login}{timeAgo(user.last_login)}{:else}<span class="faint">Unknown</span>{/if}</Fact>
+					<Fact label="Last activity">{#if user.last_activity}{timeAgo(user.last_activity)}{:else}<span class="faint">Unknown</span>{/if}</Fact>
+					<Fact label="Joined">{#if user.date_joined}{formatDate(user.date_joined)}{:else}<span class="faint">Unknown</span>{/if}</Fact>
+					<Fact label="Last platform">{platformLabel(user.last_platform) || '—'}</Fact>
 				</Facts>
 
 				<Block title="Bio">
-					{#if bio}<p class="bio">{bio}</p>{:else}<p class="faint">这个用户没有写 Bio</p>{/if}
+					{#if bio}<p class="bio">{bio}</p>{:else}<p class="faint">This user has no bio</p>{/if}
 					{#if res.data.profile?.bioLinks?.length}
 						<div class="links">
 							{#each res.data.profile.bioLinks as l (l)}
@@ -145,46 +146,50 @@
 				</Block>
 
 				{#if !isSelf}
-					<Block title="备注" hint="VRChat 备注，游戏里也看得到">
-						<textarea bind:value={note} maxlength="256" rows="2" placeholder="给 TA 写点备注…"></textarea>
+					<Block title="Note" hint="A VRChat note; also visible in game">
+						<textarea bind:value={note} maxlength="256" rows="2" placeholder="Write a note about them…"></textarea>
 						<div class="row note-foot">
 							<span class="faint small">{note.length}/256</span>
 							<span class="spacer"></span>
-							<button class="btn xs" disabled={noteBusy || note === (user.note || '')} onclick={saveNote}>{noteBusy ? '保存中…' : '保存备注'}</button>
+							<button class="btn xs" disabled={noteBusy || note === (user.note || '')} onclick={saveNote}>{noteBusy ? 'Saving…' : 'Save note'}</button>
 						</div>
 					</Block>
 				{/if}
 
-				<Block title="操作">
+				<Block title="Actions">
 					{#snippet actions()}
 						{#if $loggedInAccounts.length > 1}
-							<select class="acc-select" bind:value={accountId} title="用哪个账号操作（也决定了你和 TA 的好友关系）">
-								{#each $loggedInAccounts as a (a.id)}<option value={a.id}>以 {accountLabel(a)} 操作</option>{/each}
+							<select class="acc-select" bind:value={accountId} title="Account used for actions (also decides the friendship shown)">
+								{#each $loggedInAccounts as a (a.id)}<option value={a.id}>As {accountLabel(a)}</option>{/each}
 							</select>
 						{/if}
 					{/snippet}
 					<div class="actions">
 						{#if isSelf}
-							<button class="btn primary" onclick={() => (editOpen = true)}>✏️ 编辑个人资料</button>
+							<button class="btn primary" onclick={() => (editOpen = true)}><Icon name="pencil" /> Edit profile</button>
 						{:else if user.isFriend}
-							<button class="btn primary" onclick={() => requestInvite(accountId, userId)}>✉️ 请求加入 TA</button>
-							<button class="btn" onclick={() => withMessage('request')} title="带一条预设消息">✉️ 带消息请求</button>
-							<button class="btn" onclick={() => inviteUser(accountId, userId)} title="邀请 TA 到你当前所在的实例">📨 邀请 TA 加入我</button>
-							<button class="btn" onclick={() => withMessage('message')} title="带一条预设消息">📨 带消息邀请</button>
-							<button class="btn" onclick={() => (favOpen = true)}>⭐ 好友收藏</button>
+							<button class="btn primary" onclick={() => requestInvite(accountId, userId)} title="Ask them to invite you to their instance"><Icon name="hand" /> Ask them to invite me</button>
+							<button class="btn" onclick={() => withMessage('request')} title="Ask for an invite with a preset message"><Icon name="message" /> Ask with message</button>
+							<button class="btn" onclick={() => inviteUser(accountId, userId)} title="Invite them to the instance you are in"><Icon name="send" /> Invite them to my instance</button>
+							<button class="btn" onclick={() => withMessage('message')} title="Invite them with a preset message"><Icon name="message" /> Invite with message</button>
+							<button class="btn" onclick={() => (favOpen = true)}><Icon name="star" /> Favorite</button>
 						{:else}
-							<button class="btn primary" onclick={() => doAction('friendRequest', '好友请求已发送')}>🤝 发送好友请求</button>
-						{/if}
-						{#if !isSelf}
-							<button class="btn" onclick={() => muteUser(accountId, userId)}>🔕 静音</button>
-							<button class="btn danger" onclick={() => blockUser(accountId, userId, user.displayName)}>🚫 屏蔽</button>
-							{#if user.isFriend}<button class="btn danger" onclick={unfriend}>🗑 删除好友</button>{/if}
+							<button class="btn primary" onclick={() => doAction('friendRequest', 'Friend request sent')}><Icon name="user-plus" /> Send friend request</button>
 						{/if}
 						<span class="gap"></span>
-						<button class="btn ghost" onclick={() => copyText(user.id, '用户 ID')}>📋 ID</button>
-						<button class="btn ghost" onclick={() => copyText(user.displayName, '显示名')}>📋 名字</button>
-						<button class="btn ghost" onclick={() => openVrcProfile(user.id)}>🌐 网站</button>
+						<button class="btn ghost" onclick={() => copyText(user.id, 'user ID')}><Icon name="copy" /> ID</button>
+						<button class="btn ghost" onclick={() => copyText(user.displayName, 'display name')}><Icon name="copy" /> Name</button>
+						<button class="btn ghost" onclick={() => openVrcProfile(user.id)}><Icon name="globe" /> Website</button>
 					</div>
+					{#if !isSelf}
+						<div class="actions danger-row">
+							<span class="faint small">Moderation</span>
+							<span class="gap"></span>
+							<button class="btn" onclick={() => muteUser(accountId, userId)}><Icon name="bell-off" /> Mute</button>
+							<button class="btn danger" onclick={() => blockUser(accountId, userId, user.displayName)}><Icon name="ban" /> Block</button>
+							{#if user.isFriend}<button class="btn danger" onclick={unfriend}><Icon name="trash" /> Unfriend</button>{/if}
+						</div>
+					{/if}
 				</Block>
 			{:else if tab === 'avatars'}
 				{#if res.data.avatars?.length}
@@ -198,7 +203,7 @@
 						{/each}
 					</div>
 				{:else}
-					<Notice text="这个用户没有公开模型" />
+					<Notice text="This user has no public avatars" />
 				{/if}
 			{:else if tab === 'worlds'}
 				{#if res.data.worlds?.length}
@@ -207,38 +212,38 @@
 							<button class="thumb" title={w.name} onclick={() => openWorld(w.id, accountId)}>
 								<Avatar src={w.thumbnailImageUrl} name={w.name} size={120} {accountId} square />
 								<span class="tn ellipsis">{w.name}</span>
-								{#if w.occupants != null}<span class="badge tag">👥 {w.occupants}</span>{/if}
+								{#if w.occupants != null}<span class="badge tag"><Icon name="users" /> {w.occupants}</span>{/if}
 							</button>
 						{/each}
 					</div>
 				{:else}
-					<Notice text="这个用户没有公开世界" />
+					<Notice text="This user has no public worlds" />
 				{/if}
 			{:else if res.data.badges?.length}
 				<div class="badges-grid">
 					{#each res.data.badges as b (b.badgeId)}
 						<div class="badge-card" title={b.badgeDescription || ''}>
-							{#if b.badgeImageUrl}<img src={vrImage(b.badgeImageUrl, accountId)} alt={b.badgeName} />{:else}<span class="noimg">🏅</span>{/if}
+							{#if b.badgeImageUrl}<img src={vrImage(b.badgeImageUrl, accountId)} alt={b.badgeName} />{:else}<span class="noimg"><Icon name="award" /></span>{/if}
 							<div class="bn">{b.badgeName}</div>
 							{#if b.assignedAt}<div class="faint small">{formatDate(b.assignedAt)}</div>{/if}
 						</div>
 					{/each}
 				</div>
 			{:else}
-				<Notice text="这个用户没有徽章" />
+				<Notice text="This user has no badges" />
 			{/if}
 		</div>
 	{/if}
 </Modal>
 
 <EditProfileDialog bind:open={editOpen} {accountId} {user} onSaved={() => reload(true)} />
-<VrcFavoriteDialog bind:open={favOpen} {accountId} kind="friend" objectId={userId} title="VRChat 好友收藏" />
+<VrcFavoriteDialog bind:open={favOpen} {accountId} kind="friend" objectId={userId} title="VRChat friend favorites" />
 <InviteMessageDialog
 	bind:open={msgOpen}
 	{accountId}
 	type={msgKind}
-	title={msgKind === 'request' ? '带消息请求加入' : '带消息邀请'}
-	hint={msgKind === 'request' ? '点一条消息即发送，请求加入 TA 的实例。' : '点一条消息即发送，邀请 TA 到你当前所在的实例。'}
+	title={msgKind === 'request' ? 'Request invite with message' : 'Invite with message'}
+	hint={msgKind === 'request' ? 'Pick a message to send it and request an invite to their instance.' : 'Pick a message to send it and invite them to your current instance.'}
 	onPick={sendWithMessage}
 />
 
@@ -303,6 +308,12 @@
 	}
 	.gap {
 		flex: 1;
+	}
+	.danger-row {
+		align-items: center;
+		margin-top: 10px;
+		padding-top: 10px;
+		border-top: 1px dashed var(--border);
 	}
 	.thumbs {
 		display: grid;

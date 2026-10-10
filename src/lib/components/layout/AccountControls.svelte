@@ -1,4 +1,5 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { loginAccount, logoutAccount, reconnectAccount, removeAccount, accountLabel } from '$lib/stores/accounts.js';
 	import { openUser, askConfirm } from '$lib/stores/overlay.js';
 
@@ -18,7 +19,7 @@
 	}
 
 	async function remove() {
-		const ok = await askConfirm(`删除账号「${accountLabel(a)}」？本地保存的密码也会一并删除。`, { okLabel: '删除', danger: true });
+		const ok = await askConfirm(`Remove account "${accountLabel(a)}"? The stored password is deleted too.`, { okLabel: 'Remove', danger: true });
 		if (ok) removeAccount(a.id);
 	}
 </script>
@@ -32,24 +33,24 @@
 		disabled={disabled || busy}
 		onclick={(e) => (e.stopPropagation(), onclick())}
 	>
-		{icon}{#if !compact}&nbsp;{label}{/if}
+		<Icon name={icon} />{#if !compact}&nbsp;{label}{/if}
 	</button>
 {/snippet}
 
 <span class="controls">
 	{#if a.loggedIn && a.currentUser?.id}
-		{@render control('👤', '个人资料', () => openUser(a.currentUser.id, { accountId: a.id, name: accountLabel(a) }))}
+		{@render control('user', 'Profile', () => openUser(a.currentUser.id, { accountId: a.id, name: accountLabel(a) }))}
 	{/if}
 	{#if a.loggedIn && !a.connected}
-		{@render control('↻', '重连', () => reconnectAccount(a.id))}
+		{@render control('refresh', 'Reconnect', () => reconnectAccount(a.id))}
 	{/if}
 	{#if a.loggedIn}
-		{@render control('⎋', '登出', () => logoutAccount(a.id))}
+		{@render control('log-out', 'Log out', () => logoutAccount(a.id))}
 	{:else}
-		{@render control('↦', '登录', login)}
+		{@render control('log-in', 'Log in', login)}
 	{/if}
 	{#if !a.loggedIn || !compact}
-		{@render control('✕', '删除', remove, true)}
+		{@render control('x', 'Remove', remove, true)}
 	{/if}
 </span>
 

@@ -50,7 +50,7 @@ async function flush() {
 		console.error('save settings failed', err);
 		// keep the unsaved values (newer edits win) and retry shortly
 		for (const [k, v] of Object.entries(updates)) if (!(k in pending)) pending[k] = v;
-		toasts.error('设置保存失败，稍后重试');
+		toasts.error('Saving settings failed, try again later');
 		if (!saveTimer) saveTimer = setTimeout(flush, 5000);
 	}
 }

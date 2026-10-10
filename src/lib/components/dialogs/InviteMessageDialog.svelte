@@ -1,4 +1,5 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { api, run, accountPath } from '$lib/client/api.js';
 	import { toasts } from '$lib/stores/toast.js';
 	import Modal from '../ui/Modal.svelte';
@@ -8,7 +9,7 @@
 	 * Picker for the 12 preset messages VRChat keeps per kind ('message' = sent
 	 * with an invite, 'request' = with a request-invite, 'response' /
 	 * 'requestResponse' = decline replies). A slot can be rewritten first
-	 * ("保存并发送"); VRChat puts an edited slot on a ~60 minute cooldown.
+	 * ("Save & send"); VRChat puts an edited slot on a ~60 minute cooldown.
 	 *
 	 * @type {{
 	 *   open: boolean,
@@ -19,7 +20,7 @@
 	 *   onPick: (slot: number, message: string) => void
 	 * }}
 	 */
-	let { open = $bindable(false), accountId, type = 'request', title = '选择消息', hint = '', onPick } = $props();
+	let { open = $bindable(false), accountId, type = 'request', title = 'Choose a message', hint = '', onPick } = $props();
 
 	let messages = $state(/** @type {{ slot: number, message: string, remainingCooldownMinutes?: number }[]} */ ([]));
 	let loading = $state(false);
@@ -61,11 +62,11 @@
 
 	async function save(m, thenSend) {
 		const text = draft.trim();
-		if (!text) return toasts.error('消息不能为空');
+		if (!text) return toasts.error('Message must not be empty');
 		busy = true;
 		const ok =
 			text === m.message ||
-			(await run(() => api(`${accountPath(accountId)}/invite-messages`, { method: 'PUT', body: { type, slot: m.slot, message: text } }), '消息已更新'));
+			(await run(() => api(`${accountPath(accountId)}/invite-messages`, { method: 'PUT', body: { type, slot: m.slot, message: text } }), 'Message updated'));
 		busy = false;
 		if (!ok) return;
 		if (thenSend) pick(m.slot, text);
@@ -93,13 +94,13 @@
 								<div class="row">
 									<span class="faint small">{draft.length}/64</span>
 									<span class="spacer"></span>
-									<button class="btn ghost xs" onclick={() => (editing = null)} disabled={busy}>取消</button>
-									<button class="btn xs" onclick={() => save(m, false)} disabled={busy}>仅保存</button>
-									<button class="btn primary xs" onclick={() => save(m, true)} disabled={busy}>保存并发送</button>
+									<button class="btn ghost xs" onclick={() => (editing = null)} disabled={busy}>Cancel</button>
+									<button class="btn xs" onclick={() => save(m, false)} disabled={busy}>Save only</button>
+									<button class="btn primary xs" onclick={() => save(m, true)} disabled={busy}>Save & send</button>
 								</div>
 							</div>
 						{:else}
-							<button class="slot" title="发送这条消息" onclick={() => pick(m.slot, m.message)}>
+							<button class="slot" title="Send this message" onclick={() => pick(m.slot, m.message)}>
 								<span class="n">{m.slot + 1}</span>
 								<span class="t">{m.message}</span>
 							</button>
@@ -107,9 +108,9 @@
 								class="btn ghost icon sm"
 								disabled={cooling(m)}
 								onclick={() => startEdit(m)}
-								title={cooling(m) ? `冷却中，约 ${m.remainingCooldownMinutes} 分钟后可再改` : '改写这条消息（改写后冷却约 60 分钟）'}
+								title={cooling(m) ? `Cooling down, editable again in about ${m.remainingCooldownMinutes} min` : 'Edit this message (about 60 min cooldown afterwards)'}
 							>
-								{cooling(m) ? `⏳` : '✏️'}
+								<Icon name={cooling(m) ? 'clock' : 'pencil'} />
 							</button>
 						{/if}
 					</li>

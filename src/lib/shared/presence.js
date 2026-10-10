@@ -8,11 +8,11 @@ export const STATUS_COLOR = {
 };
 
 export const STATUS_LABEL = {
-	'join me': '加入我',
-	active: '在线',
-	'ask me': '询问我',
-	busy: '忙碌',
-	offline: '离线'
+	'join me': 'Join Me',
+	active: 'Online',
+	'ask me': 'Ask Me',
+	busy: 'Busy',
+	offline: 'Offline'
 };
 
 /** Dot colour: the status colour while in game, violet for "active", grey offline. */

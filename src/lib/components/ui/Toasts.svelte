@@ -1,11 +1,12 @@
 <script>
+	import Icon from './Icon.svelte';
 	import { toasts } from '$lib/stores/toast.js';
 </script>
 
 <div class="stack" aria-live="polite">
 	{#each $toasts as t (t.id)}
 		<div class="toast {t.kind}">
-			<span class="ico">{t.kind === 'success' ? '✓' : t.kind === 'error' ? '⚠' : 'ℹ'}</span>
+			<span class="ico"><Icon name={t.kind === 'success' ? 'check' : t.kind === 'error' ? 'alert' : 'info'} /></span>
 			{t.message}
 		</div>
 	{/each}

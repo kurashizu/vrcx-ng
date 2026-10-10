@@ -3,7 +3,7 @@
 
 	/**
 	 * The status a user picked in game. By default only the notable ones
-	 * (加入我 / 询问我 / 忙碌) are drawn; `all` shows 在线 as well.
+	 * (Join Me / Ask Me / Busy) are drawn; `all` shows Online as well.
 	 * @type {{ status?: string, all?: boolean }}
 	 */
 	let { status = '', all = false } = $props();

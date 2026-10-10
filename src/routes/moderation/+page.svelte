@@ -1,4 +1,5 @@
 <script>
+	import Icon from '$lib/components/ui/Icon.svelte';
 	import { loggedInAccounts, accountLabel } from '$lib/stores/accounts.js';
 	import { openUser, askConfirm } from '$lib/stores/overlay.js';
 	import { api, run, accountPath } from '$lib/client/api.js';
@@ -12,8 +13,8 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 
 	const KINDS = {
-		mute: { label: '静音', icon: '🔇', undo: 'unmute' },
-		block: { label: '屏蔽', icon: '⛔', undo: 'unblock' }
+		mute: { label: 'Muted', icon: 'volume-x', undo: 'unmute' },
+		block: { label: 'Blocked', icon: 'ban', undo: 'unblock' }
 	};
 
 	let accountId = $state('');
@@ -36,31 +37,31 @@
 
 	async function undo(e) {
 		const k = KINDS[kind];
-		if (!(await askConfirm(`解除对 ${e.targetDisplayName || e.targetUserId} 的${k.label}？`, { okLabel: '解除' }))) return;
-		if (await run(() => act(accountId, k.undo, e.targetUserId), '已解除')) reload();
+		if (!(await askConfirm(`Remove ${e.targetDisplayName || e.targetUserId} from the ${k.label.toLowerCase()} list?`, { okLabel: 'Remove' }))) return;
+		if (await run(() => act(accountId, k.undo, e.targetUserId), 'Removed')) reload();
 	}
 </script>
 
-<Page title="屏蔽管理" icon="🚫" subtitle="查看和解除各个账号的静音 / 屏蔽名单">
+<Page title="Moderation" icon="ban" subtitle="Review and remove muted / blocked users per account">
 	{#snippet actions()}
 		<select class="acc" bind:value={accountId}>
 			{#each $loggedInAccounts as a (a.id)}<option value={a.id}>{accountLabel(a)}</option>{/each}
 		</select>
-		<button class="btn sm" onclick={reload} disabled={res.loading}>{res.loading ? '加载中…' : '↻ 刷新'}</button>
+		<button class="btn sm" onclick={reload} disabled={res.loading}>{res.loading ? 'Loading…' : 'Refresh'}</button>
 	{/snippet}
 
 	<Tabs variant="pill" bind:value={kind} tabs={Object.entries(KINDS).map(([id, k]) => ({ id, label: k.label, icon: k.icon }))} />
 
 	{#if !accountId}
-		<Notice text="没有已登录的账号" />
+		<Notice text="No logged-in account" />
 	{:else}
-		{#if res.data?.source === 'cache'}<div class="badge warn note">VRChat API 暂时不可用，显示的是本地缓存</div>{/if}
+		{#if res.data?.source === 'cache'}<div class="badge warn note">VRChat API unavailable, showing the local cache</div>{/if}
 		{#if res.error}
 			<Notice kind="error" text={res.error} onretry={reload} />
 		{:else if res.loading && !res.data}
 			<Notice kind="loading" />
 		{:else if !entries.length}
-			<Notice icon={KINDS[kind].icon} text="没有{KINDS[kind].label}的用户" />
+			<Notice icon={KINDS[kind].icon} text="No {KINDS[kind].label.toLowerCase()} users" />
 		{:else}
 			<div class="list">
 				{#each entries as e (e.targetUserId + e.type)}
@@ -71,7 +72,7 @@
 							{#if e.created}<span>{timeAgo(e.created, $now)}</span>{/if}
 						{/snippet}
 						{#snippet trailing()}
-							<button class="btn sm" onclick={(ev) => (ev.stopPropagation(), undo(e))}>解除</button>
+							<button class="btn sm" onclick={(ev) => (ev.stopPropagation(), undo(e))}>Remove</button>
 						{/snippet}
 					</ListRow>
 				{/each}

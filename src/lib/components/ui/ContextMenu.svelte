@@ -1,4 +1,5 @@
 <script>
+	import Icon from './Icon.svelte';
 	import { contextMenu, hideContextMenu } from '$lib/stores/overlay.js';
 
 	/** @type {HTMLElement | undefined} */
@@ -51,7 +52,7 @@
 	<div class="menu" bind:this={el} style:left="{pos.left}px" style:top="{pos.top}px" role="menu" tabindex="-1" oncontextmenu={(e) => e.preventDefault()}>
 		{#if trail.length}
 			<button class="item back" onclick={() => (trail = trail.slice(0, -1))}>
-				<span class="ico">‹</span><span class="lbl">{trail.at(-1)?.label}</span>
+				<span class="ico"><Icon name="chevron-left" /></span><span class="lbl">{trail.at(-1)?.label}</span>
 			</button>
 			<div class="sep"></div>
 		{:else if $contextMenu.header}
@@ -65,9 +66,9 @@
 				<div class="sep"></div>
 			{:else}
 				<button class="item" class:danger={item.danger} disabled={item.disabled} role="menuitem" onclick={() => pick(item)}>
-					<span class="ico">{item.icon || ''}</span>
+					<span class="ico">{#if item.icon}<Icon name={item.icon} />{/if}</span>
 					<span class="lbl">{item.label}</span>
-					{#if item.sub}<span class="more">›</span>{/if}
+					{#if item.sub}<span class="more"><Icon name="chevron-right" /></span>{/if}
 				</button>
 			{/if}
 		{/each}

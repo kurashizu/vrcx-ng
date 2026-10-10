@@ -1,4 +1,5 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { api, run, accountPath } from '$lib/client/api.js';
 	import Modal from '../ui/Modal.svelte';
 	import Notice from '../ui/Notice.svelte';
@@ -9,7 +10,7 @@
 	 *
 	 * @type {{ open: boolean, accountId: string, kind: 'friend'|'world'|'avatar', objectId: string, title?: string }}
 	 */
-	let { open = $bindable(false), accountId, kind, objectId, title = 'VRChat 收藏' } = $props();
+	let { open = $bindable(false), accountId, kind, objectId, title = 'VRChat favorites' } = $props();
 
 	let data = $state(/** @type {any} */ (null));
 	let loading = $state(false);
@@ -45,7 +46,7 @@
 		busy = true;
 		const ok = await run(
 			() => api(`${accountPath(accountId)}/vrc-favorites`, { method: 'POST', body: { type: g.type, favoriteId: objectId, group: g.name } }),
-			`已收藏到「${g.displayName}」`
+			`Added to "${g.displayName}"`
 		);
 		busy = false;
 		if (ok) open = false;
@@ -54,7 +55,7 @@
 	async function remove() {
 		if (busy || !current) return;
 		busy = true;
-		const ok = await run(() => api(`${accountPath(accountId)}/vrc-favorites`, { method: 'DELETE', query: { favoriteId: objectId } }), '已取消收藏');
+		const ok = await run(() => api(`${accountPath(accountId)}/vrc-favorites`, { method: 'DELETE', query: { favoriteId: objectId } }), 'Removed from favorites');
 		busy = false;
 		if (ok) open = false;
 	}
@@ -67,23 +68,23 @@
 		{:else if error}
 			<Notice kind="error" text={error} onretry={load} />
 		{:else if groups.length === 0}
-			<Notice text="这个账号没有可用的收藏分组" />
+			<Notice text="This account has no favorite groups" />
 		{:else}
 			<ul>
 				{#each groups as g (g.name)}
 					{@const full = limitOf(g) != null && countOf(g) >= limitOf(g) && current?.group !== g.name}
 					<li>
 						<button class="grp" class:on={current?.group === g.name} disabled={busy || full} onclick={() => choose(g)}>
-							<span>{current?.group === g.name ? '★' : '☆'} {g.displayName}</span>
-							<span class="faint small">{countOf(g)}{limitOf(g) != null ? ` / ${limitOf(g)}` : ''}{full ? ' · 已满' : ''}</span>
+							<span><Icon name="star" fill={current?.group === g.name} /> {g.displayName}</span>
+							<span class="faint small">{countOf(g)}{limitOf(g) != null ? ` / ${limitOf(g)}` : ''}{full ? ' · Full' : ''}</span>
 						</button>
 					</li>
 				{/each}
 			</ul>
 		{/if}
 		{#snippet footer()}
-			{#if current}<button class="btn danger" onclick={remove} disabled={busy}>取消收藏</button>{/if}
-			<button class="btn ghost" onclick={() => (open = false)}>关闭</button>
+			{#if current}<button class="btn danger" onclick={remove} disabled={busy}>Unfavorite</button>{/if}
+			<button class="btn ghost" onclick={() => (open = false)}>Close</button>
 		{/snippet}
 	</Modal>
 {/if}

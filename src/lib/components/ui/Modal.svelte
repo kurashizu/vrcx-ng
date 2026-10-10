@@ -4,6 +4,7 @@
 </script>
 
 <script>
+	import Icon from './Icon.svelte';
 	import { onMount } from 'svelte';
 
 	/**
@@ -62,7 +63,7 @@
 				<h2>{title}</h2>
 			</header>
 		{/if}
-		<button class="close" onclick={() => onclose?.()} aria-label="关闭">✕</button>
+		<button class="close" onclick={() => onclose?.()} aria-label="Close"><Icon name="x" /></button>
 		<div class="body" class:flush>
 			{@render children()}
 		</div>

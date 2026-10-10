@@ -1,9 +1,10 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { untrack } from 'svelte';
 	import { accountLabel, loggedInAccounts } from '$lib/stores/accounts.js';
 	import { closeOverlay } from '$lib/stores/overlay.js';
 	import { api, run, accountPath } from '$lib/client/api.js';
-	import { copyText, launchInstance, selfInvite, requestInvite } from '$lib/client/actions.js';
+	import { copyText, selfInvite, requestInvite } from '$lib/client/actions.js';
 	import { createResource } from '$lib/client/resource.svelte.js';
 	import { comma, formatDateTime, tagList, prettyTag, shortId } from '$lib/shared/format.js';
 	import { describeLocation } from '$lib/shared/location.js';
@@ -44,9 +45,9 @@
 	const fullLocation = (inst) => `${worldId}:${inst.instanceId || inst.id}`;
 
 	const tabs = $derived([
-		{ id: 'instances', label: '实例', count: instances.length },
-		{ id: 'create', label: '创建实例' },
-		{ id: 'info', label: '详情' }
+		{ id: 'instances', label: 'Instances', count: instances.length },
+		{ id: 'create', label: 'Create instance' },
+		{ id: 'info', label: 'Details' }
 	]);
 
 	// ---- per-instance actions ----
@@ -61,11 +62,11 @@
 
 	// ---- create an instance ----
 	const ACCESS = [
-		['public', '公开'],
-		['friends', '仅好友'],
-		['friends+', '好友+'],
-		['invite', '仅邀请'],
-		['invite+', '邀请+（可申请）']
+		['public', 'Public'],
+		['friends', 'Friends'],
+		['friends+', 'Friends+'],
+		['invite', 'Invite'],
+		['invite+', 'Invite+ (can request)']
 	];
 	const API_TYPE = { public: 'public', friends: 'friends', 'friends+': 'hidden', invite: 'private', 'invite+': 'private' };
 	let access = $state('public');
@@ -76,7 +77,7 @@
 	async function create() {
 		creating = true;
 		const body = { action: 'createInstance', worldId, type: API_TYPE[access], canRequestInvite: access === 'invite+', region };
-		const r = await run(() => api(`${accountPath(accountId)}/instance-action`, { method: 'POST', body }), '实例已创建');
+		const r = await run(() => api(`${accountPath(accountId)}/instance-action`, { method: 'POST', body }), 'Instance created');
 		creating = false;
 		if (r) created = r.instance;
 	}
@@ -84,7 +85,7 @@
 
 <Modal size="xl" flush onclose={closeOverlay}>
 	{#if res.loading && !w}
-		<Notice kind="loading" text="加载世界详情…" />
+		<Notice kind="loading" text="Loading world…" />
 	{:else if res.error}
 		<Notice kind="error" text={res.error} onretry={() => res.load(request.accountId)} />
 	{:else if w}
@@ -92,27 +93,26 @@
 			<Avatar src={w.thumbnailUrl || w.imageUrl} name={w.name} size={88} {accountId} square />
 			<div class="who">
 				<h2>{w.name || worldId}</h2>
-				<div class="muted">by {w.authorName || w.authorId || '未知'}</div>
+				<div class="muted">by {w.authorName || w.authorId || 'unknown'}</div>
 				<div class="stats">
-					<span title="当前人数">👥 {comma(w.occupants)}</span>
-					<span title="收藏">⭐ {comma(w.favorites)}</span>
-					<span title="访问">👁 {comma(w.visits)}</span>
+					<span title="Players"><Icon name="users" /> {comma(w.occupants)}</span>
+					<span title="Favorites"><Icon name="star" /> {comma(w.favorites)}</span>
+					<span title="Visits"><Icon name="eye" /> {comma(w.visits)}</span>
 					{#if w.releaseStatus && w.releaseStatus !== 'public'}<span class="badge warn">{w.releaseStatus}</span>{/if}
 				</div>
 			</div>
 		</Hero>
 
 		<div class="bar">
-			<button class="btn primary sm" onclick={() => launchInstance(worldId)}>↗ 启动世界</button>
-			<button class="btn sm" disabled={!accountId} onclick={() => (favOpen = true)}>⭐ 收藏</button>
-			<button class="btn ghost sm" onclick={() => copyText(worldId, '世界 ID')}>📋 ID</button>
-			<button class="btn ghost sm" onclick={() => copyText(w.name, '世界名')}>📋 名字</button>
-			<button class="btn ghost sm" onclick={() => copyText(`https://vrchat.com/home/world/${worldId}`, '链接')}>📋 链接</button>
-			<a class="btn ghost sm" target="_blank" rel="noreferrer" href="https://vrchat.com/home/world/{worldId}">🌐 网站</a>
+			<button class="btn sm" disabled={!accountId} onclick={() => (favOpen = true)}><Icon name="star" /> Favorite</button>
+			<button class="btn ghost sm" onclick={() => copyText(worldId, 'world ID')}><Icon name="copy" /> ID</button>
+			<button class="btn ghost sm" onclick={() => copyText(w.name, 'world name')}><Icon name="copy" /> Name</button>
+			<button class="btn ghost sm" onclick={() => copyText(`https://vrchat.com/home/world/${worldId}`, 'link')}><Icon name="copy" /> Link</button>
+			<a class="btn ghost sm" target="_blank" rel="noreferrer" href="https://vrchat.com/home/world/{worldId}"><Icon name="globe" /> Website</a>
 			<span class="spacer"></span>
 			{#if $loggedInAccounts.length > 1}
-				<select class="acc-select" bind:value={accountId} title="用哪个账号邀请 / 创建实例 / 收藏">
-					{#each $loggedInAccounts as a (a.id)}<option value={a.id}>以 {accountLabel(a)}</option>{/each}
+				<select class="acc-select" bind:value={accountId} title="Account used to invite / create instances / favorite">
+					{#each $loggedInAccounts as a (a.id)}<option value={a.id}>As {accountLabel(a)}</option>{/each}
 				</select>
 			{/if}
 		</div>
@@ -122,7 +122,7 @@
 		<div class="pane">
 			{#if tab === 'instances'}
 				{#if instances.length === 0}
-					<Notice text="暂时没有可见的实例。可以到「创建实例」开一个。" />
+					<Notice text="No visible instances right now. Use the Create instance tab to open one." />
 				{:else}
 					<ul class="insts">
 						{#each instances as inst (inst.instanceId)}
@@ -135,21 +135,20 @@
 										<AccessBadge place={d} showPublic />
 									</div>
 									{#if inst.users?.length}
-										<div class="faint small ellipsis">好友：{inst.users.join('、')}</div>
+										<div class="faint small ellipsis">Friends: {inst.users.join(', ')}</div>
 									{/if}
 								</div>
 								{#if inst.occupants}
-									<span class="occ" title="人数">👥 {inst.occupants}{inst.capacity ? `/${inst.capacity}` : ''}</span>
+									<span class="occ" title="Players"><Icon name="users" /> {inst.occupants}{inst.capacity ? `/${inst.capacity}` : ''}</span>
 								{/if}
 								<div class="acts">
-									<button class="btn ghost icon sm" title="邀请自己（所有访问类型都可以）" disabled={!accountId || busyLoc === loc} onclick={() => inviteSelf(loc)}>
-										{busyLoc === loc ? '…' : '✉️'}
+									<button class="btn ghost icon sm" title="Invite myself (works for every access type)" disabled={!accountId || busyLoc === loc} onclick={() => inviteSelf(loc)}>
+										{#if busyLoc === loc}…{:else}<Icon name="mail" />{/if}
 									</button>
-									<button class="btn ghost icon sm" title="邀请好友加入" disabled={!accountId} onclick={() => (inviteTarget = loc)}>👥</button>
+									<button class="btn ghost icon sm" title="Invite friends" disabled={!accountId} onclick={() => (inviteTarget = loc)}><Icon name="users" /></button>
 									{#if inst.ownerUserId && d.accessType !== 'public'}
-										<button class="btn ghost icon sm" title="向房主请求邀请" disabled={!accountId} onclick={() => requestInvite(accountId, inst.ownerUserId)}>✋</button>
+										<button class="btn ghost icon sm" title="Ask the owner for an invite" disabled={!accountId} onclick={() => requestInvite(accountId, inst.ownerUserId)}><Icon name="hand" /></button>
 									{/if}
-									<button class="btn ghost icon sm" title="用 VRChat 打开" onclick={() => launchInstance(loc)}>↗</button>
 								</div>
 							</li>
 						{/each}
@@ -157,15 +156,15 @@
 				{/if}
 			{:else if tab === 'create'}
 				<div class="stack create">
-					<p class="muted small">在这个世界新开一个实例；创建后可以邀请自己进入，或直接启动。</p>
+					<p class="muted small">Open a new instance of this world; afterwards invite yourself into it.</p>
 					<label class="field">
-						<span class="lbl">访问类型</span>
+						<span class="lbl">Access type</span>
 						<select bind:value={access}>
 							{#each ACCESS as [v, label] (v)}<option value={v}>{label}</option>{/each}
 						</select>
 					</label>
 					<label class="field">
-						<span class="lbl">区域</span>
+						<span class="lbl">Region</span>
 						<select bind:value={region}>
 							<option value="us">US West</option>
 							<option value="use">US East</option>
@@ -174,41 +173,40 @@
 						</select>
 					</label>
 					<div class="row">
-						<button class="btn primary" disabled={creating || !accountId} onclick={create}>{creating ? '创建中…' : '创建实例'}</button>
+						<button class="btn primary" disabled={creating || !accountId} onclick={create}>{creating ? 'Creating…' : 'Create instance'}</button>
 						{#if created?.location}
-							<button class="btn" disabled={busyLoc === created.location} onclick={() => inviteSelf(created.location)}>✉️ 邀请自己</button>
-							<button class="btn" onclick={() => launchInstance(created.location)}>↗ 启动</button>
+							<button class="btn" disabled={busyLoc === created.location} onclick={() => inviteSelf(created.location)}><Icon name="mail" /> Invite myself</button>
 						{/if}
 					</div>
 					{#if created?.location}<div class="faint small mono">{shortId(created.location)}</div>{/if}
-					{#if !accountId}<div class="error-text small">没有已登录的账号</div>{/if}
+					{#if !accountId}<div class="error-text small">No logged-in account</div>{/if}
 				</div>
 			{:else}
 				<Facts min={170}>
-					<Fact label="当前人数">
+					<Fact label="Players">
 						{comma(w.occupants)}
 						{#if w.publicOccupants != null && w.privateOccupants != null}
-							<span class="faint small">（公开 {comma(w.publicOccupants)} / 私人 {comma(w.privateOccupants)}）</span>
+							<span class="faint small">(public {comma(w.publicOccupants)} / private {comma(w.privateOccupants)})</span>
 						{/if}
 					</Fact>
-					<Fact label="收藏">
+					<Fact label="Favorites">
 						{comma(w.favorites)}
-						{#if w.favorites && w.visits}<span class="faint small">（{Math.round((w.favorites / w.visits) * 100)}%）</span>{/if}
+						{#if w.favorites && w.visits}<span class="faint small">({Math.round((w.favorites / w.visits) * 100)}%)</span>{/if}
 					</Fact>
-					<Fact label="访问">{comma(w.visits)}</Fact>
-					<Fact label="容量">
-						{comma(w.recommendedCapacity)} <span class="faint small">推荐</span>
-						{#if w.capacity != null && w.capacity !== w.recommendedCapacity}<span class="faint small">/ {comma(w.capacity)} 最大</span>{/if}
+					<Fact label="Visits">{comma(w.visits)}</Fact>
+					<Fact label="Capacity">
+						{comma(w.recommendedCapacity)} <span class="faint small">recommended</span>
+						{#if w.capacity != null && w.capacity !== w.recommendedCapacity}<span class="faint small">/ {comma(w.capacity)} max</span>{/if}
 					</Fact>
-					<Fact label="创建">{formatDateTime(w.created_at) || '?'}</Fact>
-					<Fact label="更新">{formatDateTime(w.updated_at) || '?'}</Fact>
+					<Fact label="Created">{formatDateTime(w.created_at) || '?'}</Fact>
+					<Fact label="Updated">{formatDateTime(w.updated_at) || '?'}</Fact>
 				</Facts>
 
 				{#if w.description}
-					<Block title="描述"><p class="desc">{w.description}</p></Block>
+					<Block title="Description"><p class="desc">{w.description}</p></Block>
 				{/if}
 				{#if otherTags.length || authorTags.length}
-					<Block title="标签">
+					<Block title="Tags">
 						<div class="tags">
 							{#each otherTags as t (t)}<span class="badge">{t}</span>{/each}
 							{#each authorTags as t (t)}<span class="badge accent">{prettyTag(t)}</span>{/each}
@@ -216,17 +214,17 @@
 					</Block>
 				{/if}
 				{#if w.previewYoutubeId}
-					<Block title="预览视频">
+					<Block title="Preview video">
 						<a href="https://www.youtube.com/watch?v={w.previewYoutubeId}" target="_blank" rel="noreferrer">youtube.com/watch?v={w.previewYoutubeId}</a>
 					</Block>
 				{/if}
 				{#if w.allowedDomains?.length}
-					<Block title="允许的域名">
+					<Block title="Allowed domains">
 						<div class="tags">{#each w.allowedDomains as d (d)}<span class="badge">{d}</span>{/each}</div>
 					</Block>
 				{/if}
 				{#if packages.length}
-					<Block title="Unity 包">
+					<Block title="Unity packages">
 						<div class="tags">
 							{#each packages as p (p.platform + p.unityVersion)}<span class="badge">{p.platform} · {p.unityVersion}</span>{/each}
 						</div>
@@ -238,7 +236,7 @@
 	{/if}
 </Modal>
 
-<VrcFavoriteDialog bind:open={favOpen} {accountId} kind="world" objectId={worldId} title="VRChat 世界收藏" />
+<VrcFavoriteDialog bind:open={favOpen} {accountId} kind="world" objectId={worldId} title="VRChat world favorites" />
 {#if inviteTarget}
 	<InviteFriendsDialog {accountId} location={inviteTarget} onclose={() => (inviteTarget = null)} />
 {/if}

@@ -31,14 +31,14 @@ export async function POST({ params, request }) {
 	if (!action || !notificationId) return json({ ok: false, error: 'action and notificationId required' }, { status: 400 });
 
 	const n = getNotification(accountId, notificationId);
-	if (!n) return json({ ok: false, error: '找不到这条通知' }, { status: 404 });
+	if (!n) return json({ ok: false, error: 'Notification not found' }, { status: 404 });
 	const v2 = isV2(n);
 
 	try {
 		let r;
 		switch (action) {
 			case 'accept': {
-				if (n.type !== 'friendRequest') return json({ ok: false, error: '只能接受好友请求' }, { status: 400 });
+				if (n.type !== 'friendRequest') return json({ ok: false, error: 'Only friend requests can be accepted' }, { status: 400 });
 				r = await acceptFriendRequest(accountId, notificationId);
 				if (!r.ok) return json(r, { status: 400 });
 				markSeenIds(accountId, [notificationId]);

@@ -1,4 +1,5 @@
 <script>
+	import Icon from './Icon.svelte';
 	import { describeLocation } from '$lib/shared/location.js';
 	import { shortId } from '$lib/shared/format.js';
 	import { openWorld } from '$lib/stores/overlay.js';
@@ -41,9 +42,9 @@
 		<span class="inst faint">{place.instance}</span>
 	{/if}
 {:else if place.kind === 'private'}
-	<span class="faint">🙈 隐身中</span>
+	<span class="faint"><Icon name="eye-off" /> Hidden</span>
 {:else if place.kind === 'traveling'}
-	<span class="faint">🧳 旅行中</span>
+	<span class="faint"><Icon name="plane" /> Traveling</span>
 {/if}
 
 <style>

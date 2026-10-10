@@ -1,17 +1,18 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { page } from '$app/state';
 	import { unseenCount } from '$lib/stores/notifications.js';
 	import { notificationsOpen } from '$lib/stores/overlay.js';
 	import AccountList from './AccountList.svelte';
 
 	const NAV = [
-		{ href: '/', icon: '📡', label: '动态' },
-		{ href: '/friends', icon: '▦', label: '好友总览' },
-		{ href: '/search', icon: '🔍', label: '搜索' },
-		{ href: '/stats', icon: '📊', label: '统计' },
-		{ href: '/moderation', icon: '🚫', label: '屏蔽管理' },
-		{ href: '/chatbox', icon: '💬', label: 'Chatbox' },
-		{ href: '/settings', icon: '⚙️', label: '设置' }
+		{ href: '/', icon: 'radio', label: 'Feed' },
+		{ href: '/friends', icon: 'grid', label: 'Friends' },
+		{ href: '/search', icon: 'search', label: 'Search' },
+		{ href: '/stats', icon: 'chart', label: 'Stats' },
+		{ href: '/moderation', icon: 'ban', label: 'Moderation' },
+		{ href: '/chatbox', icon: 'message', label: 'Chatbox' },
+		{ href: '/settings', icon: 'sliders', label: 'Settings' }
 	];
 
 	const active = (href) => (href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href));
@@ -22,20 +23,20 @@
 		<span class="logo">V</span>
 		<span>
 			<span class="app">vrcx-ng</span>
-			<span class="tag">多账号 VRChat 客户端</span>
+			<span class="tag">Multi-account VRChat client</span>
 		</span>
 	</a>
 
 	<nav>
 		{#each NAV.slice(0, 2) as n (n.href)}
-			<a class="item" class:on={active(n.href)} href={n.href}><span class="ico">{n.icon}</span>{n.label}</a>
+			<a class="item" class:on={active(n.href)} href={n.href}><span class="ico"><Icon name={n.icon} /></span>{n.label}</a>
 		{/each}
 		<button class="item" onclick={() => notificationsOpen.set(true)}>
-			<span class="ico">🔔</span>通知
+			<span class="ico"><Icon name="bell" /></span>Notifications
 			{#if $unseenCount > 0}<span class="badge danger">{$unseenCount > 99 ? '99+' : $unseenCount}</span>{/if}
 		</button>
 		{#each NAV.slice(2) as n (n.href)}
-			<a class="item" class:on={active(n.href)} href={n.href}><span class="ico">{n.icon}</span>{n.label}</a>
+			<a class="item" class:on={active(n.href)} href={n.href}><span class="ico"><Icon name={n.icon} /></span>{n.label}</a>
 		{/each}
 	</nav>
 

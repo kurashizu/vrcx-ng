@@ -10,10 +10,10 @@ export const byLastSeen = (/** @type {Friend} */ a, /** @type {Friend} */ b) => 
 const STATUS_ORDER = { 'join me': 0, active: 1, 'ask me': 2, busy: 3 };
 
 export const SORTS = {
-	displayName: { label: '名字', cmp: byName },
-	lastSeen: { label: '最后在线', cmp: (a, b) => (a.lastSeen || 0) - (b.lastSeen || 0) },
-	platform: { label: '平台', cmp: (a, b) => String(a.platform || '').localeCompare(String(b.platform || '')) },
-	status: { label: '状态', cmp: (a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) }
+	displayName: { label: 'Name', cmp: byName },
+	lastSeen: { label: 'Last seen', cmp: (a, b) => (a.lastSeen || 0) - (b.lastSeen || 0) },
+	platform: { label: 'Platform', cmp: (a, b) => String(a.platform || '').localeCompare(String(b.platform || '')) },
+	status: { label: 'Status', cmp: (a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) }
 };
 
 /** @param {Friend[]} list @param {keyof typeof SORTS} by @param {'asc'|'desc'} dir */
@@ -74,7 +74,7 @@ export function groupByWorld(list) {
 }
 
 /**
- * Bucket friends by their local friend group (largest first, "未分组" last).
+ * Bucket friends by their local friend group (largest first, "Ungrouped" last).
  * @param {Friend[]} list
  * @param {{ name: string, displayName: string, color?: string }[]} groups
  */
@@ -87,7 +87,7 @@ export function groupByFriendGroup(list, groups) {
 		else rest.push(f);
 	}
 	const out = [...buckets.values()].filter((b) => b.friends.length).sort((a, b) => b.friends.length - a.friends.length);
-	if (rest.length) out.push({ key: '_none', label: '未分组', color: undefined, friends: rest });
+	if (rest.length) out.push({ key: '_none', label: 'Ungrouped', color: undefined, friends: rest });
 	return out;
 }
 

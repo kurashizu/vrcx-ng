@@ -421,7 +421,7 @@ export async function getAvatar(accountId, avatarId) {
 }
 
 /**
- * Set the account's current avatar (换装).
+ * Set the account's current avatar (wear).
  * @param {string} accountId
  * @param {string} avatarId
  * @returns {Promise<{ ok: boolean, error?: string }>}
@@ -798,7 +798,7 @@ export async function editInviteMessage(accountId, messageType, slot, message) {
 	if (status !== 200) return { ok: false, error: errorMessage(status, data) };
 	const updated = Array.isArray(data) ? data.find((m) => m.slot === slot) : null;
 	if (updated && updated.message !== message) {
-		return { ok: false, error: `这个消息槽还在冷却中（约 ${updated.remainingCooldownMinutes || '?'} 分钟），暂时不能修改` };
+		return { ok: false, error: `This message slot is still cooling down (about ${updated.remainingCooldownMinutes || '?'} min); it cannot be edited yet` };
 	}
 	return { ok: true };
 }

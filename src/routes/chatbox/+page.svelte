@@ -1,4 +1,5 @@
 <script>
+	import Icon from '$lib/components/ui/Icon.svelte';
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { settings } from '$lib/stores/settings.js';
 	import { toasts } from '$lib/stores/toast.js';
@@ -14,7 +15,7 @@
 	let sfx = $state(true);
 	let typing = $state(false);
 	let auto = $state(false);
-	let health = $state({ ok: false, status: '检查中…', detail: '' });
+	let health = $state({ ok: false, status: 'Checking…', detail: '' });
 	let history = $state(/** @type {string[]} */ ([]));
 	/** bumped on every auto-send so the progress bar restarts */
 	let pulse = $state(0);
@@ -38,7 +39,7 @@
 		saveHistory();
 	}
 	async function clearHistory() {
-		if (!(await askConfirm('清空所有历史消息？', { okLabel: '清空', danger: true }))) return;
+		if (!(await askConfirm('Clear all message history?', { okLabel: 'Clear', danger: true }))) return;
 		history = [];
 		saveHistory();
 	}
@@ -47,19 +48,19 @@
 	async function checkHealth() {
 		try {
 			const j = await api('/api/chatbox/health');
-			health = { ok: true, status: '可发送', detail: `${j.vrc_host}:${j.vrc_port}` };
+			health = { ok: true, status: 'Ready', detail: `${j.vrc_host}:${j.vrc_port}` };
 		} catch (err) {
-			health = { ok: false, status: '无法解析目标', detail: err.message };
+			health = { ok: false, status: 'Cannot resolve target', detail: err.message };
 		}
 	}
 
 	const post = (url, body) => api(url, { method: 'POST', body });
 
 	async function send(immediate) {
-		if (!text) return toasts.error('内容不能为空');
-		if (over) return toasts.error('超出字数 / 行数限制');
+		if (!text) return toasts.error('Message must not be empty');
+		if (over) return toasts.error('Over the character / line limit');
 		const sent = text;
-		if (await run(() => post('/api/chatbox/send', { text: sent, immediate, sfx }), immediate ? '已发送' : '已填入键盘')) {
+		if (await run(() => post('/api/chatbox/send', { text: sent, immediate, sfx }), immediate ? 'Sent' : 'Put into the keyboard')) {
 			remember(sent);
 			if (immediate) text = '';
 		}
@@ -77,7 +78,7 @@
 			pulse++;
 			if (typing) setTyping(false);
 		} catch (err) {
-			toasts.error(`自动发送失败：${err.message}`);
+			toasts.error(`Auto-send failed: ${err.message}`);
 			auto = false;
 		}
 	}
@@ -138,16 +139,16 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<Page title="Chatbox" icon="💬" subtitle="通过 OSC 把文字发进 VRChat 的聊天气泡" width="narrow">
+<Page title="Chatbox" icon="message" subtitle="Send text into the VRChat chatbox over OSC" width="narrow">
 	{#snippet actions()}
 		<span class="status" class:ok={health.ok} title={health.detail}><i></i>{health.status}</span>
-		<a class="btn ghost sm" href="/settings" title="修改目标地址">→ {host}:{port}</a>
+		<a class="btn ghost sm" href="/settings" title="Change target address"><Icon name="arrow-right" /> {host}:{port}</a>
 	{/snippet}
 
 	<div class="card editor">
-		<textarea bind:value={text} oninput={onInput} maxlength={MAX.chars} rows="5" placeholder="说点什么…（最多 {MAX.chars} 字 / {MAX.lines} 行）"></textarea>
+		<textarea bind:value={text} oninput={onInput} maxlength={MAX.chars} rows="5" placeholder="Say something… (max {MAX.chars} chars / {MAX.lines} lines)"></textarea>
 		<div class="count">
-			<span class:bad={lineCount > MAX.lines}>{lineCount} 行</span>
+			<span class:bad={lineCount > MAX.lines}>{lineCount} lines</span>
 			<span class:bad={text.length > MAX.chars}>{text.length} / {MAX.chars}</span>
 		</div>
 		{#if auto}
@@ -158,34 +159,34 @@
 	</div>
 
 	<div class="opts">
-		<button class="chip" class:on={sfx} onclick={() => (sfx = !sfx)}>{sfx ? '🔔' : '🔕'} 提示音</button>
-		<button class="chip" class:on={typing} onclick={() => setTyping(!typing)}>⌨️ 正在输入</button>
-		<button class="chip" class:on={auto} onclick={() => (auto = !auto)}>🔁 自动发送</button>
+		<button class="chip" class:on={sfx} aria-pressed={sfx} onclick={() => (sfx = !sfx)}><Icon name={sfx ? 'bell' : 'bell-off'} /> Sound</button>
+		<button class="chip" class:on={typing} aria-pressed={typing} onclick={() => setTyping(!typing)}><Icon name="keyboard" /> Typing indicator</button>
+		<button class="chip" class:on={auto} aria-pressed={auto} onclick={() => (auto = !auto)}><Icon name="repeat" /> Auto-send</button>
 	</div>
 
 	<div class="row">
-		<button class="btn primary send" disabled={!text || over} onclick={() => send(true)}>发送</button>
-		<button class="btn" disabled={!text || over} onclick={() => send(false)} title="只填进游戏键盘，不发送">填入键盘</button>
-		<button class="btn ghost" onclick={() => (text = '')}>清空</button>
+		<button class="btn primary send" disabled={!text || over} onclick={() => send(true)}>Send</button>
+		<button class="btn" disabled={!text || over} onclick={() => send(false)} title="Only fill the in-game keyboard, do not send">Fill keyboard</button>
+		<button class="btn ghost" onclick={() => (text = '')}>Clear</button>
 		<span class="spacer"></span>
-		<button class="btn ghost sm" onclick={checkHealth}>重新检测</button>
+		<button class="btn ghost sm" onclick={checkHealth}>Re-check</button>
 	</div>
 
 	<p class="faint small keys">
-		<kbd>Ctrl/⌘ + Enter</kbd> 发送 · <kbd>Ctrl/⌘ + K</kbd> 清空 · <kbd>Ctrl/⌘ + L</kbd> 输入中 · <kbd>Ctrl/⌘ + .</kbd> 自动发送
+		<kbd>Ctrl/⌘ + Enter</kbd> send · <kbd>Ctrl/⌘ + K</kbd> clear · <kbd>Ctrl/⌘ + L</kbd> typing · <kbd>Ctrl/⌘ + .</kbd> auto-send
 	</p>
 
 	{#if history.length}
 		<section class="card history">
 			<div class="row head">
-				<h2>最近发送</h2>
+				<h2>Recent</h2>
 				<span class="spacer"></span>
-				<button class="btn ghost xs" onclick={clearHistory}>清空历史</button>
+				<button class="btn ghost xs" onclick={clearHistory}>Clear history</button>
 			</div>
 			{#each history.slice(0, 8) as msg (msg)}
-				<div class="item" role="button" tabindex="0" title="点击追加到输入框" onclick={() => (text = (text ? text + '\n' : '') + msg)} onkeydown={(e) => e.key === 'Enter' && (text = (text ? text + '\n' : '') + msg)}>
+				<div class="item" role="button" tabindex="0" title="Click to append to the input" onclick={() => (text = (text ? text + '\n' : '') + msg)} onkeydown={(e) => e.key === 'Enter' && (text = (text ? text + '\n' : '') + msg)}>
 					<span class="msg">{msg}</span>
-					<button class="btn xs" onclick={(e) => (e.stopPropagation(), (text = msg), send(true))}>发送</button>
+					<button class="btn xs" onclick={(e) => (e.stopPropagation(), (text = msg), send(true))}>Send</button>
 				</div>
 			{/each}
 		</section>
