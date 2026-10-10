@@ -1,40 +1,41 @@
 <script>
+	import Icon from '../ui/Icon.svelte';
 	import { FEED_TYPES, feedMeta } from '$lib/shared/feed.js';
 	import { typeFilter, searchText, paused, heldCount, clearFeed, accountFilter } from '$lib/stores/feed.js';
 	import { accountById, accountLabel } from '$lib/stores/accounts.js';
 	import { settings, updateSetting } from '$lib/stores/settings.js';
 	import { askConfirm } from '$lib/stores/overlay.js';
 
-	const cards = $derived(($settings['ui.feedMode'] || 'bubbles') === 'bubbles');
+	const compact = $derived($settings['ui.feedMode'] === 'compact');
 
 	const toggleType = (t) => typeFilter.update((arr) => (arr.includes(t) ? arr.filter((x) => x !== t) : [...arr, t]));
 
 	async function clear() {
-		if (await askConfirm('清空当前显示的动态？（已保存的历史不受影响，刷新后会重新载入）', { okLabel: '清空', danger: true })) clearFeed();
+		if (await askConfirm('Clear the feed shown here? (Saved history is not affected and reloads on refresh.)', { okLabel: 'Clear', danger: true })) clearFeed();
 	}
 </script>
 
 <div class="bar">
 	<div class="row">
-		<input type="search" placeholder="搜索用户、世界、状态、模型…" bind:value={$searchText} />
+		<input type="search" placeholder="Search users, worlds, status, avatars…" bind:value={$searchText} />
 		{#if $accountFilter}
-			<button class="chip on" title="取消账号筛选" onclick={() => accountFilter.set(null)}>
-				{accountLabel($accountById.get($accountFilter)) || '账号'} ✕
+			<button class="chip on" title="Clear account filter" onclick={() => accountFilter.set(null)}>
+				{accountLabel($accountById.get($accountFilter)) || 'Account'} <Icon name="x" size="12px" />
 			</button>
 		{/if}
-		<button class="btn sm" class:primary={$paused} onclick={() => paused.update((p) => !p)} title="暂停后新动态先暂存，继续时一并显示">
-			{$paused ? `▶ 继续${$heldCount ? ` (${$heldCount})` : ''}` : '⏸ 暂停'}
+		<button class="btn sm" class:primary={$paused} onclick={() => paused.update((p) => !p)} title="While paused, new entries are held and shown on resume">
+			{$paused ? `Resume${$heldCount ? ` (${$heldCount})` : ''}` : 'Pause'}
 		</button>
-		<button class="btn ghost sm icon" onclick={clear} title="清空显示">🗑</button>
+		<button class="btn ghost sm icon" onclick={clear} title="Clear"><Icon name="trash" /></button>
 		<div class="seg">
-			<button class:on={!cards} title="列表" onclick={() => updateSetting('ui.feedMode', 'list')}>☰</button>
-			<button class:on={cards} title="卡片" onclick={() => updateSetting('ui.feedMode', 'bubbles')}>▦</button>
+			<button class:on={!compact} title="Comfortable" aria-label="Comfortable" onclick={() => updateSetting('ui.feedMode', 'comfortable')}><Icon name="rows" /></button>
+			<button class:on={compact} title="Compact" aria-label="Compact" onclick={() => updateSetting('ui.feedMode', 'compact')}><Icon name="menu" /></button>
 		</div>
 	</div>
 	<div class="types">
-		<button class="chip" class:on={$typeFilter.length === 0} onclick={() => typeFilter.set([])}>默认</button>
+		<button class="chip" class:on={$typeFilter.length === 0} onclick={() => typeFilter.set([])}>Default</button>
 		{#each FEED_TYPES as t (t)}
-			<button class="chip" class:on={$typeFilter.includes(t)} onclick={() => toggleType(t)}>{feedMeta(t).icon} {feedMeta(t).label}</button>
+			<button class="chip" class:on={$typeFilter.includes(t)} onclick={() => toggleType(t)}><Icon name={feedMeta(t).icon} /> {feedMeta(t).label}</button>
 		{/each}
 	</div>
 </div>

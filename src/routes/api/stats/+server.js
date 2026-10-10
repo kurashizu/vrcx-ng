@@ -20,12 +20,28 @@ export async function GET({ url }) {
 	const since = Date.now() - days * DAY_MS;
 	const db = getDb();
 
+	// The same event is stored once per account that saw it (accounts that are
+	// friends of each other, or share friends); count each event once: drop a row
+	// if another account already reported the same thing within two minutes.
+	const USER_EVENTS = `('Online','Offline','Active','GPS','Status','Avatar','Bio','DisplayName','TrustLevel')`;
+	const ev = `WITH ev AS (
+		SELECT * FROM feed_events e
+		 WHERE created_at >= ${since}
+		   AND NOT (e.type IN ${USER_EVENTS} AND EXISTS (
+		     SELECT 1 FROM feed_events p
+		      WHERE p.user_id = e.user_id AND p.type = e.type AND p.account_id != e.account_id
+		        AND IFNULL(p.location, '') = IFNULL(e.location, '')
+		        AND IFNULL(p.status_description, '') = IFNULL(e.status_description, '')
+		        AND p.created_at BETWEEN e.created_at - 120000 AND e.created_at
+		        AND (p.created_at < e.created_at OR p.id < e.id)))
+	)\n`;
+
 	const topOnline = db
 		.prepare(
-			`SELECT user_id AS userId, MAX(display_name) AS displayName,
+			ev + `SELECT user_id AS userId, MAX(display_name) AS displayName,
 			        COUNT(*) AS sessions,
 			        SUM(CAST(json_extract(raw_json, '$.time') AS INTEGER)) AS totalMs
-			   FROM feed_events
+			   FROM ev
 			  WHERE type = 'Offline' AND created_at >= ? AND json_valid(raw_json)
 			    AND json_extract(raw_json, '$.time') IS NOT NULL
 			  GROUP BY user_id
@@ -36,8 +52,8 @@ export async function GET({ url }) {
 
 	const hourlyRows = db
 		.prepare(
-			`SELECT CAST(strftime('%H', created_at / 1000, 'unixepoch') AS INTEGER) AS h, COUNT(*) AS c
-			   FROM feed_events WHERE type = 'Online' AND created_at >= ? GROUP BY h`
+			ev + `SELECT CAST(strftime('%H', created_at / 1000, 'unixepoch') AS INTEGER) AS h, COUNT(*) AS c
+			   FROM ev WHERE type = 'Online' AND created_at >= ? GROUP BY h`
 		)
 		.all(since);
 	const hourly = Array.from({ length: 24 }, () => 0);
@@ -45,9 +61,9 @@ export async function GET({ url }) {
 
 	const topWorlds = db
 		.prepare(
-			`SELECT world_id AS worldId, MAX(world_name) AS worldName,
+			ev + `SELECT world_id AS worldId, MAX(world_name) AS worldName,
 			        COUNT(*) AS visits, COUNT(DISTINCT user_id) AS people
-			   FROM feed_events
+			   FROM ev
 			  WHERE type = 'GPS' AND created_at >= ? AND world_id IS NOT NULL AND world_id != ''
 			  GROUP BY world_id
 			  ORDER BY people DESC, visits DESC
@@ -57,7 +73,7 @@ export async function GET({ url }) {
 
 	const totals = Object.fromEntries(
 		db
-			.prepare('SELECT type, COUNT(*) AS c FROM feed_events WHERE created_at >= ? GROUP BY type ORDER BY c DESC')
+			.prepare(ev + 'SELECT type, COUNT(*) AS c FROM ev WHERE created_at >= ? GROUP BY type ORDER BY c DESC')
 			.all(since)
 			.map((r) => [r.type, r.c])
 	);

@@ -5,6 +5,8 @@ import { accounts, accountsLoaded, refreshAccounts } from './accounts.js';
 import { setFriendsSnapshot } from './friends.js';
 import { settings } from './settings.js';
 import { notificationsTick } from './notifications.js';
+import { synced } from './connecting.js';
+import { eventKey, MERGE_WINDOW_MS } from '$lib/shared/dedupe.js';
 
 let es = null;
 let reconnectTimer = null;
@@ -31,9 +33,10 @@ export function connectSSE() {
 		retryDelay = 3000;
 		if (outage) {
 			outage = false;
-			toasts.success('已重新连接');
+			toasts.success('Reconnected');
 		}
 		setInitial(data.entries || []);
+		synced.set(true);
 		if (data.accounts) applyConnectionState(data.accounts);
 		if (data.friends) setFriendsSnapshot(data.friends);
 	});
@@ -59,7 +62,7 @@ export function connectSSE() {
 		es = null;
 		if (!outage) {
 			outage = true;
-			toasts.error('连接已断开，正在重试…');
+			toasts.error('Connection lost, retrying…');
 		}
 		reconnectTimer = setTimeout(connectSSE, retryDelay);
 		retryDelay = Math.min(retryDelay * 2, 30000);
@@ -87,10 +90,12 @@ function applyConnectionState(stateMap) {
 }
 
 /**
- * Browser notification for an incoming entry, per the "通知" settings. Only for
+ * Browser notification for an incoming entry, per the "Notifications" settings. Only for
  * a tab nobody is looking at, and only where the browser offers the
  * Notification API (https or localhost — not plain http on the LAN).
  */
+const notified = new Map();
+
 function desktopNotify(entry) {
 	try {
 		if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
@@ -101,16 +106,22 @@ function desktopNotify(entry) {
 		let title = '';
 		let body = '';
 		if (entry.type === 'Invite' && s['notification.invite']) {
-			title = `${who} 发来邀请`;
+			title = `${who} sent an invite`;
 			body = entry.worldName || entry.detail || '';
 		} else if (entry.type === 'FriendRequest' && s['notification.friendRequest']) {
-			title = `${who} 发来好友请求`;
+			title = `${who} sent a friend request`;
 		} else if (entry.type === 'Online' && s['notification.friendOnline']) {
-			title = `${who} 上线了`;
+			title = `${who} came online`;
 			body = entry.worldName || '';
 		} else {
 			return;
 		}
-		new Notification(title, { body, tag: entry.id });
+		// every account that sees the same event reports it; notify once
+		const key = eventKey(entry) || entry.id;
+		const t = Date.now();
+		for (const [k, at] of notified) if (t - at > MERGE_WINDOW_MS) notified.delete(k);
+		if (notified.has(key)) return;
+		notified.set(key, t);
+		new Notification(title, { body, tag: key });
 	} catch {}
 }

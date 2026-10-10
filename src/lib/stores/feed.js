@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { settings } from './settings.js';
 import { accounts } from './accounts.js';
+import { mergeDuplicates } from '$lib/shared/dedupe.js';
 
 const DEFAULT_MAX = 1000;
 const MAX_HELD = 500;
@@ -15,7 +16,7 @@ export const feed = writable([]);
 
 /** Selected account (null = all). */
 export const accountFilter = writable(/** @type {string|null} */ (null));
-/** Selected type chips; empty = whatever the "动态" settings enable. */
+/** Selected type chips; empty = whatever the "Feed" settings enable. */
 export const typeFilter = writable(/** @type {string[]} */ ([]));
 export const searchText = writable('');
 
@@ -72,7 +73,7 @@ export const filteredFeed = derived(
 		const enabled = $settings['feed.types'] || {};
 		const hideSelf = !!$settings['ui.hideSelfInFeed'];
 		const ownIds = hideSelf ? new Set($accounts.map((a) => a.currentUser?.id).filter(Boolean)) : null;
-		return $feed.filter((e) => {
+		const kept = $feed.filter((e) => {
 			if ($account && e.accountId !== $account) return false;
 			// an explicitly selected type chip always wins over the settings
 			if ($types.length) {
@@ -85,5 +86,7 @@ export const filteredFeed = derived(
 			const hay = `${e.displayName || ''} ${e.accountDisplayName || ''} ${e.worldName || ''} ${e.location || ''} ${e.avatarName || ''} ${e.status || ''} ${e.bio || ''}`.toLowerCase();
 			return hay.includes(q);
 		});
+		// one row per event, not one per account that saw it
+		return mergeDuplicates(kept);
 	}
 );
