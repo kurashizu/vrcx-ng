@@ -7,12 +7,15 @@
 	import { addAccountOpen } from '$lib/stores/overlay.js';
 	import FeedToolbar from '$lib/components/feed/FeedToolbar.svelte';
 	import FeedItem from '$lib/components/feed/FeedItem.svelte';
+	import BubbleBoard from '$lib/components/ui/BubbleBoard.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 
 	const PAGE = 150;
 	let limit = $state(PAGE);
 
-	const compact = $derived($settings['ui.feedMode'] === 'compact');
+	const mode = $derived(({ list: 'list', comfortable: 'list', compact: 'compact' })[$settings['ui.feedMode']] || 'cards');
+	const compact = $derived(mode === 'compact');
+	const cards = $derived(mode === 'cards');
 	const shown = $derived($filteredFeed.slice(0, limit));
 
 	/** "Today" / "Yesterday" / "Mon, Oct 5" for a feed entry's local date */
@@ -45,7 +48,7 @@
 <div class="feed-page">
 	<FeedToolbar />
 	<div class="scroll">
-		<div class="col">
+		<div class="col" class:wide={cards}>
 		{#if $filteredFeed.length === 0}
 			{#if $accountsLoaded && $accounts.length === 0}
 				<Notice icon="key" text="Add and log in to a VRChat account; friends coming online, going offline, changing worlds, avatars or status will show up here live." />
@@ -56,13 +59,24 @@
 				<Notice icon="radio" text="No matching feed entries yet" />
 			{/if}
 		{:else}
-			{#each rows as r (r.key)}
-				{#if r.day}
-					<div class="day">{r.day}</div>
-				{:else}
-					<FeedItem entry={r.entry} {compact} />
-				{/if}
-			{/each}
+			{#if cards}
+				<BubbleBoard items={rows.map((r) => ({ key: r.key, header: !!r.day, data: r }))}>
+					{#snippet header(r)}
+						<div class="day flat">{r.day}</div>
+					{/snippet}
+					{#snippet item(r)}
+						<FeedItem entry={r.entry} card />
+					{/snippet}
+				</BubbleBoard>
+			{:else}
+				{#each rows as r (r.key)}
+					{#if r.day}
+						<div class="day">{r.day}</div>
+					{:else}
+						<FeedItem entry={r.entry} {compact} />
+					{/if}
+				{/each}
+			{/if}
 			{#if $filteredFeed.length > limit}
 				<button class="btn more" onclick={() => (limit += PAGE)}>Show more ({$filteredFeed.length - limit} left)</button>
 			{/if}
@@ -87,6 +101,17 @@
 		max-width: 860px;
 		margin: 0 auto;
 		min-height: 100%;
+	}
+	.col.wide {
+		max-width: 1700px;
+		padding: 4px 16px 24px;
+	}
+	/* day band inside the board: spans the full width */
+	.day.flat {
+		position: static;
+		padding: 12px 4px 4px;
+		background: none;
+		backdrop-filter: none;
 	}
 	/* sticky day headers */
 	.day {

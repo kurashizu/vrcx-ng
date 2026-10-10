@@ -6,7 +6,7 @@
 	import { settings, updateSetting } from '$lib/stores/settings.js';
 	import { askConfirm } from '$lib/stores/overlay.js';
 
-	const compact = $derived($settings['ui.feedMode'] === 'compact');
+	const mode = $derived(({ list: 'list', comfortable: 'list', compact: 'compact' })[$settings['ui.feedMode']] || 'cards');
 
 	const toggleType = (t) => typeFilter.update((arr) => (arr.includes(t) ? arr.filter((x) => x !== t) : [...arr, t]));
 
@@ -28,8 +28,9 @@
 		</button>
 		<button class="btn ghost sm icon" onclick={clear} title="Clear"><Icon name="trash" /></button>
 		<div class="seg">
-			<button class:on={!compact} title="Comfortable" aria-label="Comfortable" onclick={() => updateSetting('ui.feedMode', 'comfortable')}><Icon name="rows" /></button>
-			<button class:on={compact} title="Compact" aria-label="Compact" onclick={() => updateSetting('ui.feedMode', 'compact')}><Icon name="menu" /></button>
+			<button class:on={mode === 'cards'} title="Cards" aria-label="Cards" onclick={() => updateSetting('ui.feedMode', 'cards')}><Icon name="grid" /></button>
+			<button class:on={mode === 'list'} title="List" aria-label="List" onclick={() => updateSetting('ui.feedMode', 'list')}><Icon name="rows" /></button>
+			<button class:on={mode === 'compact'} title="Compact" aria-label="Compact" onclick={() => updateSetting('ui.feedMode', 'compact')}><Icon name="menu" /></button>
 		</div>
 	</div>
 	<div class="types">

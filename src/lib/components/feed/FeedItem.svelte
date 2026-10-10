@@ -15,7 +15,7 @@
 	import Place from '../ui/Place.svelte';
 
 	/** @type {{ entry: import('$lib/shared/feed.js').FeedEntry, compact?: boolean }} */
-	let { entry, compact = false } = $props();
+	let { entry, compact = false, card = false } = $props();
 
 	const meta = $derived(feedMeta(entry.type));
 	const friend = $derived($friendIndex.get(entry.userId));
@@ -58,6 +58,7 @@
 <div
 	class="entry"
 	class:compact
+	class:card
 	class:fresh
 	role="button"
 	tabindex="0"
@@ -79,6 +80,9 @@
 				<strong>{name}</strong>
 			{/if}
 			<span class="verb">{entryVerb(entry)}</span>
+			{#if entry.type === 'GPS' && !showPlace && !place.worldId}
+				<span class="faint">{place.kind === 'private' ? 'a private instance' : place.kind === 'traveling' ? 'another instance…' : 'an unknown place'}</span>
+			{/if}
 
 			{#if entry.type === 'Status'}
 				<span class="flow">
@@ -320,6 +324,43 @@
 	}
 
 	/* compact: one line per entry */
+	/* bubble: used inside the masonry; the time / account line moves to the bottom */
+	.entry.card {
+		min-width: 250px;
+		max-width: 100%;
+		grid-template-columns: 40px minmax(0, 1fr);
+		gap: 0 12px;
+		padding: 12px 14px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-lg);
+		background: var(--bg-1);
+		box-shadow: inset 3px 0 0 color-mix(in srgb, var(--c) 70%, transparent);
+	}
+	.entry.card:hover,
+	.entry.card:focus-visible {
+		border-color: var(--border-strong);
+		background: var(--bg-2);
+	}
+	.card .side {
+		grid-column: 2;
+		flex-direction: row;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 6px;
+		min-width: 0;
+		margin-top: 8px;
+		padding: 0;
+		text-align: left;
+	}
+	.card .time::after {
+		content: '·';
+		margin-left: 6px;
+		opacity: 0.5;
+	}
+	.card .quick {
+		right: 10px;
+		bottom: 8px;
+	}
 	.entry.compact {
 		grid-template-columns: 28px minmax(0, 1fr) auto;
 		align-items: center;
