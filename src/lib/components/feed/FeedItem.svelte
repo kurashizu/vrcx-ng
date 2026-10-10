@@ -326,11 +326,11 @@
 	/* compact: one line per entry */
 	/* bubble: used inside the masonry; the time / account line moves to the bottom */
 	.entry.card {
-		min-width: 250px;
+		min-width: 200px;
 		max-width: 100%;
 		grid-template-columns: 40px minmax(0, 1fr);
 		gap: 0 12px;
-		padding: 12px 14px;
+		padding: 10px 14px;
 		border: 1px solid var(--border);
 		border-radius: var(--r-lg);
 		background: var(--bg-1);
@@ -341,14 +341,24 @@
 		border-color: var(--border-strong);
 		background: var(--bg-2);
 	}
+	/* the avatar spans body + footer, so a one-line bubble is not padded to the avatar's height */
+	.card .av {
+		grid-row: 1 / span 2;
+		align-self: start;
+	}
+	.card .body {
+		grid-column: 2;
+		grid-row: 1;
+	}
 	.card .side {
 		grid-column: 2;
+		grid-row: 2;
 		flex-direction: row;
 		align-items: center;
 		justify-content: flex-start;
 		gap: 6px;
 		min-width: 0;
-		margin-top: 8px;
+		margin-top: 2px;
 		padding: 0;
 		text-align: left;
 	}

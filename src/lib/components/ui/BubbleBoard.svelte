@@ -47,11 +47,76 @@
 		});
 	}
 
+	/** right edge (px from the cell's left) of the content actually drawn inside `root` */
+	function contentRight(root) {
+		const left = root.getBoundingClientRect().left;
+		const range = document.createRange();
+		let max = 0;
+		const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+		/** @type {Node|null} */
+		let n = root;
+		while ((n = walker.nextNode())) {
+			const el = /** @type {HTMLElement} */ (n);
+			const cs = getComputedStyle(el);
+			if (cs.position === 'absolute' || cs.display === 'none' || cs.visibility === 'hidden') continue;
+			if (el.children.length === 0) {
+				if (el.textContent?.trim()) {
+					// a text leaf: where its text really ends (a block leaf stretches to the box, its text does not)
+					range.selectNodeContents(el);
+					const r = range.getBoundingClientRect();
+					max = Math.max(max, r.right - left + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderRightWidth) || 0));
+				} else {
+					const r = el.getBoundingClientRect(); // image, icon, dot
+					if (r.width > 0) max = Math.max(max, r.right - left);
+				}
+			} else {
+				// text sitting directly next to child elements
+				for (const t of el.childNodes) {
+					if (t.nodeType !== 3 || !t.nodeValue?.trim()) continue;
+					range.selectNodeContents(t);
+					max = Math.max(max, range.getBoundingClientRect().right - left);
+				}
+			}
+		}
+		return max;
+	}
+
 	function measure(node, key) {
 		let k = key;
+		let lastW = -1;
+		let lastH = -1;
 		const read = () => {
-			const w = node.offsetWidth;
-			const h = node.offsetHeight;
+			if (node.classList.contains('header')) {
+				const w = node.offsetWidth;
+				const h = node.offsetHeight;
+				const old = sizes.get(k);
+				if (!old || Math.abs(old.h - h) > 0.5) {
+					sizes.set(k, { w, h });
+					bump();
+				}
+				return;
+			}
+			// nothing changed since our own last adjustment: this is the echo of it
+			if (node.offsetWidth === lastW && node.offsetHeight === lastH) return;
+			// 1. natural size (content on as few lines as the cap allows)
+			node.style.width = '';
+			let w = node.offsetWidth;
+			let h = node.offsetHeight;
+			// 2. shrink-wrap: after wrapping, the widest line is often much narrower than the cap
+			const box = /** @type {HTMLElement|null} */ (node.firstElementChild);
+			if (box) {
+				const cs = getComputedStyle(box);
+				// never narrower than the bubble's own min-width (it would overflow the cell and overlap its neighbour)
+				const tight = Math.max(parseFloat(cs.minWidth) || 0, Math.ceil(contentRight(box) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderRightWidth) || 0) + 1));
+				if (tight > 0 && tight < w - 3) {
+					node.style.width = `${tight}px`;
+					if (node.offsetHeight > h + 0.5) node.style.width = ''; // narrower would add a line: keep it
+					w = node.offsetWidth;
+					h = node.offsetHeight;
+				}
+			}
+			lastW = w;
+			lastH = h;
 			const old = sizes.get(k);
 			if (!old || Math.abs(old.w - w) > 0.5 || Math.abs(old.h - h) > 0.5) {
 				sizes.set(k, { w, h });
@@ -64,6 +129,7 @@
 		return {
 			update(next) {
 				k = next;
+				lastW = -1;
 				read();
 			},
 			destroy() {
@@ -167,7 +233,6 @@
 			class:measured={!!p && sizes.has(it.key)}
 			class:header={it.header}
 			style:max-width={it.header ? 'none' : `${cap}px`}
-			style:width={it.header ? `${width}px` : undefined}
 			style:transform="translate({p?.x ?? 0}px, {p?.y ?? 0}px)"
 			use:measure={it.key}
 		>
@@ -192,6 +257,9 @@
 		width: max-content;
 		opacity: 0;
 		will-change: transform;
+	}
+	.cell.header {
+		width: 100%;
 	}
 	.cell.measured {
 		opacity: 1;
