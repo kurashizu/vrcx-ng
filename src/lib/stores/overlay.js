@@ -46,10 +46,10 @@ export function openUser(userId, { accountId = '', name = '' } = {}) {
 	push({ kind: 'user', key: userId, userId, accountIds: ids, name: name || friend?.displayName || '' });
 }
 
-/** @param {string} worldId @param {string} [accountId] */
-export function openWorld(worldId, accountId = '') {
+/** @param {string} worldId @param {string} [accountId] @param {string} [location] a full `wrld_x:instance` tag: that instance is shown first, even if only an invite told us about it */
+export function openWorld(worldId, accountId = '', location = '') {
 	if (!worldId) return;
-	push({ kind: 'world', key: worldId, worldId, accountId: accountId || defaultAccountId() });
+	push({ kind: 'world', key: location || worldId, worldId, location, accountId: accountId || defaultAccountId() });
 }
 
 /** @param {string} avatarId @param {string} [accountId] */

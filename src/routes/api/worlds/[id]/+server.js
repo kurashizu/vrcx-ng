@@ -63,7 +63,45 @@ export async function GET({ params, url }) {
 	}
 	const friends = friendsInWorld(worldId);
 	const instances = await collectInstances(accountId, worldId);
+	await featureInstance(accountId, worldId, url.searchParams.get('location') || '', instances);
 	return json({ ...meta, ...full, id: worldId, worldId, friendsInWorld: friends, instances });
+}
+
+/**
+ * The instance the caller asked about (an invite, a friend's location): mark it
+ * `featured`, adding it when none of the sources above knew it — an invite to a
+ * group / private instance is not listed anywhere else.
+ */
+async function featureInstance(accountId, worldId, location, instances) {
+	const [w, instanceId] = location.split(':');
+	if (w !== worldId || !instanceId) return;
+	let entry = instances.find((i) => i.instanceId === instanceId);
+	if (!entry) {
+		const parsed = parseLocation(location);
+		entry = {
+			instanceId,
+			ownerUserId: parsed.userId || '',
+			ownerName: '',
+			occupants: 0,
+			capacity: null,
+			accessType: parsed.accessType || 'public',
+			canRequestInvite: !!parsed.canRequestInvite,
+			users: []
+		};
+		instances.unshift(entry);
+	}
+	try {
+		// VRChat's own numbers for exactly this instance
+		const r = await api(accountId, `instances/${encodeURIComponent(location)}`, { method: 'GET' });
+		const d = r?.data;
+		if (d && typeof d === 'object') {
+			if (typeof d.n_users === 'number') entry.occupants = d.n_users;
+			if (typeof d.capacity === 'number') entry.capacity = d.capacity;
+			entry.ownerUserId ||= d.ownerId || '';
+		}
+	} catch {}
+	entry.featured = true;
+	instances.sort((a, b) => Number(!!b.featured) - Number(!!a.featured));
 }
 
 /**

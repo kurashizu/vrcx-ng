@@ -161,7 +161,7 @@
 						</div>
 						{#if d}
 							<div class="place">
-								<button class="world" onclick={() => openWorld(it.worldId, it.accountId)}><Icon name="globe" /> {it.worldName || 'World'}</button>
+								<button class="world" onclick={() => openWorld(it.worldId, it.accountId, it.instanceId ? `${it.worldId}:${it.instanceId}` : '')}><Icon name="globe" /> {it.worldName || 'World'}</button>
 								{#if d.kind === 'instance'}
 									{#if d.parsed.instanceName}<span class="inst" title={d.tag}>#{d.parsed.instanceName}</span>{/if}
 									<AccessBadge place={d} showPublic />

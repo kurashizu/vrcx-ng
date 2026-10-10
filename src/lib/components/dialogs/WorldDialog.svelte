@@ -20,7 +20,7 @@
 	import InviteFriendsDialog from './InviteFriendsDialog.svelte';
 	import VrcFavoriteDialog from './VrcFavoriteDialog.svelte';
 
-	/** @type {{ request: { worldId: string, accountId: string } }} */
+	/** @type {{ request: { worldId: string, accountId: string, location?: string } }} */
 	let { request } = $props();
 
 	const worldId = untrack(() => request.worldId);
@@ -28,7 +28,7 @@
 	let accountId = $state(untrack(() => request.accountId));
 	let tab = $state('instances');
 
-	const res = createResource((aid) => api(`/api/worlds/${encodeURIComponent(worldId)}`, { query: { accountId: aid } }));
+	const res = createResource((aid) => api(`/api/worlds/${encodeURIComponent(worldId)}`, { query: { accountId: aid, location: untrack(() => request.location) || undefined } }));
 	// the world itself doesn't depend on who looks, so only the first load is keyed by the account
 	$effect(() => {
 		untrack(() => res.load(request.accountId));
@@ -128,9 +128,10 @@
 						{#each instances as inst (inst.instanceId)}
 							{@const loc = fullLocation(inst)}
 							{@const d = describeLocation(loc)}
-							<li>
+							<li class:featured={inst.featured}>
 								<div class="main">
 									<div class="line">
+										{#if inst.featured}<span class="badge accent">This one</span>{/if}
 										<span class="iid mono">{String(inst.instanceId).split('~')[0]}</span>
 										<AccessBadge place={d} showPublic />
 									</div>
@@ -336,5 +337,9 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
+	}
+	.insts li.featured {
+		border-color: var(--accent);
+		background: var(--accent-soft);
 	}
 </style>

@@ -31,7 +31,7 @@
 			title={place.tag}
 			onclick={(e) => {
 				e.stopPropagation();
-				openWorld(place.worldId, accountId);
+				openWorld(place.worldId, accountId, place.tag);
 			}}>{label}</button
 		>
 	{:else}
