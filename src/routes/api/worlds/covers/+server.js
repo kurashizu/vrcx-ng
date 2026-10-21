@@ -19,7 +19,7 @@ async function fill(accountId, ids) {
 
 /**
  * GET /api/worlds/covers?ids=wrld_a,wrld_b&accountId=…
- * → { covers: { <worldId>: { image, thumb } }, pending }
+ * → { covers: { <worldId>: { image, thumb, author } }, pending }
  * Cached worlds come back at once; the missing ones are fetched in the background (`pending` > 0: ask again).
  */
 export function GET({ url }) {
@@ -33,7 +33,7 @@ export function GET({ url }) {
 	return (async () => {
 		for (const id of ids) {
 			const m = await getWorldMeta(accountId, id, { fetchOnMiss: false });
-			if (m?.imageUrl || m?.thumbnailUrl) covers[id] = { image: m.imageUrl || m.thumbnailUrl, thumb: m.thumbnailUrl || m.imageUrl };
+			if (m?.imageUrl || m?.thumbnailUrl) covers[id] = { image: m.imageUrl || m.thumbnailUrl, thumb: m.thumbnailUrl || m.imageUrl, author: m.authorName || '' };
 			else missing.push(id);
 		}
 		const todo = missing.filter((id) => !fetching.has(id));

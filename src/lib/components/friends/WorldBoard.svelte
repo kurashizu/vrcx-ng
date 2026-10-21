@@ -20,7 +20,7 @@
 	let { worlds } = $props();
 
 	/** worldId -> { image, thumb } (the world cover pictures; fetched in batches, the server fills the cache in the background) */
-	let covers = $state(/** @type {Record<string, { image: string, thumb: string }>} */ ({}));
+	let covers = $state(/** @type {Record<string, { image: string, thumb: string, author?: string }>} */ ({}));
 	let tries = 0;
 	async function loadCovers() {
 		const missing = worlds.filter((w) => !covers[w.worldId]);
@@ -117,6 +117,7 @@
 				<button class="wname" title="Open world" onclick={() => openWorld(w.worldId, w.friends[0]?.accountIds?.[0] || '', '')}>
 					<Icon name="globe" /><span class="ellipsis">{w.label}</span>
 				</button>
+				{#if covers[w.worldId]?.author}<span class="by ellipsis" title="World author">by {covers[w.worldId].author}</span>{/if}
 				<span class="count" title="Friends in this world"><Icon name="users" /> {w.count}</span>
 			</header>
 			<PackBoard items={w.instances.map((i, k) => ({ key: i.key, span: spans[k], data: i }))} gap={8} minCol={200} maxCols={innerCols(spanOf(w))}>
@@ -195,12 +196,24 @@
 		gap: 8px;
 		min-width: 0;
 	}
+	.by {
+		flex: 0 1 auto;
+		min-width: 52px;
+		max-width: 38%;
+		padding: 0 7px;
+		font-size: 10.5px;
+		font-weight: 600;
+		line-height: 17px;
+		border-radius: 999px;
+		color: hsl(var(--h) 60% 85% / 0.9);
+		background: hsl(var(--h) 55% 55% / 0.2);
+	}
 	.wname {
 		display: flex;
 		align-items: center;
 		gap: 7px;
 		min-width: 0;
-		flex: 1;
+		flex: 0 1 auto;
 		font-weight: 650;
 		font-size: 14px;
 		color: hsl(var(--h) 80% 78%);
@@ -210,6 +223,7 @@
 		text-decoration: underline;
 	}
 	.count {
+		margin-left: auto;
 		flex: none;
 		display: inline-flex;
 		align-items: center;
