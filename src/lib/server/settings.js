@@ -55,6 +55,8 @@ const DEFAULTS = {
 
 	// Game client (Play as): ssh alias of the machine running VRChat, and the learned profile -> account map
 	'game.host': 'krsz-desktop',
+	'game.script': '~/Documents/vrchat-dev/scripts/vrc-game', // launcher on the game machine
+	'game.maxProfiles': 6, // game profiles 0..N-1 searched for an account
 	'game.profiles': {},
 
 	// Advanced

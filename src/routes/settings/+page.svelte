@@ -4,7 +4,7 @@
 	import { accounts, accountLabel, refreshAccounts } from '$lib/stores/accounts.js';
 	import { addAccountOpen, askConfirm } from '$lib/stores/overlay.js';
 	import { toasts } from '$lib/stores/toast.js';
-	import { run } from '$lib/client/api.js';
+	import { run, api } from '$lib/client/api.js';
 	import { FEED_META } from '$lib/shared/feed.js';
 	import { formatDateTime } from '$lib/shared/format.js';
 	import Page from '$lib/components/ui/Page.svelte';
@@ -73,6 +73,18 @@
 				{ key: 'friend.sortOfflineBy', kind: 'select', label: 'Offline friend order', desc: 'Order of offline friends in the side list and the overview', options: [['lastSeen', 'Most recently seen first'], ['name', 'By name']] }
 			]
 		},
+		{
+			id: 'game',
+			icon: 'play',
+			label: 'Game',
+			intro: 'The "Play as" button starts the VRChat desktop client on another machine over ssh, logged in as that account (one game profile per account).',
+			rows: [
+				{ key: 'game.host', kind: 'text', placeholder: 'krsz-desktop', label: 'Game machine', desc: 'ssh host (an alias from ~/.ssh/config) of the machine running the VRChat client; key login required' },
+				{ key: 'game.script', kind: 'text', placeholder: '~/Documents/vrchat-dev/scripts/vrc-game', label: 'Launch script', desc: 'Path of the vrc-game script on that machine' },
+				{ key: 'game.maxProfiles', kind: 'number', min: 1, max: 20, step: 1, label: 'Profiles to search', desc: 'An account is looked for in game profiles 0 … N-1' }
+			],
+			game: true
+		},
 		{ id: 'advanced', icon: 'wrench', label: 'Advanced' }
 	];
 
@@ -107,6 +119,46 @@
 	const typeEnabled = (t) => ($settings['feed.types'] || {})[t] !== false;
 	function toggleType(t) {
 		set('feed.types', { ...($settings['feed.types'] || {}), [t]: !typeEnabled(t) });
+	}
+
+	// ---- game machine: connection test + the learned profile -> account map ----
+	let gameTest = $state(/** @type {any} */ (null));
+	let gameTesting = $state(false);
+	let gameMap = $state(/** @type {Record<string, string | null>} */ ({}));
+
+	async function loadGame() {
+		try {
+			gameMap = (await api('/api/game')).profiles || {};
+		} catch {
+			gameMap = {};
+		}
+	}
+	$effect(() => {
+		if (section === 'game') loadGame();
+	});
+
+	async function testGame() {
+		gameTesting = true;
+		gameTest = null;
+		try {
+			gameTest = await api('/api/game', { method: 'POST', body: { action: 'test' } });
+		} catch (err) {
+			gameTest = { reachable: false, error: err.message };
+		}
+		gameTesting = false;
+	}
+
+	async function forget(profile) {
+		const r = await run(() => api('/api/game', { method: 'POST', body: { action: 'forget', profile } }), profile === 'all' ? 'Forgot all profiles' : `Forgot profile ${profile}`);
+		if (r) gameMap = r.profiles || {};
+	}
+
+	const gameProfileCount = $derived(Math.min(20, Math.max(1, Number($settings['game.maxProfiles']) || 6)));
+	function gameOwner(uid) {
+		if (uid === null) return { text: 'No saved login', kind: 'faint' };
+		if (uid === undefined) return { text: 'Not searched yet', kind: 'faint' };
+		const a = $accounts.find((x) => x.currentUser?.id === uid);
+		return { text: a ? accountLabel(a) : uid, kind: 'ok' };
 	}
 
 	// ---- backup ----
@@ -218,6 +270,36 @@
 					{#each current.rows as r (r.key)}
 						{@render field(r)}
 					{/each}
+					{#if current.game}
+						<h3>Connection</h3>
+						<SettingRow label="Test connection" desc="Checks ssh to the game machine, the launch script, Steam and whether the game is running">
+							<button class="btn" disabled={gameTesting} onclick={testGame}><Icon name="refresh" /> {gameTesting ? 'Testing…' : 'Test'}</button>
+						</SettingRow>
+						{#if gameTest}
+							<div class="gtest">
+								{#if gameTest.reachable}
+									<span class="badge ok">Reachable · {gameTest.ms} ms</span>
+									<span class="badge" class:ok={gameTest.script} class:warn={!gameTest.script}>{gameTest.script ? 'Launch script found' : 'Launch script missing'}</span>
+									<span class="badge" class:ok={gameTest.steam} class:warn={!gameTest.steam}>{gameTest.steam ? 'Steam running' : 'Steam not running'}</span>
+									<span class="badge">{gameTest.client ? 'Game running' : 'Game not running'}</span>
+								{:else}
+									<span class="error-text small"><Icon name="alert" /> {gameTest.error || 'Not reachable'}</span>
+								{/if}
+							</div>
+						{/if}
+						<h3>Game profiles</h3>
+						<p class="muted small">Learned automatically the first time an account is launched: the game is started on each profile in turn and the account it logs in as is recorded.</p>
+						{#each Array.from({ length: gameProfileCount }, (_, i) => i) as i (i)}
+							{@const o = gameOwner(gameMap[String(i)])}
+							<SettingRow label={`Profile ${i}`} desc={i === 0 ? 'The default profile (no --profile flag)' : `--profile=${i}`}>
+								<span class={o.kind === 'ok' ? '' : 'faint'}>{o.text}</span>
+								{#if gameMap[String(i)] !== undefined}<button class="btn ghost xs" onclick={() => forget(i)}>Forget</button>{/if}
+							</SettingRow>
+						{/each}
+						{#if Object.keys(gameMap).length}
+							<div class="bar"><button class="btn ghost sm" onclick={() => forget('all')}>Forget all</button></div>
+						{/if}
+					{/if}
 					{#if current.feedTypes}
 						<h3>Event types shown by default</h3>
 						<p class="muted small">Uncheck a type to hide it from the feed; a type picked by hand on the feed page takes precedence.</p>
@@ -311,6 +393,12 @@
 		flex-wrap: wrap;
 		gap: 4px 10px;
 		margin-top: 3px;
+	}
+	.gtest {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 10px;
+		padding: 2px 0 10px;
 	}
 	.types {
 		display: grid;
