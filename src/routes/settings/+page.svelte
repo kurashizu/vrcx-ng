@@ -80,7 +80,6 @@
 			intro: 'The "Play as" button starts the VRChat desktop client on another machine over ssh, logged in as that account (one game profile per account).',
 			rows: [
 				{ key: 'game.host', kind: 'text', placeholder: 'krsz-desktop', label: 'Game machine', desc: 'ssh host (an alias from ~/.ssh/config) of the machine running the VRChat client; key login required' },
-				{ key: 'game.script', kind: 'text', placeholder: '~/Documents/vrchat-dev/scripts/vrc-game', label: 'Launch script', desc: 'Path of the vrc-game script on that machine' },
 				{ key: 'game.maxProfiles', kind: 'number', min: 1, max: 50, step: 1, label: 'Profiles to search', desc: 'An account is looked for in game profiles 0 … N-1 (the search stops at the first profile without a login)' }
 			],
 			game: true
