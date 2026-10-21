@@ -2,6 +2,7 @@
 	import Icon from '../ui/Icon.svelte';
 	import { loginAccount, logoutAccount, reconnectAccount, removeAccount, accountLabel } from '$lib/stores/accounts.js';
 	import { openUser, askConfirm } from '$lib/stores/overlay.js';
+	import { playAs } from '$lib/client/actions.js';
 
 	/**
 	 * The actions available for an account. `compact` = icon-only (sidebar),
@@ -15,6 +16,12 @@
 	async function login() {
 		busy = true;
 		await loginAccount(a.id);
+		busy = false;
+	}
+
+	async function play() {
+		busy = true;
+		await playAs(a.id, accountLabel(a));
 		busy = false;
 	}
 
@@ -40,6 +47,9 @@
 <span class="controls">
 	{#if a.loggedIn && a.currentUser?.id}
 		{@render control('user', 'Profile', () => openUser(a.currentUser.id, { accountId: a.id, name: accountLabel(a) }))}
+	{/if}
+	{#if a.loggedIn}
+		{@render control('play', 'Play as', play)}
 	{/if}
 	{#if a.loggedIn && !a.connected}
 		{@render control('refresh', 'Reconnect', () => reconnectAccount(a.id))}

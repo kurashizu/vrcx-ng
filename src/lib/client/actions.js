@@ -64,3 +64,16 @@ export const instanceLink = (location) => {
 	const [worldId, instanceId] = String(location || '').split(':');
 	return `https://vrchat.com/home/launch?worldId=${encodeURIComponent(worldId || '')}&instanceId=${encodeURIComponent(instanceId || '')}`;
 };
+
+/** Start the desktop game client logged in as this account (the server finds the right game profile). */
+export async function playAs(accountId, label = '') {
+	toasts.info(`Starting the game${label ? ` as ${label}` : ''}…`);
+	try {
+		const r = await api(`${accountPath(accountId)}/game`, { method: 'POST' });
+		if (r.needLogin) toasts.info(`No saved login for this account yet: log in once in the game window (profile ${r.profile}), then this button works in one click`);
+		else toasts.success(`Game started as ${r.name}`);
+		return r;
+	} catch (err) {
+		toasts.error(err.message);
+	}
+}

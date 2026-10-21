@@ -53,6 +53,10 @@ const DEFAULTS = {
 	'friend.showLastSeen': true,
 	'friend.sortOfflineBy': 'lastSeen', // 'lastSeen' | 'name'
 
+	// Game client (Play as): ssh alias of the machine running VRChat, and the learned profile -> account map
+	'game.host': 'krsz-desktop',
+	'game.profiles': {},
+
 	// Advanced
 	'advanced.lastCleanup': 0
 };
