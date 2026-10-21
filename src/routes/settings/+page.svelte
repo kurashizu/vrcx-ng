@@ -81,7 +81,7 @@
 			rows: [
 				{ key: 'game.host', kind: 'text', placeholder: 'krsz-desktop', label: 'Game machine', desc: 'ssh host (an alias from ~/.ssh/config) of the machine running the VRChat client; key login required' },
 				{ key: 'game.script', kind: 'text', placeholder: '~/Documents/vrchat-dev/scripts/vrc-game', label: 'Launch script', desc: 'Path of the vrc-game script on that machine' },
-				{ key: 'game.maxProfiles', kind: 'number', min: 1, max: 20, step: 1, label: 'Profiles to search', desc: 'An account is looked for in game profiles 0 … N-1' }
+				{ key: 'game.maxProfiles', kind: 'number', min: 1, max: 50, step: 1, label: 'Profiles to search', desc: 'An account is looked for in game profiles 0 … N-1 (the search stops at the first profile without a login)' }
 			],
 			game: true
 		},
@@ -161,7 +161,12 @@
 		if (r) gameMap = r.profiles || {};
 	}
 
-	const gameProfileCount = $derived(Math.min(20, Math.max(1, Number($settings['game.maxProfiles']) || 6)));
+	// rows shown: every learned profile, one spare, and at least one per account
+	const gameProfileCount = $derived.by(() => {
+		const max = Math.min(50, Math.max(1, Number($settings['game.maxProfiles']) || 20));
+		const used = Object.keys(gameMap).map(Number).filter(Number.isInteger);
+		return Math.min(max, Math.max(used.length ? Math.max(...used) + 2 : 0, $accounts.length, 1));
+	});
 	function gameOwner(uid) {
 		if (uid === null) return { text: 'No saved login', kind: 'faint' };
 		if (uid === undefined) return { text: 'Not searched yet', kind: 'faint' };

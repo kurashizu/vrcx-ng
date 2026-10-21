@@ -28,7 +28,7 @@ function config() {
 	const script = String(getSetting('game.script') || '').trim();
 	if (!HOST_RE.test(host)) throw new Error('Game machine: enter an ssh host name (Settings → Game)');
 	if (!SCRIPT_RE.test(script)) throw new Error('Launch script: only letters, digits and . _ / ~ - are allowed (Settings → Game)');
-	const max = Math.min(20, Math.max(1, Number(getSetting('game.maxProfiles')) || 6));
+	const max = Math.min(50, Math.max(1, Number(getSetting('game.maxProfiles')) || 20));
 	return { host, script, max };
 }
 
