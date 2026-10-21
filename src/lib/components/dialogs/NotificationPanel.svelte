@@ -121,7 +121,13 @@
 	}
 
 	const close = () => notificationsOpen.set(false);
-	const sender = (it) => it.senderDisplayName || it.senderUsername || it.senderUserId?.slice(0, 8) || '?';
+	const rawData = (it) => it.raw?.data || {};
+	/** Who a notification is from: the user, else the group (announcements / events have no sender), else VRChat itself. */
+	const sender = (it) =>
+		it.senderDisplayName || it.senderUsername || rawData(it).groupName || rawData(it).ownerName || it.senderUserId?.slice(0, 8) || (it.raw?.isSystem ? 'VRChat' : 'Unknown');
+	const heading = (it) => it.raw?.title || rawData(it).title || '';
+	/** [icon, label]; group.* types we have no name for get a readable one ("group.event.created" -> "Group event created"). */
+	const kindOf = (it) => KINDS[it.type] || (String(it.type).startsWith('group.') ? ['users', `Group ${String(it.type).slice(6).replace(/[._]/g, ' ')}`] : ['bell', it.type]);
 </script>
 
 {#if $notificationsOpen}
@@ -145,7 +151,7 @@
 		{:else}
 			<ul>
 				{#each items as it (it.id)}
-					{@const [icon, label] = KINDS[it.type] || ['bell', it.type]}
+					{@const [icon, label] = kindOf(it)}
 					{@const d = it.worldId ? describeLocation(`${it.worldId}:${it.instanceId || ''}`) : null}
 					<li class:unseen={!it.seenAt}>
 						<div class="head">
@@ -168,6 +174,7 @@
 								{/if}
 							</div>
 						{/if}
+						{#if heading(it)}<div class="title">{heading(it)}</div>{/if}
 						{#if it.message}<div class="msg">{it.message}</div>{/if}
 						<div class="acts">
 							{#if it.senderUserId && it.accountId}
@@ -253,6 +260,10 @@
 	}
 	.world:hover {
 		text-decoration: underline;
+	}
+	.title {
+		font-weight: 600;
+		margin: 2px 0;
 	}
 	.msg {
 		padding: 6px 10px;
