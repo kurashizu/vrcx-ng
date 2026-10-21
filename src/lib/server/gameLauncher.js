@@ -16,6 +16,8 @@ import { getSetting, setSettings } from './settings.js';
 // host and script end up in a remote shell command: only plain names/paths are accepted
 const HOST_RE = /^[A-Za-z0-9_][A-Za-z0-9._@-]*$/;
 const SCRIPT_RE = /^[~A-Za-z0-9_./-]+$/;
+// an instance location, e.g. wrld_x:12345~hidden(usr_y)~region(jp); no quote characters, so it is safe inside '...'
+const LOCATION_RE = /^wrld_[A-Za-z0-9-]+:[A-Za-z0-9_~().,:+-]{1,300}$/;
 
 const versionOf = (text) => Number(/^# vrc-game-version: (\d+)/m.exec(text)?.[1]) || 0;
 const BUNDLED_VERSION = versionOf(bundled);
@@ -44,15 +46,20 @@ function ssh(host, command, timeout) {
 	});
 }
 
-async function runProfile({ host, script }, profile, keep) {
-	const { err, stdout, stderr } = await ssh(host, `${script} ${profile}${keep ? ' --keep' : ''}`, 5 * 60_000);
-	const line = stdout.trim().split('\n').pop() || '';
-	if (line.startsWith('AUTH\t')) {
-		const [, id, name] = line.split('\t');
-		return { kind: 'auth', id, name };
+async function runProfile({ host, script }, profile, keep, location) {
+	const cmd = `${script} ${profile}${keep ? ' --keep' : ''}${location ? ` --join '${location}'` : ''}`;
+	const { err, stdout, stderr } = await ssh(host, cmd, 5 * 60_000);
+	const lines = stdout.trim().split('\n');
+	const auth = lines.find((l) => l.startsWith('AUTH\t'));
+	if (auth) {
+		const [, id, name] = auth.split('\t');
+		const j = lines.find((l) => l.startsWith('JOIN'));
+		const join = !location ? undefined : j?.startsWith('JOINED\t') ? { room: j.split('\t')[1] } : { failed: j === 'JOINFAIL' ? 'The game could not open that instance (no access, or it is closed)' : 'The instance did not finish loading' };
+		return { kind: 'auth', id, name, join };
 	}
-	if (line === 'NOLOGIN') return { kind: 'nologin' };
-	throw new Error(line === 'FAILED' ? 'The game client did not start' : (stderr || err?.message || 'ssh failed').trim());
+	const last = lines[lines.length - 1] || '';
+	if (last === 'NOLOGIN') return { kind: 'nologin' };
+	throw new Error(last === 'FAILED' ? 'The game client did not start' : (stderr || err?.message || 'ssh failed').trim());
 }
 
 /**
@@ -67,14 +74,16 @@ function candidates(map, userId, max) {
 	return [...known, ...empty, ...fresh];
 }
 
-async function launch(accountId) {
+async function launch(accountId, location) {
 	const cfg = config();
 	const userId = getSession(accountId)?.user?.id;
 	if (!userId) throw new Error('Not logged in');
 	const map = { ...(getSetting('game.profiles') || {}) };
 	const tried = [];
 	for (const p of candidates(map, userId, cfg.max)) {
-		const r = await runProfile(cfg, p, map[p] !== userId);
+		// the location only goes to a profile already known to be this account: probing another account's profile must not join it
+		const known = map[p] === userId;
+		let r = await runProfile(cfg, p, !known, known ? location : undefined);
 		tried.push(p);
 		if (r.kind === 'nologin') {
 			map[p] = null;
@@ -84,15 +93,20 @@ async function launch(accountId) {
 		}
 		map[p] = r.id;
 		setSettings({ 'game.profiles': map });
-		if (r.id === userId) return { profile: Number(p), name: r.name, tried };
+		if (r.id === userId) {
+			// found by probing: now start it again with the instance
+			if (location && !known) r = await runProfile(cfg, p, false, location);
+			return { profile: Number(p), name: r.name, join: r.join, tried };
+		}
 	}
 	throw new Error(`No game profile (0-${cfg.max - 1}) is logged in as this account`);
 }
 
 /** One launch at a time: the client is a single process on the game box. */
-export function launchGame(accountId) {
+export function launchGame(accountId, location) {
 	if (running) return Promise.reject(new Error('A game launch is already in progress'));
-	running = launch(accountId).finally(() => (running = null));
+	if (location && !LOCATION_RE.test(location)) return Promise.reject(new Error('Not a valid instance location'));
+	running = launch(accountId, location || undefined).finally(() => (running = null));
 	return running;
 }
 

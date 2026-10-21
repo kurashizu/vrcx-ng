@@ -66,11 +66,13 @@ export const instanceLink = (location) => {
 };
 
 /** Start the desktop game client logged in as this account (the server finds the right game profile). */
-export async function playAs(accountId, label = '') {
-	toasts.push(`Starting the game${label ? ` as ${label}` : ''}… (about 20 seconds)`, 'info', 8000);
+export async function playAs(accountId, label = '', location = '') {
+	toasts.push(`Starting the game${label ? ` as ${label}` : ''}${location ? ' and joining the instance' : ''}… (about ${location ? 30 : 20} seconds)`, 'info', 8000);
 	try {
-		const r = await api(`${accountPath(accountId)}/game`, { method: 'POST' });
+		const r = await api(`${accountPath(accountId)}/game`, { method: 'POST', body: location ? { location } : {} });
 		if (r.needLogin) toasts.push(`No saved login for this account yet: log in once in the game window (profile ${r.profile}), then this button works in one click`, 'info', 12000);
+		else if (r.join?.room) toasts.success(`${r.name} joined ${r.join.room}`);
+		else if (r.join?.failed) toasts.error(`Game started as ${r.name}, but: ${r.join.failed}`);
 		else toasts.success(`Game started as ${r.name}`);
 		return r;
 	} catch (err) {
