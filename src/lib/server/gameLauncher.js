@@ -55,13 +55,16 @@ async function runProfile({ host, script }, profile, keep) {
 	throw new Error(line === 'FAILED' ? 'The game client did not start' : (stderr || err?.message || 'ssh failed').trim());
 }
 
-/** Order to try: the known profile, then never-tried ones, then profiles that had no login (the user may have logged in since). */
+/**
+ * Order to try: the known profile, then profiles that had no login (that is where the user was told to log in, so the
+ * login is most likely there now), then never-tried ones.
+ */
 function candidates(map, userId, max) {
 	const all = Array.from({ length: max }, (_, i) => String(i));
 	const known = all.filter((p) => map[p] === userId);
-	const fresh = all.filter((p) => map[p] === undefined);
 	const empty = all.filter((p) => map[p] === null);
-	return [...known, ...fresh, ...empty];
+	const fresh = all.filter((p) => map[p] === undefined);
+	return [...known, ...empty, ...fresh];
 }
 
 async function launch(accountId) {
