@@ -5,6 +5,8 @@
 	import { friendIndex } from '$lib/stores/friends.js';
 	import { openAvatar, openWorld, closeOverlay, askConfirm } from '$lib/stores/overlay.js';
 	import { api, run, accountPath } from '$lib/client/api.js';
+	import { openJoinMenu } from '$lib/client/join.js';
+	import { describeLocation } from '$lib/shared/location.js';
 	import { act, copyText, requestInvite, inviteUser, muteUser, blockUser, openVrcProfile } from '$lib/client/actions.js';
 	import { createResource } from '$lib/client/resource.svelte.js';
 	import { timeAgo, formatDate, vrImage } from '$lib/shared/format.js';
@@ -124,6 +126,9 @@
 						{#if user.location && user.location !== 'offline'}
 							<Place location={user.location} worldName={res.data.currentWorld?.name} {accountId} showPublic />
 							{#if res.data.currentWorld?.occupants != null}<span class="faint small"><Icon name="users" /> {res.data.currentWorld.occupants}</span>{/if}
+							{#if !isSelf && describeLocation(user.location).kind === 'instance'}
+								<button class="btn ghost xs" title="Open this instance in the game with one of your accounts" onclick={(e) => openJoinMenu(e, user.location)}><Icon name="play" /> Join in game as…</button>
+							{/if}
 						{:else}
 							<span class="faint">Offline</span>
 						{/if}

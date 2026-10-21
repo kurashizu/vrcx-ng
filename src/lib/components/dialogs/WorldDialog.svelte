@@ -5,6 +5,7 @@
 	import { closeOverlay } from '$lib/stores/overlay.js';
 	import { api, run, accountPath } from '$lib/client/api.js';
 	import { copyText, selfInvite, requestInvite } from '$lib/client/actions.js';
+	import { openJoinMenu } from '$lib/client/join.js';
 	import { createResource } from '$lib/client/resource.svelte.js';
 	import { comma, formatDateTime, tagList, prettyTag, shortId } from '$lib/shared/format.js';
 	import { describeLocation } from '$lib/shared/location.js';
@@ -143,6 +144,7 @@
 									<span class="occ" title="Players"><Icon name="users" /> {inst.occupants}{inst.capacity ? `/${inst.capacity}` : ''}</span>
 								{/if}
 								<div class="acts">
+									<button class="btn ghost icon sm" title="Join in game as…" onclick={(e) => openJoinMenu(e, loc)}><Icon name="play" /></button>
 									<button class="btn ghost icon sm" title="Invite myself (works for every access type)" disabled={!accountId || busyLoc === loc} onclick={() => inviteSelf(loc)}>
 										{#if busyLoc === loc}…{:else}<Icon name="mail" />{/if}
 									</button>

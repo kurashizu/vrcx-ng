@@ -4,7 +4,8 @@ import { friendGroups, setFriendGroupMember } from '$lib/stores/friends.js';
 import { openUser, showContextMenu } from '$lib/stores/overlay.js';
 import { describeLocation } from '$lib/shared/location.js';
 import { run } from './api.js';
-import { copyText, playAs, selfInvite, requestInvite, muteUser, blockUser, openVrcProfile, instanceLink } from './actions.js';
+import { joinMenuItem } from './join.js';
+import { copyText, selfInvite, requestInvite, muteUser, blockUser, openVrcProfile, instanceLink } from './actions.js';
 
 /**
  * One menu item — or, when several accounts could perform it, an item that
@@ -31,7 +32,7 @@ export function friendMenuItems(f) {
 		{ divider: true },
 		perAccount(accts, { icon: 'mail', label: 'Request invite' }, (id) => requestInvite(id, f.id)),
 		perAccount(accts, { icon: 'target', label: 'Invite myself to their instance' }, (id) => selfInvite(id, f.location)),
-		perAccount(accts, { icon: 'play', label: 'Join in game', disabled: !inInstance }, (id) => playAs(id, accountLabel(accts.find((a) => a.id === id)), f.location)),
+		joinMenuItem(f.location, { disabled: !inInstance }),
 		{ icon: 'link', label: 'Copy instance link', disabled: !inInstance, action: () => copyText(instanceLink(f.location), 'instance link') },
 		{ divider: true },
 		perAccount(accts, { icon: 'bell-off', label: 'Mute' }, (id) => muteUser(id, f.id)),
