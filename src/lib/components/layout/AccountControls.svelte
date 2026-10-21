@@ -21,8 +21,11 @@
 
 	async function play() {
 		busy = true;
-		await playAs(a.id, accountLabel(a));
-		busy = false;
+		try {
+			await playAs(a.id, accountLabel(a));
+		} finally {
+			busy = false;
+		}
 	}
 
 	async function remove() {
