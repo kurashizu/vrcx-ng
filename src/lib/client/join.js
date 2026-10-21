@@ -4,7 +4,7 @@ import { friendList } from '$lib/stores/friends.js';
 import { showContextMenu } from '$lib/stores/overlay.js';
 import { toasts } from '$lib/stores/toast.js';
 import { parseLocation } from '$lib/shared/location.js';
-import { playAs } from './actions.js';
+import { playAs, relayAs } from './actions.js';
 
 /**
  * Which logged-in accounts can open an instance, and why. Decided from what we know:
@@ -53,13 +53,43 @@ export function accountsWithAccess(location) {
 	return out;
 }
 
-/** One menu item per account that may join (flat list, for a menu opened from a button). */
+/**
+ * Accounts that cannot open the instance themselves but can be invited from one that can: they are a friend of an
+ * account with access (an invite is only possible between friends, and only from inside the instance).
+ * @returns {{ account: any, via: any }[]}
+ */
+export function relayOptions(location) {
+	const withAccess = accountsWithAccess(location);
+	if (!withAccess.length) return [];
+	const has = new Set(withAccess.map((x) => x.account.id));
+	const friends = get(friendList);
+	const out = [];
+	for (const b of get(accounts)) {
+		if (!b.loggedIn || !b.currentUser?.id || has.has(b.id)) continue;
+		for (const { account: a } of withAccess) {
+			// the friend entry of account A (as someone's friend) lists the accounts it is a friend of
+			if (friends.find((f) => f.id === a.currentUser.id)?.accountIds?.includes(b.id)) {
+				out.push({ account: b, via: a });
+				break;
+			}
+		}
+	}
+	return out;
+}
+
+/** One menu item per account that may join (flat list, for a menu opened from a button), then the relay ones. */
 export function joinAccountItems(location) {
-	return accountsWithAccess(location).map(({ account, reason }) => ({
+	const direct = accountsWithAccess(location).map(({ account, reason }) => ({
 		icon: 'user',
 		label: `${accountLabel(account)} · ${reason}`,
 		action: () => playAs(account.id, accountLabel(account), location)
 	}));
+	const relay = relayOptions(location).map(({ account, via }) => ({
+		icon: 'users',
+		label: `${accountLabel(account)} · Relay via ${accountLabel(via)}`,
+		action: () => relayAs(via.id, accountLabel(via), account.id, accountLabel(account), location)
+	}));
+	return [...direct, ...relay];
 }
 
 /** A single entry for a bigger menu: "Join in game as ▸" with the accounts that have access. */
@@ -67,7 +97,7 @@ export function joinMenuItem(location, { disabled = false } = {}) {
 	const list = accountsWithAccess(location);
 	if (disabled) return { icon: 'play', label: 'Join in game', disabled: true };
 	if (!list.length) return { icon: 'play', label: 'Join in game (no account has access)', disabled: true };
-	if (list.length === 1) {
+	if (list.length === 1 && !relayOptions(location).length) {
 		const { account } = list[0];
 		return { icon: 'play', label: `Join in game as ${accountLabel(account)}`, action: () => playAs(account.id, accountLabel(account), location) };
 	}

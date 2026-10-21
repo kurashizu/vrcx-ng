@@ -1,13 +1,13 @@
 #!/bin/bash
-# vrc-game-version: 2
+# vrc-game-version: 3
 # Start the desktop VRChat client on a saved login profile and report who it logged in as.
-# usage: vrc-game <profile> [--keep] [--join <location>]     profile 0 = default (no flag), N = --profile=N
+# usage: vrc-game <profile> [--keep] [--join <location>] [--fast]     profile 0 = default (no flag), N = --profile=N
 # stdout lines: "AUTH<TAB><usr_id><TAB><displayName>" | "NOLOGIN" (profile has no saved login: client left at
 # the login screen with --keep, closed otherwise) | "FAILED". With --join, after AUTH one more line:
 # "JOINED<TAB><room name>" | "JOINFAIL" (client fell into the Error World) | "JOINTIMEOUT".
 # Exit 0 = AUTH, 3 = NOLOGIN, 1 = FAILED. On AUTH the client keeps running. Same start-hang handling as vrc-testclient (restart after 25 s without "Master volume").
-N=${1:?profile}; shift; KEEP=; LOC=
-while [ $# -gt 0 ]; do case "$1" in --keep) KEEP=--keep ;; --join) LOC=$2; shift ;; esac; shift; done
+N=${1:?profile}; shift; KEEP=; LOC=; FAST=
+while [ $# -gt 0 ]; do case "$1" in --keep) KEEP=--keep ;; --join) LOC=$2; shift ;; --fast) FAST=1 ;; esac; shift; done
 D=$HOME/.local/share/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat
 PAT='[V]RChat.exe|[A]ppId=438100|[x]alia|[w]ineserver|[s]team -applaunch'
 stop() {
@@ -32,6 +32,8 @@ for t in 1 2 3; do
       id=$(echo "$line" | sed -E 's/.*\((usr_[^)]*)\)$/\1/'); name=$(echo "$line" | sed -E 's/ \(usr_[^)]*\)$//')
       printf 'AUTH\t%s\t%s\n' "$id" "$name"
       [ -z "$LOC" ] && exit 0
+      # --fast: the caller only needs the client launched into the instance (it checks the rest through the API)
+      [ -n "$FAST" ] && { echo LAUNCHED; exit 0; }
       WID=${LOC%%:*}
       for j in $(seq 1 60); do
         sleep 2

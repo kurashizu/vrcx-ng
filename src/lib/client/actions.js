@@ -79,3 +79,17 @@ export async function playAs(accountId, label = '', location = '') {
 		toasts.error(err.message);
 	}
 }
+
+/** Relay join: `from` (has access) enters the instance and invites `to`, then the game is started as `to` in it. */
+export async function relayAs(fromId, fromLabel, toId, toLabel, location) {
+	toasts.push(`Relay: joining as ${fromLabel}, inviting ${toLabel}, then starting the game as ${toLabel}… (about 1–2 minutes)`, 'info', 15000);
+	try {
+		const r = await api(`${accountPath(fromId)}/relay`, { method: 'POST', body: { to: toId, location } });
+		if (r.needLogin) toasts.push(`No saved login for this account yet: log in once in the game window (profile ${r.profile}), then try again`, 'info', 12000);
+		else if (r.join?.room) toasts.success(`${r.to} joined ${r.join.room} (invited by ${r.from})`);
+		else toasts.error(`${r.to}: ${r.join?.failed || 'the game started but did not join the instance'}`);
+		return r;
+	} catch (err) {
+		toasts.error(err.message);
+	}
+}

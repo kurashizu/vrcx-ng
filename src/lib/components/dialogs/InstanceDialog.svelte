@@ -5,8 +5,8 @@
 	import { friendList, friendIndex, friendsData } from '$lib/stores/friends.js';
 	import { closeOverlay, openWorld, openUser } from '$lib/stores/overlay.js';
 	import { api } from '$lib/client/api.js';
-	import { copyText, selfInvite, playAs, instanceLink } from '$lib/client/actions.js';
-	import { accountsWithAccess } from '$lib/client/join.js';
+	import { copyText, selfInvite, playAs, relayAs, instanceLink } from '$lib/client/actions.js';
+	import { accountsWithAccess, relayOptions } from '$lib/client/join.js';
 	import { byName } from '$lib/client/friends.js';
 	import { createResource } from '$lib/client/resource.svelte.js';
 	import { describeLocation, parseLocation } from '$lib/shared/location.js';
@@ -52,6 +52,7 @@
 	const here = $derived($friendList.filter((f) => f.location === location).sort(byName));
 	const ours = $derived(($friendsData.self || []).filter((s) => s.location === location));
 	const access = $derived(accountsWithAccess(location));
+	const relay = $derived(relayOptions(location));
 
 	const ownerFriend = $derived(parsed.userId ? $friendIndex.get(parsed.userId) : null);
 	const platforms = $derived(live?.platforms ? Object.entries(live.platforms).filter(([, n]) => n) : []);
@@ -59,6 +60,11 @@
 
 	let inviteOpen = $state(false);
 	let busy = $state('');
+	async function relayJoin(b, via) {
+		busy = b.id;
+		await relayAs(via.id, accountLabel(via), b.id, accountLabel(b), location);
+		busy = '';
+	}
 	async function join(a) {
 		busy = a.id;
 		await playAs(a.id, accountLabel(a), location);
@@ -117,6 +123,18 @@
 								<span class="spacer"></span>
 								<button class="btn xs" title="Invite this account to the instance (works for every access type)" onclick={() => selfInvite(a.id, location)}><Icon name="mail" /> Invite myself</button>
 								<button class="btn primary xs" disabled={busy === a.id} onclick={() => join(a)}><Icon name="play" /> {busy === a.id ? 'Starting…' : 'Join in game'}</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+				{#if relay.length}
+					<ul class="acc">
+						{#each relay as { account: b, via } (b.id)}
+							<li>
+								<Avatar src={b.currentUser?.currentAvatarThumbnailImageUrl} name={accountLabel(b)} size={32} accountId={b.id} />
+								<div class="n"><strong>{accountLabel(b)}</strong><span class="faint small">Relay: {accountLabel(via)} joins, invites, then this account starts the game</span></div>
+								<span class="spacer"></span>
+								<button class="btn xs" disabled={busy === b.id} onclick={() => relayJoin(b, via)}><Icon name="users" /> {busy === b.id ? 'Relaying…' : 'Relay join'}</button>
 							</li>
 						{/each}
 					</ul>
