@@ -6,6 +6,8 @@
 	import { describeLocation } from '$lib/shared/location.js';
 	import { accountsWithAccess, openJoinMenu } from '$lib/client/join.js';
 	import { byName } from '$lib/client/friends.js';
+	import { api } from '$lib/client/api.js';
+	import { vrImage } from '$lib/shared/format.js';
 	import AccessBadge from '../ui/AccessBadge.svelte';
 	import PackBoard from '../ui/PackBoard.svelte';
 	import FriendChip from './FriendChip.svelte';
@@ -16,6 +18,30 @@
 	 * @type {{ worlds: import('$lib/client/friends.js').WorldBucket[] }}
 	 */
 	let { worlds } = $props();
+
+	/** worldId -> { image, thumb } (the world cover pictures; fetched in batches, the server fills the cache in the background) */
+	let covers = $state(/** @type {Record<string, { image: string, thumb: string }>} */ ({}));
+	let tries = 0;
+	async function loadCovers() {
+		const missing = worlds.filter((w) => !covers[w.worldId]);
+		if (!missing.length) return;
+		try {
+			const r = await api('/api/worlds/covers', { query: { ids: missing.map((w) => w.worldId).join(','), accountId: missing[0].friends[0]?.accountIds?.[0] } });
+			covers = { ...covers, ...r.covers };
+			if (r.pending && tries++ < 8) setTimeout(loadCovers, 3000);
+		} catch {}
+	}
+	$effect(() => {
+		worlds.length;
+		tries = 0;
+		loadCovers();
+	});
+	/** small cards use the small picture */
+	const coverOf = (w) => {
+		const c = covers[w.worldId];
+		const url = c && (small(w) ? c.thumb : c.image);
+		return url ? vrImage(url, w.friends[0]?.accountIds?.[0] || '') : '';
+	};
 
 	/** a world with one friend gets a smaller card; it also fills the holes the bigger cards leave */
 	const small = (w) => w.count < 2;
@@ -42,7 +68,8 @@
 
 <PackBoard items={worlds.map((w) => ({ key: w.key, span: spanOf(w), data: w }))} gap={12} minCol={330}>
 	{#snippet item(w)}
-		<section class="world" class:compact={small(w)} style="--h: {hue(w.worldId)}">
+		{@const cover = coverOf(w)}
+		<section class="world" class:compact={small(w)} class:cover={!!cover} style="--h: {hue(w.worldId)}; {cover ? `--cover: url('${cover}')` : ''}">
 			<header>
 				<button class="wname" title="Open world" onclick={() => openWorld(w.worldId, w.friends[0]?.accountIds?.[0] || '', '')}>
 					<Icon name="globe" /><span class="ellipsis">{w.label}</span>
@@ -98,6 +125,21 @@
 		border: 1px solid hsl(var(--h) 45% 55% / 0.35);
 		border-radius: 20px;
 		background: linear-gradient(160deg, hsl(var(--h) 55% 55% / 0.14), hsl(var(--h) 55% 55% / 0.03) 70%), var(--bg-1);
+	}
+	/* the world's cover picture behind the card, darkened so the text and bubbles on it stay readable */
+	.world.cover {
+		background:
+			linear-gradient(180deg, hsl(var(--h) 40% 10% / 0.55), hsl(var(--h) 40% 8% / 0.88) 70%),
+			var(--cover) center / cover,
+			var(--bg-1);
+	}
+	.world.cover .wname {
+		color: #fff;
+		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+	}
+	.world.cover .inst {
+		background: rgba(8, 10, 16, 0.62);
+		backdrop-filter: blur(6px);
 	}
 	.world.compact {
 		gap: 6px;
