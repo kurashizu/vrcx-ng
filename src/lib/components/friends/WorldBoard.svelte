@@ -56,6 +56,9 @@
 	 * Columns a world card takes. Only really crowded worlds are wider: plenty of one-column cards is what lets the
 	 * packer fill every hole (a board of only wide cards leaves a column empty).
 	 */
+	/** inside a world card the instances are packed too: busy ones take two or three of the inner columns */
+	const instSpan = (i) => (i.count >= 8 ? 3 : i.count >= 4 ? 2 : 1);
+
 	const spanOf = (w) => (small(w) ? 1 : w.count >= 20 ? 3 : w.count >= 10 || w.instances.length >= 7 ? 2 : 1);
 
 	/** instance location -> our accounts that are in it right now */
@@ -76,8 +79,8 @@
 				</button>
 				<span class="count" title="Friends in this world"><Icon name="users" /> {w.count}</span>
 			</header>
-			<div class="insts">
-				{#each w.instances as inst (inst.key)}
+			<PackBoard items={w.instances.map((i) => ({ key: i.key, span: instSpan(i), data: i }))} gap={8} minCol={200}>
+				{#snippet item(inst)}
 					{@const d = describeLocation(inst.location)}
 					{@const mine = here.get(inst.location)}
 					<div class="inst" class:mine={!!mine} class:single={inst.count === 1}>
@@ -97,8 +100,8 @@
 							{/each}
 						</div>
 					</div>
-				{/each}
-			</div>
+				{/snippet}
+			</PackBoard>
 		</section>
 	{/snippet}
 </PackBoard>
@@ -177,13 +180,7 @@
 		font-weight: 650;
 		background: hsl(var(--h) 55% 55% / 0.22);
 	}
-	.insts {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
 	.inst {
-		flex: 1 1 210px;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
@@ -192,6 +189,21 @@
 		border: 1px solid var(--border);
 		border-radius: 16px;
 		background: color-mix(in srgb, var(--bg-0) 55%, transparent);
+	}
+	/* a lone friend: room header and friend share a line when they fit, so there is no empty strip beside the chip */
+	.inst.single {
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px 8px;
+		padding: 7px 8px;
+	}
+	.inst.single .ihead {
+		flex: 1 1 auto;
+	}
+	.inst.single .people {
+		flex: 0 1 auto;
+		min-width: 0;
 	}
 	.inst.mine {
 		border-color: var(--online);
