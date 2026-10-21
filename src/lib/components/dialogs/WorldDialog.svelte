@@ -6,6 +6,7 @@
 	import { api, run, accountPath } from '$lib/client/api.js';
 	import { copyText, selfInvite, requestInvite } from '$lib/client/actions.js';
 	import { openJoinMenu } from '$lib/client/join.js';
+	import { openInstance } from '$lib/stores/overlay.js';
 	import { createResource } from '$lib/client/resource.svelte.js';
 	import { comma, formatDateTime, tagList, prettyTag, shortId } from '$lib/shared/format.js';
 	import { describeLocation } from '$lib/shared/location.js';
@@ -133,7 +134,7 @@
 								<div class="main">
 									<div class="line">
 										{#if inst.featured}<span class="badge accent">This one</span>{/if}
-										<span class="iid mono">{String(inst.instanceId).split('~')[0]}</span>
+										<button class="iid mono" title="Open this instance" onclick={() => openInstance(loc, accountId)}>{String(inst.instanceId).split('~')[0]}</button>
 										<AccessBadge place={d} showPublic />
 									</div>
 									{#if inst.users?.length}

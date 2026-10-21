@@ -7,7 +7,7 @@ import { accounts } from './accounts.js';
  * user dialog layers it on top, and closing it returns to the user. The
  * OverlayHost renders the stack; Esc and the backdrop close the top entry.
  *
- * @typedef {{ id: number, kind: 'user'|'world'|'avatar', key: string, [k: string]: any }} Overlay
+ * @typedef {{ id: number, kind: 'user'|'world'|'avatar'|'instance', key: string, [k: string]: any }} Overlay
  */
 export const overlays = writable(/** @type {Overlay[]} */ ([]));
 
@@ -50,6 +50,16 @@ export function openUser(userId, { accountId = '', name = '' } = {}) {
 export function openWorld(worldId, accountId = '', location = '') {
 	if (!worldId) return;
 	push({ kind: 'world', key: location || worldId, worldId, location, accountId: accountId || defaultAccountId() });
+}
+
+/**
+ * Open the instance (room) dialog: who can join, who is there, join / invite.
+ * @param {string} location a full `wrld_x:instance` tag
+ * @param {string} [accountId]
+ */
+export function openInstance(location, accountId = '') {
+	if (!String(location || '').startsWith('wrld_') || !String(location).includes(':')) return;
+	push({ kind: 'instance', key: location, location, accountId: accountId || defaultAccountId() });
 }
 
 /** @param {string} avatarId @param {string} [accountId] */

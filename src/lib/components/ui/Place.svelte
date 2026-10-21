@@ -2,7 +2,7 @@
 	import Icon from './Icon.svelte';
 	import { describeLocation } from '$lib/shared/location.js';
 	import { shortId } from '$lib/shared/format.js';
-	import { openWorld } from '$lib/stores/overlay.js';
+	import { openWorld, openInstance } from '$lib/stores/overlay.js';
 	import { settings } from '$lib/stores/settings.js';
 	import { worldNames } from '$lib/stores/friends.js';
 	import AccessBadge from './AccessBadge.svelte';
@@ -38,6 +38,17 @@
 		<span class="world plain" title={place.tag}>{label}</span>
 	{/if}
 	<AccessBadge {place} {showPublic} />
+	{#if link}
+		<button
+			class="room"
+			title="Open this instance"
+			aria-label="Open this instance"
+			onclick={(e) => {
+				e.stopPropagation();
+				openInstance(place.tag, accountId);
+			}}><Icon name="door" /></button
+		>
+	{/if}
 	{#if $settings['ui.showInstanceId'] && place.instance}
 		<span class="inst faint">{place.instance}</span>
 	{/if}
@@ -63,5 +74,18 @@
 	}
 	.inst {
 		font-size: 11px;
+	}
+	.room {
+		flex: none;
+		display: inline-grid;
+		place-items: center;
+		width: 18px;
+		height: 18px;
+		border-radius: 5px;
+		color: var(--text-faint);
+	}
+	.room:hover {
+		background: var(--bg-3);
+		color: var(--accent-ink);
 	}
 </style>

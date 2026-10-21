@@ -3,6 +3,7 @@
 	import UserDialog from '../dialogs/UserDialog.svelte';
 	import WorldDialog from '../dialogs/WorldDialog.svelte';
 	import AvatarDialog from '../dialogs/AvatarDialog.svelte';
+	import InstanceDialog from '../dialogs/InstanceDialog.svelte';
 </script>
 
 <!-- the stack of user / world / avatar detail dialogs; later entries sit on top -->
@@ -13,5 +14,7 @@
 		<WorldDialog request={o} />
 	{:else if o.kind === 'avatar'}
 		<AvatarDialog request={o} />
+	{:else if o.kind === 'instance'}
+		<InstanceDialog request={o} />
 	{/if}
 {/each}

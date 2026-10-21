@@ -1,6 +1,6 @@
 <script>
 	import Icon from '../ui/Icon.svelte';
-	import { notificationsOpen, openUser, openWorld, askConfirm } from '$lib/stores/overlay.js';
+	import { notificationsOpen, openUser, openWorld, openInstance, askConfirm } from '$lib/stores/overlay.js';
 	import { notificationsTick, unseenCount, refreshUnseen } from '$lib/stores/notifications.js';
 	import { accounts, accountName, accountLabel } from '$lib/stores/accounts.js';
 	import { now } from '$lib/stores/clock.js';
@@ -210,7 +210,7 @@
 							<div class="place">
 								<button class="world" onclick={() => openWorld(it.worldId, it.accountId, it.instanceId ? `${it.worldId}:${it.instanceId}` : '')}><Icon name="globe" /> {it.worldName || 'World'}</button>
 								{#if d.kind === 'instance'}
-									{#if d.parsed.instanceName}<span class="inst" title={d.tag}>#{d.parsed.instanceName}</span>{/if}
+									{#if d.parsed.instanceName}<button class="inst" title="Open this instance" onclick={() => openInstance(d.tag, it.accountId)}>#{d.parsed.instanceName}</button>{/if}
 									<AccessBadge place={d} showPublic />
 								{/if}
 							</div>

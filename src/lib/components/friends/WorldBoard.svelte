@@ -2,7 +2,7 @@
 	import Icon from '../ui/Icon.svelte';
 	import { accountName } from '$lib/stores/accounts.js';
 	import { friendsData } from '$lib/stores/friends.js';
-	import { openWorld } from '$lib/stores/overlay.js';
+	import { openWorld, openInstance } from '$lib/stores/overlay.js';
 	import { describeLocation } from '$lib/shared/location.js';
 	import { accountsWithAccess, openJoinMenu } from '$lib/client/join.js';
 	import { byName } from '$lib/client/friends.js';
@@ -82,7 +82,7 @@
 					{@const mine = here.get(inst.location)}
 					<div class="inst" class:mine={!!mine} class:single={inst.count === 1}>
 						<div class="ihead">
-							{#if d.parsed?.instanceName}<span class="iid mono">#{d.parsed.instanceName}</span>{/if}
+							{#if d.parsed?.instanceName}<button class="iid mono" title="Open this instance" onclick={() => openInstance(inst.location, w.friends[0]?.accountIds?.[0] || '')}>#{d.parsed.instanceName}</button>{/if}
 							<AccessBadge place={d} showPublic />
 							{#if mine}<span class="you" title="One of your accounts is in this instance">You: {mine.map(accountName).join(', ')}</span>{/if}
 							<span class="spacer"></span>
@@ -202,6 +202,10 @@
 		align-items: center;
 		flex-wrap: wrap;
 		gap: 6px;
+	}
+	button.iid:hover {
+		color: var(--accent-ink);
+		text-decoration: underline;
 	}
 	.iid {
 		font-size: 12px;
