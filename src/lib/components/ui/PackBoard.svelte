@@ -14,15 +14,16 @@
 	 *   gap?: number,
 	 *   minCol?: number,
 	 *   lookahead?: number,
+	 *   maxCols?: number,
 	 *   item: import('svelte').Snippet<[any]>
 	 * }}
 	 */
-	let { items, gap = 12, minCol = 330, lookahead = 16, item } = $props();
+	let { items, gap = 12, minCol = 330, lookahead = 16, maxCols = Infinity, item } = $props();
 
 	let width = $state(0);
 	let ready = $state(false);
 
-	const cols = $derived(Math.max(1, Math.floor((width + gap) / (minCol + gap))));
+	const cols = $derived(Math.min(maxCols, Math.max(1, Math.floor((width + gap) / (minCol + gap)))));
 	const colW = $derived(width > 0 ? (width - gap * (cols - 1)) / cols : minCol);
 	const spanOf = (it) => Math.min(cols, Math.max(1, it.span || 1));
 	const widthOf = (it) => spanOf(it) * colW + (spanOf(it) - 1) * gap;

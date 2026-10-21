@@ -59,7 +59,46 @@
 	/** inside a world card the instances are packed too: busy ones take two or three of the inner columns */
 	const instSpan = (i) => (i.count >= 8 ? 3 : i.count >= 4 ? 2 : 1);
 
-	const spanOf = (w) => (small(w) ? 1 : w.count >= 20 ? 3 : w.count >= 10 || w.instances.length >= 7 ? 2 : 1);
+	/** inner columns a world card of this span gets (the instance bubbles inside are packed into them) */
+	const innerCols = (s) => (s === 1 ? 1 : s === 2 ? 3 : 5);
+
+	/**
+	 * Width of a world card, chosen from its content: the narrowest card whose last row of room bubbles is
+	 * (nearly) full while the card does not get too tall. Crowded worlds are never narrower than their head count needs.
+	 */
+	const spanOf = (w) => {
+		const need = w.count >= 20 ? 3 : w.count >= 10 ? 2 : 1;
+		if (small(w)) return 1;
+		const n = w.instances.length;
+		let best = 1;
+		let bestScore = Infinity;
+		for (let s = 1; s <= 3; s++) {
+			const c = innerCols(s);
+			const rows = Math.ceil(n / c);
+			const score = rows * c - n + 0.5 * (rows - 1) + 0.9 * (s - 1);
+			if (score < bestScore - 1e-9) (bestScore = score), (best = s);
+		}
+		return Math.max(best, need);
+	};
+
+	/**
+	 * Column spans of a world's room bubbles. When they would leave the last row ragged, the last bubbles are
+	 * widened to fill it (3 columns, 2 rooms left → one takes 2 columns, the other 1).
+	 */
+	const instSpans = (w) => {
+		const c = innerCols(spanOf(w));
+		const spans = w.instances.map(instSpan);
+		const rem = c > 1 && spans.every((x) => x === 1) ? spans.length % c : 0;
+		if (rem) {
+			let left = c;
+			for (let k = 0; k < rem; k++) {
+				const sp = Math.ceil(left / (rem - k));
+				spans[spans.length - rem + k] = sp;
+				left -= sp;
+			}
+		}
+		return spans;
+	};
 
 	/** instance location -> our accounts that are in it right now */
 	const here = $derived.by(() => {
@@ -72,6 +111,7 @@
 <PackBoard items={worlds.map((w) => ({ key: w.key, span: spanOf(w), data: w }))} gap={12} minCol={330}>
 	{#snippet item(w)}
 		{@const cover = coverOf(w)}
+		{@const spans = instSpans(w)}
 		<section class="world" class:compact={small(w)} class:cover={!!cover} style="--h: {hue(w.worldId)}; {cover ? `--cover: url('${cover}')` : ''}">
 			<header>
 				<button class="wname" title="Open world" onclick={() => openWorld(w.worldId, w.friends[0]?.accountIds?.[0] || '', '')}>
@@ -79,7 +119,7 @@
 				</button>
 				<span class="count" title="Friends in this world"><Icon name="users" /> {w.count}</span>
 			</header>
-			<PackBoard items={w.instances.map((i) => ({ key: i.key, span: instSpan(i), data: i }))} gap={8} minCol={200}>
+			<PackBoard items={w.instances.map((i, k) => ({ key: i.key, span: spans[k], data: i }))} gap={8} minCol={200} maxCols={innerCols(spanOf(w))}>
 				{#snippet item(inst)}
 					{@const d = describeLocation(inst.location)}
 					{@const mine = here.get(inst.location)}
