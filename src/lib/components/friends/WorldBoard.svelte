@@ -230,21 +230,6 @@
 		border-radius: 16px;
 		background: color-mix(in srgb, var(--bg-0) 55%, transparent);
 	}
-	/* a lone friend: room header and friend share a line when they fit, so there is no empty strip beside the chip */
-	.inst.single {
-		flex-direction: row;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 6px 8px;
-		padding: 7px 8px;
-	}
-	.inst.single .ihead {
-		flex: 1 1 auto;
-	}
-	.inst.single .people {
-		flex: 0 1 auto;
-		min-width: 0;
-	}
 	.inst.mine {
 		border-color: var(--online);
 		box-shadow: 0 0 0 1px color-mix(in srgb, var(--online) 30%, transparent);
