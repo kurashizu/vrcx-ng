@@ -124,6 +124,7 @@
 	// ---- game machine: connection test + the learned profile -> account map ----
 	let gameTest = $state(/** @type {any} */ (null));
 	let gameTesting = $state(false);
+	let gameDeploying = $state(false);
 	let gameMap = $state(/** @type {Record<string, string | null>} */ ({}));
 
 	async function loadGame() {
@@ -146,6 +147,13 @@
 			gameTest = { reachable: false, error: err.message };
 		}
 		gameTesting = false;
+	}
+
+	async function deployScript() {
+		gameDeploying = true;
+		const r = await run(() => api('/api/game', { method: 'POST', body: { action: 'deploy' } }), 'Launch script deployed');
+		gameDeploying = false;
+		if (r) await testGame();
 	}
 
 	async function forget(profile) {
@@ -272,6 +280,9 @@
 					{/each}
 					{#if current.game}
 						<h3>Connection</h3>
+						<SettingRow label="Launch script" desc="The bridge script that runs on the game machine; deploy it here (written over ssh) instead of copying it by hand">
+							<button class="btn" disabled={gameDeploying} onclick={deployScript}><Icon name="send" /> {gameDeploying ? 'Deploying…' : gameTest?.script ? 'Update' : 'Deploy'}</button>
+						</SettingRow>
 						<SettingRow label="Test connection" desc="Checks ssh to the game machine, the launch script, Steam and whether the game is running">
 							<button class="btn" disabled={gameTesting} onclick={testGame}><Icon name="refresh" /> {gameTesting ? 'Testing…' : 'Test'}</button>
 						</SettingRow>
@@ -279,7 +290,13 @@
 							<div class="gtest">
 								{#if gameTest.reachable}
 									<span class="badge ok">Reachable · {gameTest.ms} ms</span>
-									<span class="badge" class:ok={gameTest.script} class:warn={!gameTest.script}>{gameTest.script ? 'Launch script found' : 'Launch script missing'}</span>
+									{#if !gameTest.script}
+										<span class="badge warn">Launch script missing: use Deploy</span>
+									{:else if gameTest.scriptVersion < gameTest.bundledVersion}
+										<span class="badge warn">Launch script outdated (v{gameTest.scriptVersion} → v{gameTest.bundledVersion}): use Update</span>
+									{:else}
+										<span class="badge ok">Launch script v{gameTest.scriptVersion} up to date</span>
+									{/if}
 									<span class="badge" class:ok={gameTest.steam} class:warn={!gameTest.steam}>{gameTest.steam ? 'Steam running' : 'Steam not running'}</span>
 									<span class="badge">{gameTest.client ? 'Game running' : 'Game not running'}</span>
 								{:else}

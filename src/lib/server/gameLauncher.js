@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+// the bridge script that runs on the game machine, bundled into the build so it can be deployed from Settings
+import bundled from './vrc-game.sh?raw';
 import { getSession } from './accounts.js';
 import { getSetting, setSettings } from './settings.js';
 
@@ -14,6 +16,9 @@ import { getSetting, setSettings } from './settings.js';
 // host and script end up in a remote shell command: only plain names/paths are accepted
 const HOST_RE = /^[A-Za-z0-9_][A-Za-z0-9._@-]*$/;
 const SCRIPT_RE = /^[~A-Za-z0-9_./-]+$/;
+
+const versionOf = (text) => Number(/^# vrc-game-version: (\d+)/m.exec(text)?.[1]) || 0;
+const BUNDLED_VERSION = versionOf(bundled);
 
 /** @type {Promise<any> | null} */
 let running = null;
@@ -94,7 +99,7 @@ export async function gameStatus() {
 	const t0 = Date.now();
 	const { err, stdout, stderr } = await ssh(
 		host,
-		`test -x ${script} && echo SCRIPT; pgrep -x steam >/dev/null && echo STEAM; pgrep -x VRChat.exe >/dev/null && echo CLIENT; echo DONE`,
+		`test -x ${script} && echo SCRIPT; echo VER:$(grep -m1 '^# vrc-game-version:' ${script} 2>/dev/null | cut -d: -f2 | tr -d ' '); pgrep -x steam >/dev/null && echo STEAM; pgrep -x VRChat.exe >/dev/null && echo CLIENT; echo DONE`,
 		20_000
 	);
 	if (!stdout.includes('DONE')) return { reachable: false, error: (stderr || err?.message || 'ssh failed').trim().split('\n').pop() };
@@ -102,9 +107,25 @@ export async function gameStatus() {
 		reachable: true,
 		ms: Date.now() - t0,
 		script: stdout.includes('SCRIPT'),
+		scriptVersion: Number(/^VER:(\d*)/m.exec(stdout)?.[1]) || 0,
+		bundledVersion: BUNDLED_VERSION,
 		steam: stdout.includes('STEAM'),
 		client: stdout.includes('CLIENT')
 	};
+}
+
+/** Write the bundled bridge script to the game machine (temp file + mv, so a half-written script is never run). */
+export function deployGameScript() {
+	const { host, script } = config();
+	return new Promise((resolve, reject) => {
+		const child = execFile(
+			'ssh',
+			['-F', `${process.env.HOME}/.ssh/config`, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', host, `mkdir -p $(dirname ${script}) && cat > ${script}.tmp && chmod +x ${script}.tmp && mv ${script}.tmp ${script}`],
+			{ timeout: 30_000 },
+			(err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).trim())) : resolve({ version: BUNDLED_VERSION }))
+		);
+		child.stdin.end(bundled);
+	});
 }
 
 /** Learned profile map (for the settings page). */
