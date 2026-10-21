@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { accounts, accountLabel } from '$lib/stores/accounts.js';
 import { friendList } from '$lib/stores/friends.js';
+import { receivedInvites } from '$lib/stores/notifications.js';
 import { showContextMenu } from '$lib/stores/overlay.js';
 import { toasts } from '$lib/stores/toast.js';
 import { parseLocation } from '$lib/shared/location.js';
@@ -13,8 +14,11 @@ import { playAs, relayAs } from './actions.js';
  *   friends                friends of the owner, or the owner's own account
  *   friends+               friends of the owner, friends of someone standing in the instance, or the owner's account
  *   invite / invite+       only the owner's own account (anyone else needs an invite first)
+ * and any account that was invited to it (a received invite notification), whatever the access type.
+ * Each entry says whether the account may invite others from inside (`canInvite`): in an Invite instance only the
+ * owner can, everywhere else everyone standing in it can. That decides who can start a relay.
  * @param {string} location
- * @returns {{ account: any, reason: string }[]}
+ * @returns {{ account: any, reason: string, canInvite: boolean }[]}
  */
 export function accountsWithAccess(location) {
 	const p = parseLocation(location);
@@ -22,6 +26,7 @@ export function accountsWithAccess(location) {
 	const friends = get(friendList);
 	const owner = p.userId ? friends.find((f) => f.id === p.userId) : null;
 	const there = friends.filter((f) => f.location === location);
+	const invites = get(receivedInvites).filter((i) => i.location === location);
 	const out = [];
 	for (const a of get(accounts)) {
 		if (!a.loggedIn || !a.currentUser?.id) continue;
@@ -48,7 +53,11 @@ export function accountsWithAccess(location) {
 				reason = mine ? 'Own instance' : '';
 				break;
 		}
-		if (reason) out.push({ account: a, reason });
+		if (!reason) {
+			const inv = invites.find((i) => i.accountId === a.id);
+			if (inv) reason = `Invited${inv.from ? ` by ${inv.from}` : ''}`;
+		}
+		if (reason) out.push({ account: a, reason, canInvite: p.accessType !== 'invite' || mine });
 	}
 	return out;
 }
@@ -59,9 +68,11 @@ export function accountsWithAccess(location) {
  * @returns {{ account: any, via: any }[]}
  */
 export function relayOptions(location) {
-	const withAccess = accountsWithAccess(location);
+	const all = accountsWithAccess(location);
+	const has = new Set(all.map((x) => x.account.id));
+	// only an account that may invite from inside can relay
+	const withAccess = all.filter((x) => x.canInvite);
 	if (!withAccess.length) return [];
-	const has = new Set(withAccess.map((x) => x.account.id));
 	const friends = get(friendList);
 	const out = [];
 	for (const b of get(accounts)) {
