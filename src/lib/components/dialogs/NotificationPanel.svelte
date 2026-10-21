@@ -6,7 +6,7 @@
 	import { now } from '$lib/stores/clock.js';
 	import { api, run, accountPath } from '$lib/client/api.js';
 	import { inviteUser } from '$lib/client/actions.js';
-	import { timeAgo } from '$lib/shared/format.js';
+	import { timeAgo, vrImage } from '$lib/shared/format.js';
 	import { describeLocation } from '$lib/shared/location.js';
 	import Modal from '../ui/Modal.svelte';
 	import Notice from '../ui/Notice.svelte';
@@ -120,14 +120,54 @@
 		refreshUnseen();
 	}
 
-	const close = () => notificationsOpen.set(false);
+	const unread = $derived(items.filter((x) => !x.seenAt));
+
+	/** Mark everything shown as unread as read (local inbox now, VRChat in the background). */
+	async function markAllRead() {
+		const list = unread.filter((x) => x.accountId).map((x) => ({ accountId: x.accountId, id: x.id }));
+		if (!list.length) return;
+		items = items.map((x) => (x.seenAt ? x : { ...x, seenAt: Date.now() }));
+		await api('/api/notifications', { method: 'POST', body: { action: 'seenMany', items: list } }).catch(() => {});
+		refreshUnseen();
+	}
+
+	// closing the panel = you have read what it showed: the sidebar bubble goes away
+	const close = () => {
+		notificationsOpen.set(false);
+		markAllRead();
+	};
 	const rawData = (it) => it.raw?.data || {};
 	/** Who a notification is from: the user, else the group (announcements / events have no sender), else VRChat itself. */
 	const sender = (it) =>
 		it.senderDisplayName || it.senderUsername || rawData(it).groupName || rawData(it).ownerName || it.senderUserId?.slice(0, 8) || (it.raw?.isSystem ? 'VRChat' : 'Unknown');
 	const heading = (it) => it.raw?.title || rawData(it).title || '';
 	/** [icon, label]; group.* types we have no name for get a readable one ("group.event.created" -> "Group event created"). */
-	const kindOf = (it) => KINDS[it.type] || (String(it.type).startsWith('group.') ? ['users', `Group ${String(it.type).slice(6).replace(/[._]/g, ' ')}`] : ['bell', it.type]);
+	const kindOf = (it) => {
+		const t = String(it.type);
+		if (KINDS[t]) return KINDS[t];
+		if (t.startsWith('group.event')) return ['clock', `Group event${t.slice(11) ? ` ${t.slice(12).replace(/[._]/g, ' ')}` : ''}`];
+		if (t.startsWith('group.')) return ['users', `Group ${t.slice(6).replace(/[._]/g, ' ')}`];
+		return ['bell', t];
+	};
+
+	/** One colour per kind of notification: left stripe, icon chip and label. */
+	const TONES = {
+		friendRequest: 'var(--online)',
+		invite: 'var(--accent)',
+		requestInvite: '#f59e0b',
+		inviteResponse: '#38bdf8',
+		requestInviteResponse: '#38bdf8',
+		message: '#94a3b8',
+		groupAnnouncement: '#c084fc',
+		groupInvite: '#fb923c',
+		groupJoinRequest: '#fb923c',
+		boop: '#f472b6',
+		moderation: 'var(--danger)'
+	};
+	const tone = (it) => TONES[it.type] || (String(it.type).startsWith('group.event') ? '#2dd4bf' : String(it.type).startsWith('group.') ? '#c084fc' : 'var(--text-faint)');
+	const isGroup = (it) => it.type === 'groupAnnouncement' || String(it.type).startsWith('group.');
+	/** long group texts are folded to a few lines until clicked */
+	let open = $state(/** @type {Record<string, boolean>} */ ({}));
 </script>
 
 {#if $notificationsOpen}
@@ -138,6 +178,7 @@
 				{#each $accounts as a (a.id)}<option value={a.id}>{accountLabel(a)}</option>{/each}
 			</select>
 			<span class="faint small nowrap">{items.length} total</span>
+			<button class="btn ghost sm" onclick={markAllRead} disabled={!unread.length}><Icon name="check" /> Mark all read{unread.length ? ` (${unread.length})` : ''}</button>
 			<button class="btn ghost sm" onclick={refresh} disabled={loading}><Icon name="refresh" /> Refresh</button>
 			<button class="btn danger sm" onclick={clearAll} disabled={!items.length}>Clear</button>
 		</div>
@@ -153,10 +194,10 @@
 				{#each items as it (it.id)}
 					{@const [icon, label] = kindOf(it)}
 					{@const d = it.worldId ? describeLocation(`${it.worldId}:${it.instanceId || ''}`) : null}
-					<li class:unseen={!it.seenAt}>
+					<li class:unseen={!it.seenAt} class:group={isGroup(it)} style="--tone: {tone(it)}">
 						<div class="head">
-							<span><Icon name={icon} /></span>
-							<strong>{label}</strong>
+							<span class="chip"><Icon name={icon} /></span>
+							<strong class="kind">{label}</strong>
 							{#if !it.seenAt}<span class="badge accent">New</span>{/if}
 							<span class="spacer"></span>
 							<span class="faint small">{timeAgo(it.createdAt, $now)}</span>
@@ -174,8 +215,17 @@
 								{/if}
 							</div>
 						{/if}
+						{#if isGroup(it) && it.raw?.imageUrl}
+							<img class="banner" src={vrImage(it.raw.imageUrl, it.accountId)} alt="" loading="lazy" onerror={(e) => (e.currentTarget.style.display = 'none')} />
+						{/if}
 						{#if heading(it)}<div class="title">{heading(it)}</div>{/if}
-						{#if it.message}<div class="msg">{it.message}</div>{/if}
+						{#if it.message}
+							{#if isGroup(it)}
+								<button class="msg fold" class:clamp={!open[it.id]} title={open[it.id] ? 'Click to fold' : 'Click to read all'} onclick={() => (open[it.id] = !open[it.id])}>{it.message}</button>
+							{:else}
+								<div class="msg">{it.message}</div>
+							{/if}
+						{/if}
 						<div class="acts">
 							{#if it.senderUserId && it.accountId}
 								<button class="btn ghost xs" onclick={() => openUser(it.senderUserId, { accountId: it.accountId, name: sender(it) })}>View user</button>
@@ -238,9 +288,52 @@
 		border: 1px solid var(--border);
 		border-radius: var(--r-lg);
 	}
+	li {
+		--tone: var(--text-faint);
+		background: color-mix(in srgb, var(--tone) 6%, var(--bg-2));
+		border-left: 3px solid var(--tone);
+	}
 	li.unseen {
-		border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-		box-shadow: inset 3px 0 0 var(--accent);
+		border-color: color-mix(in srgb, var(--tone) 55%, transparent);
+		border-left-color: var(--tone);
+		box-shadow: 0 0 0 1px color-mix(in srgb, var(--tone) 18%, transparent);
+	}
+	.chip {
+		display: inline-grid;
+		place-items: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--tone) 22%, transparent);
+		color: var(--tone);
+	}
+	.kind {
+		color: var(--tone);
+	}
+	.banner {
+		width: 100%;
+		max-height: 130px;
+		object-fit: cover;
+		border-radius: var(--r);
+		margin-top: 2px;
+	}
+	.place {
+		padding: 4px 8px;
+		border-radius: var(--r);
+		background: color-mix(in srgb, var(--tone) 10%, transparent);
+	}
+	.fold {
+		text-align: left;
+		width: 100%;
+		cursor: pointer;
+		font: inherit;
+		border: 0;
+	}
+	.fold.clamp {
+		display: -webkit-box;
+		-webkit-line-clamp: 4;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
 	.head,
 	.from,
