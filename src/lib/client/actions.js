@@ -80,12 +80,18 @@ export async function playAs(accountId, label = '', location = '') {
 	}
 }
 
-/** Relay join: `from` (has access) enters the instance and invites `to`, then the game is started as `to` in it. */
-export async function relayAs(fromId, fromLabel, toId, toLabel, location) {
-	toasts.push(`Relay: joining as ${fromLabel}, inviting ${toLabel}, then starting the game as ${toLabel}… (about 1–2 minutes)`, 'info', 15000);
+/**
+ * Relay through an account that has access: it enters the instance and invites the targets from inside, then the game is closed.
+ * mode 'join' also starts the game as the (single) target in the instance; 'invite' leaves the invites for the targets to accept.
+ * @param {string} fromId @param {string} fromLabel @param {{ id: string, label: string }[]} targets @param {string} location @param {'join'|'invite'} mode
+ */
+export async function relayAs(fromId, fromLabel, targets, location, mode = 'join') {
+	const names = targets.map((t) => t.label).join(', ');
+	toasts.push(`Relay: joining as ${fromLabel} to invite ${names}${mode === 'join' ? ', then starting the game as them' : ''}… (about ${mode === 'join' ? '1–2 minutes' : '1 minute'})`, 'info', 15000);
 	try {
-		const r = await api(`${accountPath(fromId)}/relay`, { method: 'POST', body: { to: toId, location } });
+		const r = await api(`${accountPath(fromId)}/relay`, { method: 'POST', body: { to: targets.map((t) => t.id), location, mode } });
 		if (r.needLogin) toasts.push(`No saved login for this account yet: log in once in the game window (profile ${r.profile}), then try again`, 'info', 12000);
+		else if (mode === 'invite') toasts.success(`${r.from} invited ${r.invited.join(', ')}: accept the invite in the game or on vrchat.com`);
 		else if (r.join?.room) toasts.success(`${r.to} joined ${r.join.room} (invited by ${r.from})`);
 		else toasts.error(`${r.to}: ${r.join?.failed || 'the game started but did not join the instance'}`);
 		return r;

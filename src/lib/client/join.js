@@ -84,11 +84,18 @@ export function joinAccountItems(location) {
 		label: `${accountLabel(account)} · ${reason}`,
 		action: () => playAs(account.id, accountLabel(account), location)
 	}));
-	const relay = relayOptions(location).map(({ account, via }) => ({
-		icon: 'users',
-		label: `${accountLabel(account)} · Relay via ${accountLabel(via)}`,
-		action: () => relayAs(via.id, accountLabel(via), account.id, accountLabel(account), location)
-	}));
+	const opts = relayOptions(location);
+	const target = (b) => ({ id: b.id, label: accountLabel(b) });
+	const relay = opts.flatMap(({ account, via }) => [
+		{ icon: 'play', label: `${accountLabel(account)} · Join in game (relay via ${accountLabel(via)})`, action: () => relayAs(via.id, accountLabel(via), [target(account)], location, 'join') },
+		{ icon: 'mail', label: `${accountLabel(account)} · Invite (relay via ${accountLabel(via)})`, action: () => relayAs(via.id, accountLabel(via), [target(account)], location, 'invite') }
+	]);
+	// one entry that invites every relay account at once, through the first account that has access
+	if (opts.length > 1) {
+		const via = opts[0].via;
+		const all = opts.filter((o) => o.via.id === via.id).map((o) => target(o.account));
+		if (all.length > 1) relay.push({ icon: 'mail', label: `Invite all ${all.length} other accounts (relay via ${accountLabel(via)})`, action: () => relayAs(via.id, accountLabel(via), all, location, 'invite') });
+	}
 	return [...direct, ...relay];
 }
 

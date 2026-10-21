@@ -60,9 +60,9 @@
 
 	let inviteOpen = $state(false);
 	let busy = $state('');
-	async function relayJoin(b, via) {
+	async function relayJoin(b, via, mode) {
 		busy = b.id;
-		await relayAs(via.id, accountLabel(via), b.id, accountLabel(b), location);
+		await relayAs(via.id, accountLabel(via), [{ id: b.id, label: accountLabel(b) }], location, mode);
 		busy = '';
 	}
 	async function join(a) {
@@ -132,9 +132,10 @@
 						{#each relay as { account: b, via } (b.id)}
 							<li>
 								<Avatar src={b.currentUser?.currentAvatarThumbnailImageUrl} name={accountLabel(b)} size={32} accountId={b.id} />
-								<div class="n"><strong>{accountLabel(b)}</strong><span class="faint small">Relay: {accountLabel(via)} joins, invites, then this account starts the game</span></div>
+								<div class="n"><strong>{accountLabel(b)}</strong><span class="faint small">Relay via {accountLabel(via)}: it enters and invites this account</span></div>
 								<span class="spacer"></span>
-								<button class="btn xs" disabled={busy === b.id} onclick={() => relayJoin(b, via)}><Icon name="users" /> {busy === b.id ? 'Relaying…' : 'Relay join'}</button>
+								<button class="btn xs" disabled={!!busy} onclick={() => relayJoin(b, via, 'invite')}><Icon name="mail" /> {busy === b.id ? 'Relaying…' : 'Invite'}</button>
+								<button class="btn primary xs" disabled={!!busy} onclick={() => relayJoin(b, via, 'join')}><Icon name="play" /> Join in game</button>
 							</li>
 						{/each}
 					</ul>

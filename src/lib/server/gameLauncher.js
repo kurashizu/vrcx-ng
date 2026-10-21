@@ -55,7 +55,7 @@ async function runProfile({ host, script }, profile, keep, location, fast = fals
 	const auth = lines.find((l) => l.startsWith('AUTH\t'));
 	if (auth) {
 		const [, id, name] = auth.split('\t');
-		const j = lines.find((l) => l.startsWith('JOIN'));
+		const j = lines.find((l) => l.startsWith('JOIN') || l === 'LAUNCHED');
 		const join = !location ? undefined : j === 'LAUNCHED' ? { launched: true } : j?.startsWith('JOINED\t') ? { room: j.split('\t')[1] } : { failed: j === 'JOINFAIL' ? 'The game could not open that instance (no access, or it is closed)' : 'The instance did not finish loading' };
 		return { kind: 'auth', id, name, join };
 	}
@@ -161,48 +161,54 @@ export function forgetGameProfile(profile) {
 	return map;
 }
 
-/** Close the running game client on the game box (graceful first, like vrc-game does before a launch). */
+/** Kill the running game client on the game box at once (the invite is out: nothing in the first account is worth waiting for). */
 async function closeClient() {
 	const { host } = config();
-	await ssh(host, `pkill -TERM -x VRChat.exe; for i in $(seq 1 20); do pgrep -x VRChat.exe >/dev/null || break; sleep 1; done; pgrep -x VRChat.exe >/dev/null && pkill -KILL -x VRChat.exe; sleep 4; echo DONE`, 60_000);
+	await ssh(host, 'pkill -KILL -x VRChat.exe; for i in 1 2 3 4 5 6 7 8 9 10; do pgrep -x VRChat.exe >/dev/null || break; sleep 0.3; done; echo DONE', 20_000);
 }
 
 /**
- * Relay join: account `fromId` (has access) enters the instance in the game, invites `toId` from inside it (VRChat only
- * accepts an invite from someone who is in the instance), the client is closed, and the game is started as `toId` in that instance.
- * Steps are reported as they happen through `onStep`.
+ * Relay: account `fromId` (has access) enters the instance in the game and invites the `toIds` accounts from inside it
+ * (VRChat only accepts an invite from someone who is in the instance), then the client is closed.
+ *   mode 'invite'  nothing else: the invited accounts accept in their own client
+ *   mode 'join'    (one target) the game is started as that account in the instance
+ * The first account does not have to finish loading: it only has to be in the instance as far as VRChat is concerned,
+ * which is when the invite is accepted.
  */
-export function relayJoin(fromId, toId, location, onStep = () => {}) {
+export function relayJoin(fromId, toIds, location, mode = 'join') {
 	if (running) return Promise.reject(new Error('A game launch is already in progress'));
 	if (!LOCATION_RE.test(location || '')) return Promise.reject(new Error('Not a valid instance location'));
+	const targets = (Array.isArray(toIds) ? toIds : [toIds]).map(String).filter(Boolean);
+	if (!targets.length) return Promise.reject(new Error('No target account'));
+	if (mode === 'join' && targets.length !== 1) return Promise.reject(new Error('Join relays one account'));
 	running = (async () => {
-		const toUser = getSession(toId)?.user?.id;
-		if (!toUser) throw new Error('The target account is not logged in');
-		const out = { steps: [] };
-		const step = (name, extra = {}) => {
-			out.steps.push({ name, ...extra });
-			onStep(name);
-		};
-		// the first account does not have to finish loading: it only has to be in the instance as far as VRChat is
-		// concerned, which is when the invite is accepted
+		const users = targets.map((id) => {
+			const u = getSession(id)?.user;
+			if (!u?.id) throw new Error('A target account is not logged in');
+			return { id, userId: u.id, name: u.displayName };
+		});
 		const a = await launch(fromId, location, true);
-		if (a.needLogin) return { ...out, needLogin: true, profile: a.profile };
+		if (a.needLogin) return { needLogin: true, profile: a.profile };
 		if (!a.join?.launched) throw new Error(`${a.name} could not join the instance: ${a.join?.failed || 'unknown'}`);
-		step('launched', { name: a.name });
 		const meta = await getWorldMeta(fromId, location.split(':')[0]).catch(() => null);
-		let inv = { ok: false, error: '' };
-		for (let i = 0; i < 45 && !inv.ok; i++) {
-			if (i) await new Promise((r) => setTimeout(r, 2000));
-			inv = await sendInvite(fromId, toUser, location, { worldName: meta?.name });
+		// the API learns the new location a moment after the client logs it: retry until the invite is accepted
+		const invited = [];
+		let lastError = '';
+		for (let i = 0; i < 120 && invited.length < users.length; i++) {
+			if (i) await new Promise((r) => setTimeout(r, 700));
+			for (const u of users) {
+				if (invited.includes(u.name)) continue;
+				const inv = await sendInvite(fromId, u.userId, location, { worldName: meta?.name });
+				if (inv.ok) invited.push(u.name);
+				else lastError = inv.error;
+			}
 		}
-		if (!inv.ok) throw new Error(`${a.name} is in the instance but the invite failed: ${inv.error}`);
-		step('invited');
+		if (!invited.length) throw new Error(`${a.name} is in the instance but the invite failed: ${lastError}`);
 		await closeClient();
-		step('closed');
-		const b = await launch(toId, location);
-		if (b.needLogin) return { ...out, needLogin: true, profile: b.profile };
-		step('target', { name: b.name, join: b.join });
-		return { ...out, from: a.name, to: b.name, join: b.join };
+		if (mode === 'invite') return { from: a.name, invited };
+		const b = await launch(targets[0], location);
+		if (b.needLogin) return { needLogin: true, profile: b.profile, from: a.name, invited };
+		return { from: a.name, to: b.name, invited, join: b.join };
 	})().finally(() => (running = null));
 	return running;
 }

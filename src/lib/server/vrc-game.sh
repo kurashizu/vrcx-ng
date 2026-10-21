@@ -1,5 +1,5 @@
 #!/bin/bash
-# vrc-game-version: 3
+# vrc-game-version: 4
 # Start the desktop VRChat client on a saved login profile and report who it logged in as.
 # usage: vrc-game <profile> [--keep] [--join <location>] [--fast]     profile 0 = default (no flag), N = --profile=N
 # stdout lines: "AUTH<TAB><usr_id><TAB><displayName>" | "NOLOGIN" (profile has no saved login: client left at
@@ -32,15 +32,17 @@ for t in 1 2 3; do
       id=$(echo "$line" | sed -E 's/.*\((usr_[^)]*)\)$/\1/'); name=$(echo "$line" | sed -E 's/ \(usr_[^)]*\)$//')
       printf 'AUTH\t%s\t%s\n' "$id" "$name"
       [ -z "$LOC" ] && exit 0
-      # --fast: the caller only needs the client launched into the instance (it checks the rest through the API)
-      [ -n "$FAST" ] && { echo LAUNCHED; exit 0; }
       WID=${LOC%%:*}
       for j in $(seq 1 60); do
         sleep 2
         grep -q 'Joining local:error' "$L" && { echo JOINFAIL; exit 0; }
+        # --fast: the caller only needs the client launched into the instance (it checks the rest through the API)
         if grep -q "Joining $WID" "$L"; then
+          [ -n "$FAST" ] && { echo LAUNCHED; exit 0; }
           sleep 2; printf 'JOINED\t%s\n' "$(grep 'Entering Room:' "$L" | tail -1 | tr -d '\r' | sed 's/.*Entering Room: //')"; exit 0
         fi
+        # the client froze or crashed (SuspendThread loop failed): the log stops growing, start over
+        [ $(( $(date +%s) - $(stat -c %Y "$L") )) -gt 25 ] && break 2
       done
       echo JOINTIMEOUT; exit 0
     fi
