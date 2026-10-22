@@ -1,8 +1,8 @@
 #!/bin/bash
-# vrc-game-version: 5
+# vrc-game-version: 6
 # Start the desktop VRChat client on a saved login profile and report who it logged in as.
 # usage: vrc-game <profile> [--keep] [--join <location>] [--fast]     profile 0 = default (no flag), N = --profile=N
-# stdout lines: "AUTH<TAB><usr_id><TAB><displayName>" | "NOLOGIN" (profile has no saved login: client left at
+# stdout lines: "AUTH<TAB><usr_id><TAB><displayName><TAB>[steam]" (steam = signed in through Steam, not a saved login) | "NOLOGIN" (profile has no saved login: client left at
 # the login screen with --keep, closed otherwise) | "FAILED". With --join, after AUTH one more line:
 # "JOINED<TAB><room name>" | "JOINFAIL" (client fell into the Error World) | "JOINTIMEOUT".
 # Exit 0 = AUTH, 3 = NOLOGIN, 1 = FAILED. On AUTH the client keeps running. Same start-hang handling as vrc-testclient (restart after 25 s without "Master volume").
@@ -28,12 +28,11 @@ for t in 1 2 3; do
     sleep 2; X=$(log)
     [ -n "$X" ] && [ "$(stat -c %Y "$X")" -ge "$start" ] && L=$X
     if [ -n "$L" ] && grep -q 'User Authenticated:' "$L"; then
-      # the saved login failed and the client fell back to the Steam account: that is not this profile's login
-      sleep 1
-      if grep -qE 'Auto-login failed|Authenticated via steam' "$L"; then echo NOLOGIN; [ "$KEEP" = --keep ] || stop; exit 3; fi
+      # "steam": no saved login on this profile, the client signed in with the Steam account instead (the caller decides if that is who it wants)
+      VIA=; grep -qE 'Trying to login with steam|Authenticated via steam' "$L" && VIA=steam
       line=$(grep 'User Authenticated:' "$L" | tail -1 | tr -d '\r' | sed 's/.*User Authenticated: //')
       id=$(echo "$line" | sed -E 's/.*\((usr_[^)]*)\)$/\1/'); name=$(echo "$line" | sed -E 's/ \(usr_[^)]*\)$//')
-      printf 'AUTH\t%s\t%s\n' "$id" "$name"
+      printf 'AUTH\t%s\t%s\t%s\n' "$id" "$name" "$VIA"
       [ -z "$LOC" ] && exit 0
       WID=${LOC%%:*}
       for j in $(seq 1 60); do

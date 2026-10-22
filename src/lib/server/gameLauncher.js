@@ -54,10 +54,10 @@ async function runProfile({ host, script }, profile, keep, location, fast = fals
 	const lines = stdout.trim().split('\n');
 	const auth = lines.find((l) => l.startsWith('AUTH\t'));
 	if (auth) {
-		const [, id, name] = auth.split('\t');
+		const [, id, name, via] = auth.split('\t');
 		const j = lines.find((l) => l.startsWith('JOIN') || l === 'LAUNCHED');
 		const join = !location ? undefined : j === 'LAUNCHED' ? { launched: true } : j?.startsWith('JOINED\t') ? { room: j.split('\t')[1] } : { failed: j === 'JOINFAIL' ? 'The game could not open that instance (no access, or it is closed)' : 'The instance did not finish loading' };
-		return { kind: 'auth', id, name, join };
+		return { kind: 'auth', id, name, join, via };
 	}
 	const last = lines[lines.length - 1] || '';
 	if (last === 'NOLOGIN') return { kind: 'nologin' };
@@ -91,6 +91,12 @@ async function launch(accountId, location, fast = false) {
 			map[p] = null;
 			setSettings({ 'game.profiles': map });
 			// no saved login here: the client is left open at the login screen so the user can log in once
+			return { needLogin: true, profile: Number(p), tried };
+		}
+		// signed in through Steam (no saved login here) as someone else: this profile is not logged in for the account we want
+		if (r.via === 'steam' && r.id !== userId) {
+			map[p] = null;
+			setSettings({ 'game.profiles': map });
 			return { needLogin: true, profile: Number(p), tried };
 		}
 		map[p] = r.id;
