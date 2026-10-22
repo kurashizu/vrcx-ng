@@ -8,7 +8,8 @@ modelled on the API usage of [VRCX](https://github.com/vrcx-team/VRCX).
 
 > **Disclaimer**: this project is only an API client / relay and takes no part
 > in any VRChat server logic. Follow the [VRChat Terms of Service](https://hello.vrchat.com/legal)
-> and do not use this tool to bypass rate limits or anti-cheat measures.
+> and do not use this tool to bypass rate limits or anti-cheat measures. The game
+> client is always started through its own launcher (`launch.exe`, anti-cheat on).
 
 ## Features
 
@@ -22,8 +23,14 @@ modelled on the API usage of [VRCX](https://github.com/vrcx-team/VRCX).
   - friend requests, invites, instance closures
   - group events, instance queue joins, notifications v1 / v2
 - **Friend list** — the right rail shows online friends by world, by group or
-  flat, with a "same instance" section and pinned VIP groups; `/friends` is a
-  full-screen grid of the same data. Trust rank colors are shown
+  flat, with a "same instance" section and pinned VIP groups. Trust rank colors are shown
+- **Friends overview** — `/friends` shows where everybody is as world → instance → friends:
+  a world card with its cover as the background, the instances packed inside it
+  (a skyline packer: every level adapts its width and height, nothing is left empty),
+  and a friend bubble per person with small tags for which of your accounts they are a
+  friend of. Every instance says its type and who made it (`Friends+ by Alice`,
+  `Group Public · <group name>`); a name opens the player info wherever it appears
+  (`UserLink`). A grid view of the same data is one click away
 - **Context menu** — view details, request invite, invite yourself to their
   instance, copy instance link, mute / block, add to a local group, copy ID,
   open the vrchat.com profile (with several accounts you pick the acting one)
@@ -58,8 +65,44 @@ modelled on the API usage of [VRCX](https://github.com/vrcx-team/VRCX).
   before it enters the feed; if they come back in that window neither event is
   recorded (same as VRCX, filters out the brief drop while switching instances)
 
-This app is a message display panel: it never launches the VRChat client
-(no `vrchat://` links); joining an instance goes through invites.
+- **Instance dialog** — click an instance for its live numbers, who is there, the creator or
+  group, and the accounts that can join it (see below)
+- **Game client control** — "Join in game as", "Play as" and relays start the VRChat
+  desktop client on another machine over ssh (see [Game client](#game-client))
+
+## Game client
+
+vrcx-ng can drive a VRChat desktop client (Proton/Steam on Linux) on a separate "game
+machine" over ssh. Nothing is required for the feed: this is optional (Settings → Game).
+
+- **Play as / Join in game as** — starts the client logged in as the chosen account, optionally
+  straight into an instance. Accounts map to game profiles (`--profile=N`, each with its own saved
+  login); the map is learned by launching profiles in turn and reading who logged in, and shown in
+  Settings → Game (a profile can be forgotten there)
+- **Who can join** — decided from the access type: public / group → every account,
+  friends / friends+ → friends of the creator (friends+ also friends of someone inside),
+  invite / invite+ → the creator, and any account that received an invite to it
+- **Relay** — an account that cannot open an instance itself, but is a friend of one that can,
+  gets two options under "Via a friend": *Invite* (the helper client enters as the friend's
+  account, sends the invite from inside and is closed at once; only someone inside an instance
+  can invite) and *Join in game* (the same, then your game starts as the invited account)
+- **Two clients** — the **main** client is yours (started through Steam; Play as only ever touches
+  it). The **helper** client exists only for relays and temporary logins: its own copy of the wine
+  prefix, no Steam app id (Steam refuses two copies of a game), drawn on a VNC display, and killed
+  the moment its task is over. A watchdog closes a helper nobody owns; one left at a login screen
+  for you gets ten minutes. The sidebar **Game clients** panel shows both and closes either
+- **Launch script** — `src/lib/server/vrc-game.sh` is bundled into the build and deployed to the game
+  machine from Settings → Game (Deploy / Update). It starts a profile, reports who logged in
+  (`AUTH`, `NOLOGIN`, `WRONGUSER`…), copes with the client's startup hang and crashes (restarts),
+  and has `clients`, `kill-main` and `kill-aux` commands
+
+Setup: key-based ssh to the game machine (an alias from `~/.ssh/config`), Steam with VRChat
+(Proton) running there, `rsync`, and — for the helper — a VNC display (`:10`) it can draw on.
+The helper's prefix is created from the main one on first use (without the asset cache).
+
+Limits worth knowing: the relay account is visible in the instance for a few seconds (VRChat only lets
+someone inside invite); a Steam-linked account (logged in through Steam, not a saved login) can only run
+on the main client; the helper client keeps its own saved logins, separate from the main one.
 
 ## Architecture
 
@@ -68,6 +111,7 @@ Browser ──SSE──> SvelteKit (Node)
                   │
                   ├── better-sqlite3  (data/vrcx-ng.db)
                   ├── dgram UDP       →  VRChat OSC chatbox
+                  ├── ssh             →  game machine (vrc-game: main + helper VRChat client)
                   │
                   └── WebSocket per account → wss://pipeline.vrchat.cloud
                                               (×N accounts in parallel)
@@ -91,17 +135,19 @@ SvelteKit + Svelte 5 (runes), a pure SPA (`ssr = false`), global state with
 
 ```
 shared/      pure functions: formatting, location parsing, trust rank, feed type registry, presence colors
-client/      browser logic: api()/run() request wrappers, actions (copy / self-invite / block…),
+client/      browser logic: api()/run() request wrappers, actions (copy / self-invite / block / play as / relay…),
+             join (who can open an instance, relay options, the Join as menu),
              friend grouping and sorting, friend context menu, createResource (async loading with stale guard)
-stores/      accounts · friends · feed · settings · notifications · overlay (dialog stack / confirm /
-             context menu) · sse (event stream)
+stores/      accounts · friends · feed · settings · notifications (+ received invites) · overlay (dialog stack /
+             confirm / context menu) · sse (event stream) · groups / userNames (looked up once, shared) · gameClients
 components/
-  ui/        business-free building blocks: Modal · Avatar · UserName · Place · AccessBadge · StatusPill ·
+  ui/        business-free building blocks: Modal · Avatar · UserName · UserLink · Place · AccessBadge · PackBoard · StatusPill ·
              Tabs · Section · Toggle · ListRow · Notice · Page · ContextMenu · Toasts · Icon…
-  layout/    sidebar, account list and account actions, the dialog host OverlayHost
-  friends/   friend rail (FriendRail / FriendRow) and overview card (FriendCard)
+  layout/    sidebar, account list and account actions, the Game clients panel, the dialog host OverlayHost
+  friends/   friend rail (FriendRail / FriendRow), the world → instance → friends board (WorldBoard,
+             FriendChip) built on the skyline packer ui/PackBoard
   feed/      FeedItem · FeedToolbar
-  dialogs/   user / world / avatar details, notifications, invite messages, favorites, invite friends,
+  dialogs/   user / world / instance / avatar details, notifications, invite messages, favorites, invite friends,
              profile editor, login / 2FA
 routes/      feed · friends overview · search · stats · moderation · chatbox · settings
 ```
@@ -181,6 +227,14 @@ at the top right of the chatbox page and save it; it is stored in the SQLite
 | `GET/POST/DELETE /api/accounts/:id/vrc-favorites` | VRChat favorite groups and entries (friends / worlds / avatars) |
 | `GET /api/stats?days=1\|7\|30\|90` | Activity statistics |
 | `GET /api/friends` | Aggregated friend list, de-duplicated across accounts |
+| `GET /api/worlds/covers?ids=…` | World cover images and authors (cached; missing ones are fetched in the background, `pending` > 0: ask again) |
+| `GET /api/instance?location=…` | One instance's live numbers and its world |
+| `GET /api/groups?ids=grp_…` | Group names / icons for group instances (cached for a day) |
+| `GET /api/user-names?ids=usr_…` | Display names of people who are nobody's friend (instance creators) |
+| `POST /api/accounts/:id/game` | Play as: start the main game client as this account (`location` also joins an instance) |
+| `POST /api/accounts/:id/relay` | Relay: `{ to, location, mode: 'invite' \| 'join' }` — the helper client enters as `:id`, invites `to` from inside and closes; `join` then starts the main client as the target |
+| `GET /api/game` | Learned profile maps (main + helper) and what is busy |
+| `POST /api/game` | `{ action }`: `test` · `deploy` · `clients` · `forget` · `close-main` · `close-aux` |
 | `GET /api/notifications` / `POST` | Notification inbox / mark seen, dismiss |
 | `GET /api/feed?limit&before&type&accountId&userId` | Feed history (SQLite, paged backwards) |
 | `GET /api/feed/events` | Live SSE stream (`hello` / `feed` / `accounts` / `friends` / `notifications` / `ping`) |
@@ -242,7 +296,7 @@ journalctl --user -u vrcx-ng -f
 | Multi-account | yes | yes |
 | Storage | sql.js (in memory + WASM) | better-sqlite3 (file) |
 | Chatbox relay | yes (built in) | yes (integrated) |
-| Launching VRChat | yes | no (display panel only) |
+| Launching VRChat | yes (local) | yes, on a remote game machine over ssh (main + helper client, relays) |
 | VR mode | yes | no (not implemented) |
 | Dashboard / charts | yes | partial (`/stats` page) |
 | i18n | many languages | English |
