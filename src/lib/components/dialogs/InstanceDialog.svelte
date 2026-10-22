@@ -1,4 +1,5 @@
 <script>
+	import { groupInfo, ensureGroups } from '$lib/stores/groups.js';
 	import UserLink from '../ui/UserLink.svelte';
 	import Section from '$lib/components/ui/Section.svelte';
 	import Icon from '../ui/Icon.svelte';
@@ -62,6 +63,9 @@
 
 	let inviteOpen = $state(false);
 	let relayOpen = $state(false);
+	$effect(() => {
+		if (parsed.groupId) ensureGroups([parsed.groupId], accountId);
+	});
 	let accOpen = $state(false);
 	// with many accounts that can open it (a public room: all of them) only one row is shown, the rest is folded:
 	// the account picked in "As …" at the top, else the first
@@ -202,7 +206,8 @@
 						{#if parsed.userId}
 							<button class="link" onclick={() => openUser(parsed.userId, { accountId })}>{ownerFriend?.displayName || parsed.userId.slice(0, 12) + '…'}</button>
 						{:else if parsed.groupId}
-							<a class="link" target="_blank" rel="noreferrer" href="https://vrchat.com/home/group/{parsed.groupId}">Group {parsed.groupId.slice(0, 12)}…</a>
+							<a class="link" target="_blank" rel="noreferrer" href="https://vrchat.com/home/group/{parsed.groupId}">{$groupInfo[parsed.groupId]?.name || `Group ${parsed.groupId.slice(0, 12)}…`}</a>
+							{#if $groupInfo[parsed.groupId]?.shortCode}<div class="faint small">{$groupInfo[parsed.groupId].shortCode}.{$groupInfo[parsed.groupId].discriminator}{#if $groupInfo[parsed.groupId].memberCount != null} · {$groupInfo[parsed.groupId].memberCount} members{/if}</div>{/if}
 						{:else}<span class="faint">None (public)</span>{/if}
 					</Fact>
 					<Fact label="Region">{(live?.region || parsed.region || '—').toUpperCase()}</Fact>

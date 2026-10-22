@@ -414,6 +414,13 @@ export async function getWorld(accountId, worldId) {
 	return null;
 }
 
+/** A group's public card (name, short code, icon). Null when it cannot be read (deleted, hidden). */
+export async function getGroup(accountId, groupId) {
+	const { status, data } = await api(accountId, `groups/${groupId}`);
+	if (status !== 200 || !data) return null;
+	return { name: data.name || '', shortCode: data.shortCode || '', discriminator: data.discriminator || '', iconUrl: data.iconUrl || '', memberCount: data.memberCount ?? null };
+}
+
 export async function getAvatar(accountId, avatarId) {
 	const { status, data } = await api(accountId, `avatars/${avatarId}`);
 	if (status === 200) return data;

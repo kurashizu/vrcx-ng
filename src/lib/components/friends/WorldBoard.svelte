@@ -128,7 +128,6 @@
 					<div class="inst" class:mine={!!mine} class:single={inst.count === 1}>
 						<div class="ihead">
 							{#if d.parsed?.instanceName}<button class="iid mono" title="Open this instance" onclick={() => openInstance(inst.location, w.friends[0]?.accountIds?.[0] || '')}>#{d.parsed.instanceName}</button>{/if}
-							<AccessBadge place={d} showPublic />
 							{#if mine}<span class="you" title="One of your accounts is in this instance">You: {mine.map(accountName).join(', ')}</span>{/if}
 							<span class="spacer"></span>
 							{#if inst.count > 1}<span class="faint small"><Icon name="users" /> {inst.count}</span>{/if}
@@ -136,6 +135,7 @@
 								<button class="btn ghost icon xs" title="Join in game as…" onclick={(e) => openJoinMenu(e, inst.location)}><Icon name="play" /></button>
 							{/if}
 						</div>
+						<div class="tags"><AccessBadge place={d} showPublic /></div>
 						<div class="people">
 							{#each [...inst.friends].sort(byName) as f (f.id)}
 								<FriendChip friend={f} />
@@ -248,6 +248,15 @@
 	.inst.mine {
 		border-color: var(--online);
 		box-shadow: 0 0 0 1px color-mix(in srgb, var(--online) 30%, transparent);
+	}
+	.tags {
+		display: flex;
+		align-items: center;
+		flex-wrap: nowrap;
+		gap: 6px;
+		min-width: 0;
+		overflow: hidden;
+		margin-top: -2px;
 	}
 	.ihead {
 		display: flex;
