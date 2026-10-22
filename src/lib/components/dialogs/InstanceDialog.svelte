@@ -62,6 +62,13 @@
 
 	let inviteOpen = $state(false);
 	let relayOpen = $state(false);
+	let accOpen = $state(false);
+	// with many accounts that can open it (a public room: all of them) only one row is shown, the rest is folded:
+	// the account picked in "As …" at the top, else the first
+	const primary = $derived(access.find((x) => x.account.id === accountId) || access[0]);
+	const fold = $derived(access.length > 2);
+	const shownAccess = $derived(fold ? [primary] : access);
+	const restAccess = $derived(fold ? access.filter((x) => x !== primary) : []);
 	let busy = $state('');
 	// one trip through the first account that has access invites every relay account it is a friend of
 	const relayAll = $derived.by(() => {
@@ -130,17 +137,27 @@
 				{#if !access.length && !relay.length}
 					<Notice icon="door" text="None of your logged-in accounts has access to this instance. {WHO[place.accessTypeLabel] || WHO[place.accessType] || ''}" />
 				{:else if access.length}
+					{#snippet accRow({ account: a, reason })}
+						<li>
+							<Avatar src={a.currentUser?.currentAvatarThumbnailImageUrl} name={accountLabel(a)} size={32} accountId={a.id} />
+							<div class="n"><strong><UserLink id={a.currentUser?.id} name={accountLabel(a)} accountId={a.id} /></strong><span class="faint small">{reason}</span></div>
+							<span class="spacer"></span>
+							<button class="btn xs" title="Invite this account to the instance (works for every access type)" onclick={() => selfInvite(a.id, location)}><Icon name="mail" /> Invite myself</button>
+							<button class="btn primary xs" disabled={busy === a.id} onclick={() => join(a)}><Icon name="play" /> {busy === a.id ? 'Starting…' : 'Join in game'}</button>
+						</li>
+					{/snippet}
 					<ul class="acc">
-						{#each access as { account: a, reason } (a.id)}
-							<li>
-								<Avatar src={a.currentUser?.currentAvatarThumbnailImageUrl} name={accountLabel(a)} size={32} accountId={a.id} />
-								<div class="n"><strong><UserLink id={a.currentUser?.id} name={accountLabel(a)} accountId={a.id} /></strong><span class="faint small">{reason}</span></div>
-								<span class="spacer"></span>
-								<button class="btn xs" title="Invite this account to the instance (works for every access type)" onclick={() => selfInvite(a.id, location)}><Icon name="mail" /> Invite myself</button>
-								<button class="btn primary xs" disabled={busy === a.id} onclick={() => join(a)}><Icon name="play" /> {busy === a.id ? 'Starting…' : 'Join in game'}</button>
-							</li>
-						{/each}
+						{#each shownAccess as x (x.account.id)}{@render accRow(x)}{/each}
 					</ul>
+					{#if restAccess.length}
+						<div class="via">
+							<Section title="Other accounts" icon="user" count={restAccess.length} open={accOpen} ontoggle={(o) => (accOpen = o)}>
+								<ul class="acc">
+									{#each restAccess as x (x.account.id)}{@render accRow(x)}{/each}
+								</ul>
+							</Section>
+						</div>
+					{/if}
 				{/if}
 			</Block>
 
