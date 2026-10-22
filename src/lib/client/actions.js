@@ -91,6 +91,7 @@ export async function relayAs(fromId, fromLabel, targets, location, mode = 'join
 	try {
 		const r = await api(`${accountPath(fromId)}/relay`, { method: 'POST', body: { to: targets.map((t) => t.id), location, mode } });
 		if (r.needLogin) toasts.push(`No saved login for this account yet: log in once in the game window (profile ${r.profile}), then try again`, 'info', 12000);
+		else if (mode === 'invite' && r.missed?.length) toasts.error(`${r.from} invited ${r.invited.join(', ')}, but not ${r.missed.join(', ')}: try again for those`);
 		else if (mode === 'invite') toasts.success(`${r.from} invited ${r.invited.join(', ')}: accept the invite in the game or on vrchat.com`);
 		else if (r.join?.room) toasts.success(`${r.to} joined ${r.join.room} (invited by ${r.from})`);
 		else toasts.error(`${r.to}: ${r.join?.failed || 'the game started but did not join the instance'}`);

@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 import { accounts, accountLabel } from '$lib/stores/accounts.js';
 import { friendList } from '$lib/stores/friends.js';
-import { receivedInvites } from '$lib/stores/notifications.js';
+import { receivedInvites, refreshInvites } from '$lib/stores/notifications.js';
 import { showContextMenu } from '$lib/stores/overlay.js';
 import { toasts } from '$lib/stores/toast.js';
 import { parseLocation } from '$lib/shared/location.js';
@@ -123,9 +123,12 @@ export function joinMenuItem(location, { disabled = false } = {}) {
 }
 
 /** Open the account picker next to a button. */
-export function openJoinMenu(event, location) {
+export async function openJoinMenu(event, location) {
+	// the menu depends on invites received a moment ago: read them fresh (a failure keeps the cached list)
+	const el = event.currentTarget;
+	await refreshInvites().catch(() => {});
 	const items = joinAccountItems(location);
 	if (!items.length) return toasts.error('No logged-in account has access to this instance');
-	const r = event.currentTarget.getBoundingClientRect();
+	const r = el.getBoundingClientRect();
 	showContextMenu({ x: r.left, y: r.bottom + 4, header: { title: 'Join in game as' }, items });
 }

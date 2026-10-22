@@ -1,13 +1,13 @@
 #!/bin/bash
-# vrc-game-version: 6
+# vrc-game-version: 7
 # Start the desktop VRChat client on a saved login profile and report who it logged in as.
-# usage: vrc-game <profile> [--keep] [--join <location>] [--fast]     profile 0 = default (no flag), N = --profile=N
+# usage: vrc-game <profile> [--keep] [--join <location>] [--fast] [--expect <usr_id>]     profile 0 = default (no flag), N = --profile=N
 # stdout lines: "AUTH<TAB><usr_id><TAB><displayName><TAB>[steam]" (steam = signed in through Steam, not a saved login) | "NOLOGIN" (profile has no saved login: client left at
 # the login screen with --keep, closed otherwise) | "FAILED". With --join, after AUTH one more line:
 # "JOINED<TAB><room name>" | "JOINFAIL" (client fell into the Error World) | "JOINTIMEOUT".
 # Exit 0 = AUTH, 3 = NOLOGIN, 1 = FAILED. On AUTH the client keeps running. Same start-hang handling as vrc-testclient (restart after 25 s without "Master volume").
-N=${1:?profile}; shift; KEEP=; LOC=; FAST=
-while [ $# -gt 0 ]; do case "$1" in --keep) KEEP=--keep ;; --join) LOC=$2; shift ;; --fast) FAST=1 ;; esac; shift; done
+N=${1:?profile}; shift; KEEP=; LOC=; FAST=; EXPECT=
+while [ $# -gt 0 ]; do case "$1" in --keep) KEEP=--keep ;; --join) LOC=$2; shift ;; --fast) FAST=1 ;; --expect) EXPECT=$2; shift ;; esac; shift; done
 D=$HOME/.local/share/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat
 PAT='[V]RChat.exe|[A]ppId=438100|[x]alia|[w]ineserver|[s]team -applaunch'
 stop() {
@@ -34,6 +34,8 @@ for t in 1 2 3; do
       id=$(echo "$line" | sed -E 's/.*\((usr_[^)]*)\)$/\1/'); name=$(echo "$line" | sed -E 's/ \(usr_[^)]*\)$//')
       printf 'AUTH\t%s\t%s\t%s\n' "$id" "$name" "$VIA"
       [ -z "$LOC" ] && exit 0
+      # another account than expected signed in (the saved login changed): never join the instance as the wrong one
+      [ -n "$EXPECT" ] && [ "$id" != "$EXPECT" ] && { echo WRONGUSER; exit 0; }
       WID=${LOC%%:*}
       for j in $(seq 1 60); do
         sleep 2

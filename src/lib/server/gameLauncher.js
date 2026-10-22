@@ -48,8 +48,8 @@ function ssh(host, command, timeout) {
 	});
 }
 
-async function runProfile({ host, script }, profile, keep, location, fast = false) {
-	const cmd = `${script} ${profile}${keep ? ' --keep' : ''}${location ? ` --join '${location}'` : ''}${location && fast ? ' --fast' : ''}`;
+async function runProfile({ host, script }, profile, keep, location, fast = false, expect) {
+	const cmd = `${script} ${profile}${keep ? ' --keep' : ''}${location ? ` --join '${location}'` : ''}${location && fast ? ' --fast' : ''}${location && expect ? ` --expect ${expect}` : ''}`;
 	const { err, stdout, stderr } = await ssh(host, cmd, 5 * 60_000);
 	const lines = stdout.trim().split('\n');
 	const auth = lines.find((l) => l.startsWith('AUTH\t'));
@@ -85,7 +85,7 @@ async function launch(accountId, location, fast = false) {
 	for (const p of candidates(map, userId, cfg.max)) {
 		// the location only goes to a profile already known to be this account: probing another account's profile must not join it
 		const known = map[p] === userId;
-		let r = await runProfile(cfg, p, !known, known ? location : undefined, fast);
+		let r = await runProfile(cfg, p, !known, known ? location : undefined, fast, userId);
 		tried.push(p);
 		if (r.kind === 'nologin') {
 			map[p] = null;
@@ -103,7 +103,7 @@ async function launch(accountId, location, fast = false) {
 		setSettings({ 'game.profiles': map });
 		if (r.id === userId) {
 			// found by probing: now start it again with the instance
-			if (location && !known) r = await runProfile(cfg, p, false, location, fast);
+			if (location && !known) r = await runProfile(cfg, p, false, location, fast, userId);
 			return { profile: Number(p), name: r.name, join: r.join, tried };
 		}
 	}
@@ -173,6 +173,12 @@ async function closeClient() {
 	await ssh(host, 'pkill -KILL -x VRChat.exe; for i in 1 2 3 4 5 6 7 8 9 10; do pgrep -x VRChat.exe >/dev/null || break; sleep 0.3; done; echo DONE', 20_000);
 }
 
+async function clientAlive() {
+	const { host } = config();
+	const { stdout } = await ssh(host, 'pgrep -x VRChat.exe >/dev/null && echo ALIVE', 15_000);
+	return stdout.includes('ALIVE');
+}
+
 /**
  * Relay: account `fromId` (has access) enters the instance in the game and invites the `toIds` accounts from inside it
  * (VRChat only accepts an invite from someone who is in the instance), then the client is closed.
@@ -184,7 +190,8 @@ async function closeClient() {
 export function relayJoin(fromId, toIds, location, mode = 'join') {
 	if (running) return Promise.reject(new Error('A game launch is already in progress'));
 	if (!LOCATION_RE.test(location || '')) return Promise.reject(new Error('Not a valid instance location'));
-	const targets = (Array.isArray(toIds) ? toIds : [toIds]).map(String).filter(Boolean);
+	// the account that enters is never its own target; duplicates collapse
+	const targets = [...new Set((Array.isArray(toIds) ? toIds : [toIds]).map(String).filter((t) => t && t !== String(fromId)))];
 	if (!targets.length) return Promise.reject(new Error('No target account'));
 	if (mode === 'join' && targets.length !== 1) return Promise.reject(new Error('Join relays one account'));
 	running = (async () => {
@@ -193,13 +200,18 @@ export function relayJoin(fromId, toIds, location, mode = 'join') {
 			if (!u?.id) throw new Error('A target account is not logged in');
 			return { id, userId: u.id, name: u.displayName };
 		});
-		const a = await launch(fromId, location, true);
+		let a = await launch(fromId, location, true);
 		if (a.needLogin) return { needLogin: true, profile: a.profile };
-		if (!a.join?.launched) throw new Error(`${a.name} could not join the instance: ${a.join?.failed || 'unknown'}`);
+		if (!a.join?.launched) {
+			// the client froze or the instance would not open: close it so the next launch starts clean
+			await closeClient();
+			throw new Error(`${a.name} could not join the instance: ${a.join?.failed || 'unknown'}`);
+		}
 		const meta = await getWorldMeta(fromId, location.split(':')[0]).catch(() => null);
 		// the API learns the new location a moment after the client logs it: retry until the invite is accepted
 		const invited = [];
 		let lastError = '';
+		let relaunched = false;
 		for (let i = 0; i < 120 && invited.length < users.length; i++) {
 			if (i) await new Promise((r) => setTimeout(r, 700));
 			for (const u of users) {
@@ -208,10 +220,20 @@ export function relayJoin(fromId, toIds, location, mode = 'join') {
 				if (inv.ok) invited.push(u.name);
 				else lastError = inv.error;
 			}
+			// the client died after it was launched (the startup crash): once start it again instead of waiting for nothing
+			if (!invited.length && i && i % 12 === 0 && !(await clientAlive())) {
+				if (relaunched) break;
+				relaunched = true;
+				a = await launch(fromId, location, true);
+				if (a.needLogin) return { needLogin: true, profile: a.profile };
+				if (!a.join?.launched) break;
+				i = 0;
+			}
 		}
-		if (!invited.length) throw new Error(`${a.name} is in the instance but the invite failed: ${lastError}`);
 		await closeClient();
-		if (mode === 'invite') return { from: a.name, invited };
+		if (!invited.length) throw new Error(`${a.name} is in the instance but the invite failed: ${lastError || 'the game closed'}`);
+		const missed = users.filter((u) => !invited.includes(u.name)).map((u) => u.name);
+		if (mode === 'invite') return { from: a.name, invited, missed };
 		const b = await launch(targets[0], location);
 		if (b.needLogin) return { needLogin: true, profile: b.profile, from: a.name, invited };
 		return { from: a.name, to: b.name, invited, join: b.join };
