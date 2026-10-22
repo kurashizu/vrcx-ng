@@ -1,5 +1,5 @@
 #!/bin/bash
-# vrc-game-version: 4
+# vrc-game-version: 5
 # Start the desktop VRChat client on a saved login profile and report who it logged in as.
 # usage: vrc-game <profile> [--keep] [--join <location>] [--fast]     profile 0 = default (no flag), N = --profile=N
 # stdout lines: "AUTH<TAB><usr_id><TAB><displayName>" | "NOLOGIN" (profile has no saved login: client left at
@@ -28,6 +28,9 @@ for t in 1 2 3; do
     sleep 2; X=$(log)
     [ -n "$X" ] && [ "$(stat -c %Y "$X")" -ge "$start" ] && L=$X
     if [ -n "$L" ] && grep -q 'User Authenticated:' "$L"; then
+      # the saved login failed and the client fell back to the Steam account: that is not this profile's login
+      sleep 1
+      if grep -qE 'Auto-login failed|Authenticated via steam' "$L"; then echo NOLOGIN; [ "$KEEP" = --keep ] || stop; exit 3; fi
       line=$(grep 'User Authenticated:' "$L" | tail -1 | tr -d '\r' | sed 's/.*User Authenticated: //')
       id=$(echo "$line" | sed -E 's/.*\((usr_[^)]*)\)$/\1/'); name=$(echo "$line" | sed -E 's/ \(usr_[^)]*\)$//')
       printf 'AUTH\t%s\t%s\n' "$id" "$name"
