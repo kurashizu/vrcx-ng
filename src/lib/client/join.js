@@ -3,6 +3,7 @@ import { accounts, accountLabel } from '$lib/stores/accounts.js';
 import { friendList } from '$lib/stores/friends.js';
 import { receivedInvites, refreshInvites } from '$lib/stores/notifications.js';
 import { showContextMenu } from '$lib/stores/overlay.js';
+import { accountFilter } from '$lib/stores/feed.js';
 import { toasts } from '$lib/stores/toast.js';
 import { parseLocation } from '$lib/shared/location.js';
 import { playAs, relayAs } from './actions.js';
@@ -90,11 +91,19 @@ export function relayOptions(location) {
 
 /** One menu item per account that may join (flat list, for a menu opened from a button), then the relay ones. */
 export function joinAccountItems(location) {
-	const direct = accountsWithAccess(location).map(({ account, reason }) => ({
+	const access = accountsWithAccess(location);
+	const entry = ({ account, reason }) => ({
 		icon: 'user',
 		label: `${accountLabel(account)} · ${reason}`,
 		action: () => playAs(account.id, accountLabel(account), location)
-	}));
+	});
+	// with many accounts that can open it (a public room: all of them) one entry stays on top, the rest is folded:
+	// the account selected in the sidebar, else the first
+	const primary = access.find((x) => x.account.id === get(accountFilter)) || access[0];
+	const direct =
+		access.length > 2
+			? [entry(primary), { icon: 'user', label: `Other accounts (${access.length - 1})`, sub: access.filter((x) => x !== primary).map(entry) }]
+			: access.map(entry);
 	const opts = relayOptions(location);
 	if (!opts.length) return direct;
 	const target = (b) => ({ id: b.id, label: accountLabel(b) });
