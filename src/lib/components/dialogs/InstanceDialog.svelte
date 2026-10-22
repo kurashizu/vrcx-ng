@@ -152,14 +152,14 @@
 								<button class="btn xs" disabled={!!busy} title="One trip through {accountLabel(relayAll.via)}: it enters and invites all of them" onclick={(e) => { e.stopPropagation(); inviteAll(); }}><Icon name="mail" /> {busy === 'all' ? 'Inviting…' : `Invite all ${relayAll.targets.length}`}</button>
 							{/if}
 						{/snippet}
-						<p class="faint small hint">These accounts cannot open it themselves: a friend's account enters first and invites them.</p>
+						<p class="faint small hint">These accounts cannot open it themselves. A friend's account enters the instance for a few seconds (others there see it join and leave) and sends the invite, because VRChat only lets someone inside the instance invite. <b>Invite</b> stops there, <b>Join in game</b> then starts the game as the invited account.</p>
 						<ul class="acc">
 							{#each relay as { account: b, via } (b.id)}
 								<li>
 									<Avatar src={b.currentUser?.currentAvatarThumbnailImageUrl} name={accountLabel(b)} size={32} accountId={b.id} />
 									<div class="n"><strong><UserLink id={b.currentUser?.id} name={accountLabel(b)} accountId={b.id} /></strong><span class="faint small">Relay through <UserLink id={via.currentUser?.id} name={accountLabel(via)} accountId={via.id} /></span></div>
 									<span class="spacer"></span>
-									<button class="btn xs" disabled={!!busy} title="Only send the invite: accept it later in the game or on vrchat.com" onclick={() => relayJoin(b, via, 'invite')}><Icon name="mail" /> {busy === b.id + ':invite' ? 'Inviting…' : 'Invite'}</button>
+									<button class="btn xs" disabled={!!busy} title="{accountLabel(via)}'s account enters the instance for a few seconds to send the invite, then the game closes. This account does not enter: accept the invite later in the game or on vrchat.com" onclick={() => relayJoin(b, via, 'invite')}><Icon name="mail" /> {busy === b.id + ':invite' ? 'Inviting…' : 'Invite'}</button>
 									<button class="btn primary xs" disabled={!!busy} title="Invite, then start the game as this account in the instance" onclick={() => relayJoin(b, via, 'join')}><Icon name="play" /> {busy === b.id + ':join' ? 'Starting…' : 'Join in game'}</button>
 								</li>
 							{/each}

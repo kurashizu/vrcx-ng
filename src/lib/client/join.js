@@ -104,7 +104,7 @@ export function joinAccountItems(location) {
 		label: `${accountLabel(account)} · via ${accountLabel(via)}`,
 		sub: [
 			{ icon: 'play', label: 'Join in game', action: () => relayAs(via.id, accountLabel(via), [target(account)], location, 'join') },
-			{ icon: 'mail', label: 'Invite only', action: () => relayAs(via.id, accountLabel(via), [target(account)], location, 'invite') }
+			{ icon: 'mail', label: `Send invite (${accountLabel(via)} enters briefly)`, action: () => relayAs(via.id, accountLabel(via), [target(account)], location, 'invite') }
 		]
 	}));
 	// one entry that invites every relay account at once, through the first account that has access
