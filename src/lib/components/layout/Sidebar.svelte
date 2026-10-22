@@ -4,6 +4,7 @@
 	import { unseenCount } from '$lib/stores/notifications.js';
 	import { notificationsOpen } from '$lib/stores/overlay.js';
 	import AccountList from './AccountList.svelte';
+	import GameClients from './GameClients.svelte';
 
 	const NAV = [
 		{ href: '/', icon: 'radio', label: 'Feed' },
@@ -42,6 +43,7 @@
 
 	<div class="divider"></div>
 	<AccountList />
+	<GameClients />
 </div>
 
 <style>

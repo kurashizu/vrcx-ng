@@ -58,6 +58,8 @@ const DEFAULTS = {
 	'game.script': '~/Documents/vrchat-dev/scripts/vrc-game', // launcher on the game machine
 	'game.maxProfiles': 20, // game profiles 0..N-1 searched for an account
 	'game.profiles': {},
+	'game.auxDisplayUrl': 'http://10.0.0.20:6080/vnc.html?autoconnect=1&resize=remote', // where the helper client is drawn (noVNC), for logging in there
+	'game.auxProfiles': {}, // the helper client's own map (its wine prefix keeps its own saved logins)
 
 	// Advanced
 	'advanced.lastCleanup': 0

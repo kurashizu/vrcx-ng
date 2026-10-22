@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 // the bridge script that runs on the game machine, bundled into the build so it can be deployed from Settings
 import bundled from './vrc-game.sh?raw';
-import { getSession, listAccounts } from './accounts.js';
+import { getSession } from './accounts.js';
 import { sendInvite } from './vrchat.js';
 import { getWorldMeta } from './worldCache.js';
 import { getSetting, setSettings } from './settings.js';
@@ -24,8 +24,23 @@ const LOCATION_RE = /^wrld_[A-Za-z0-9-]+:[A-Za-z0-9_~().,:+-]{1,300}$/;
 const versionOf = (text) => Number(/^# vrc-game-version: (\d+)/m.exec(text)?.[1]) || 0;
 const BUNDLED_VERSION = versionOf(bundled);
 
-/** @type {Promise<any> | null} */
-let running = null;
+/**
+ * Two clients can run at once: the MAIN one is the player's (started through Steam), the AUX one is a helper for temporary
+ * logins and relays (own wine prefix, shown on the VNC display) and lives only as long as its task. One launch at a time on each.
+ * @type {{ main: Promise<any> | null, aux: Promise<any> | null }}
+ */
+const running = { main: null, aux: null };
+/** a helper client left at a login screen for the user to log in stays this long (ms timestamp), then it is closed */
+let auxLoginUntil = 0;
+const AUX_LOGIN_GRACE = 10 * 60_000;
+
+const mapKey = (client) => (client === 'aux' ? 'game.auxProfiles' : 'game.profiles');
+/** profile → account map of a client; the helper starts from a copy of the main one (its wine prefix was copied from it) */
+function profileMap(client) {
+	const own = getSetting(mapKey(client)) || {};
+	if (client === 'aux' && !Object.keys(own).length) return { ...(getSetting('game.profiles') || {}) };
+	return { ...own };
+}
 
 function config() {
 	const host = String(getSetting('game.host') || '').trim();
@@ -48,8 +63,8 @@ function ssh(host, command, timeout) {
 	});
 }
 
-async function runProfile({ host, script }, profile, keep, location, fast = false, expect) {
-	const cmd = `${script} ${profile}${keep ? ' --keep' : ''}${location ? ` --join '${location}'` : ''}${location && fast ? ' --fast' : ''}${location && expect ? ` --expect ${expect}` : ''}`;
+async function runProfile({ host, script }, profile, keep, location, fast = false, expect, client = 'main') {
+	const cmd = `${script} ${profile}${client === 'aux' ? ' --aux' : ''}${keep ? ' --keep' : ''}${location ? ` --join '${location}'` : ''}${location && fast ? ' --fast' : ''}${location && expect ? ` --expect ${expect}` : ''}`;
 	const { err, stdout, stderr } = await ssh(host, cmd, 5 * 60_000);
 	const lines = stdout.trim().split('\n');
 	const auth = lines.find((l) => l.startsWith('AUTH\t'));
@@ -76,46 +91,58 @@ function candidates(map, userId, max) {
 	return [...known, ...empty, ...fresh];
 }
 
-async function launch(accountId, location, fast = false) {
+async function launch(accountId, location, fast = false, client = 'main') {
 	const cfg = config();
 	const userId = getSession(accountId)?.user?.id;
 	if (!userId) throw new Error('Not logged in');
-	const map = { ...(getSetting('game.profiles') || {}) };
+	const map = profileMap(client);
+	const save = () => setSettings({ [mapKey(client)]: map });
 	const tried = [];
+	// a login screen is left open for the user (helper client: they log in on the VNC display, it is closed after a while)
+	const needLogin = (p) => {
+		if (client === 'aux') auxLoginUntil = Date.now() + AUX_LOGIN_GRACE;
+		return { needLogin: true, profile: Number(p), tried, client };
+	};
 	for (const p of candidates(map, userId, cfg.max)) {
 		// the location only goes to a profile already known to be this account: probing another account's profile must not join it
 		const known = map[p] === userId;
-		let r = await runProfile(cfg, p, !known, known ? location : undefined, fast, userId);
+		let r = await runProfile(cfg, p, !known, known ? location : undefined, fast, userId, client);
 		tried.push(p);
 		if (r.kind === 'nologin') {
 			map[p] = null;
-			setSettings({ 'game.profiles': map });
-			// no saved login here: the client is left open at the login screen so the user can log in once
-			return { needLogin: true, profile: Number(p), tried };
+			save();
+			return needLogin(p);
 		}
 		// signed in through Steam (no saved login here) as someone else: this profile is not logged in for the account we want
 		if (r.via === 'steam' && r.id !== userId) {
 			map[p] = null;
-			setSettings({ 'game.profiles': map });
-			return { needLogin: true, profile: Number(p), tried };
+			save();
+			return needLogin(p);
 		}
 		map[p] = r.id;
-		setSettings({ 'game.profiles': map });
+		save();
 		if (r.id === userId) {
 			// found by probing: now start it again with the instance
-			if (location && !known) r = await runProfile(cfg, p, false, location, fast, userId);
-			return { profile: Number(p), name: r.name, join: r.join, tried };
+			if (location && !known) r = await runProfile(cfg, p, false, location, fast, userId, client);
+			return { profile: Number(p), name: r.name, join: r.join, tried, client };
 		}
 	}
 	throw new Error(`No game profile (0-${cfg.max - 1}) is logged in as this account`);
 }
 
-/** One launch at a time: the client is a single process on the game box. */
+/** Play as: the main client (the player's game) starts as this account. One launch at a time. */
 export function launchGame(accountId, location) {
-	if (running) return Promise.reject(new Error('A game launch is already in progress'));
+	if (running.main) return Promise.reject(new Error('A game launch is already in progress'));
 	if (location && !LOCATION_RE.test(location)) return Promise.reject(new Error('Not a valid instance location'));
-	running = launch(accountId, location || undefined).finally(() => (running = null));
-	return running;
+	running.main = launch(accountId, location || undefined).finally(() => (running.main = null));
+	return running.main;
+}
+
+/** Log an account in on the helper client (its login screen stays open for a while) so relays can use it. */
+export function launchAux(accountId) {
+	if (running.aux) return Promise.reject(new Error('The helper client is busy'));
+	running.aux = launch(accountId, undefined, false, 'aux').finally(() => (running.aux = null));
+	return running.aux;
 }
 
 /** Settings → Game "Test connection": is the box reachable, is the launch script there, what is running. */
@@ -124,7 +151,7 @@ export async function gameStatus() {
 	const t0 = Date.now();
 	const { err, stdout, stderr } = await ssh(
 		host,
-		`test -x ${script} && echo SCRIPT; echo VER:$(grep -m1 '^# vrc-game-version:' ${script} 2>/dev/null | cut -d: -f2 | tr -d ' '); pgrep -x steam >/dev/null && echo STEAM; pgrep -x VRChat.exe >/dev/null && echo CLIENT; echo DONE`,
+		`test -x ${script} && echo SCRIPT; echo VER:$(grep -m1 '^# vrc-game-version:' ${script} 2>/dev/null | cut -d: -f2 | tr -d ' '); pgrep -x steam >/dev/null && echo STEAM; pgrep -x VRChat.exe >/dev/null && echo CLIENT; ${script} clients 2>/dev/null | sed 's/^/C:/'; echo DONE`,
 		20_000
 	);
 	if (!stdout.includes('DONE')) return { reachable: false, error: (stderr || err?.message || 'ssh failed').trim().split('\n').pop() };
@@ -135,7 +162,9 @@ export async function gameStatus() {
 		scriptVersion: Number(/^VER:(\d*)/m.exec(stdout)?.[1]) || 0,
 		bundledVersion: BUNDLED_VERSION,
 		steam: stdout.includes('STEAM'),
-		client: stdout.includes('CLIENT')
+		client: stdout.includes('CLIENT'),
+		// the running clients: { kind: 'main' | 'aux', profile }
+		clients: [...stdout.matchAll(/^C:(main|aux)\t(\d*)\t/gm)].map((m) => ({ kind: m[1], profile: Number(m[2]) || 0 }))
 	};
 }
 
@@ -153,132 +182,134 @@ export function deployGameScript() {
 	});
 }
 
-/** Learned profile map (for the settings page). */
+/** Learned profile maps (for the settings page): the main client's and the helper's. */
 export function gameProfiles() {
-	return { profiles: getSetting('game.profiles') || {}, max: config().max, busy: !!running };
+	return {
+		profiles: getSetting('game.profiles') || {},
+		auxProfiles: profileMap('aux'),
+		max: config().max,
+		busy: !!(running.main || running.aux),
+		busyMain: !!running.main,
+		busyAux: !!running.aux
+	};
 }
 
 /** Forget what was learned about one profile (or all with 'all'): it is searched again on the next launch. */
-export function forgetGameProfile(profile) {
-	const map = { ...(getSetting('game.profiles') || {}) };
+export function forgetGameProfile(profile, client = 'main') {
+	const map = client === 'aux' ? profileMap('aux') : { ...(getSetting('game.profiles') || {}) };
 	if (profile === 'all') for (const k of Object.keys(map)) delete map[k];
 	else delete map[String(profile)];
-	setSettings({ 'game.profiles': map });
+	setSettings({ [mapKey(client)]: map });
 	return map;
 }
 
-/** Kill the running game client on the game box at once (the invite is out: nothing in the first account is worth waiting for). */
-async function closeClient() {
-	const { host } = config();
-	await ssh(host, 'pkill -KILL -x VRChat.exe; for i in 1 2 3 4 5 6 7 8 9 10; do pgrep -x VRChat.exe >/dev/null || break; sleep 0.3; done; echo DONE', 20_000);
+/** Close the helper client at once (never touches the main one). */
+export async function closeAux() {
+	const { host, script } = config();
+	auxLoginUntil = 0;
+	await ssh(host, `${script} kill-aux; echo DONE`, 30_000);
 }
 
-/**
- * What the game box is running right now: the profile, the account on it and the instance that account is in
- * (the live location from the API wins over the launch URL, the player may have moved since). Null when no client runs.
- */
-async function currentClient() {
-	const { host } = config();
-	const { stdout } = await ssh(host, "pgrep -fa '[V]RChat.exe --no-vr' | head -1; echo DONE", 15_000);
-	const line = stdout.split('\n').find((l) => l.includes('VRChat.exe'));
-	if (!line) return null;
-	const profile = /--profile=(\d+)/.exec(line)?.[1] || '0';
-	const userId = (getSetting('game.profiles') || {})[profile] || undefined;
-	let location = /[?&]id=(wrld_\S+)/.exec(line)?.[1];
-	const acc = userId && listAccounts().find((a) => getSession(a.id)?.user?.id === userId);
-	const live = acc ? getSession(acc.id)?.user?.location : '';
-	if (live && LOCATION_RE.test(live)) location = live;
-	return { profile, userId, location: LOCATION_RE.test(location || '') ? location : undefined };
+/** Close the main client (the player's game) on the game box. */
+export async function closeMain() {
+	const { host, script } = config();
+	await ssh(host, `${script} kill-main; echo DONE`, 90_000);
 }
 
-/** Start the client that was running before a relay, in the instance it was in. Never throws: the relay itself already succeeded or failed. */
-async function restoreClient(prev) {
-	try {
-		const r = await runProfile(config(), prev.profile, false, prev.location, false, prev.userId);
-		return { name: r.name, profile: Number(prev.profile), location: prev.location, join: r.join };
-	} catch (err) {
-		return { failed: err.message };
-	}
+/** What runs on the game box right now: the clients with their profile, plus the learned maps and what is busy launching. */
+export async function gameClientsInfo() {
+	const { host, script } = config();
+	const { stdout, stderr, err } = await ssh(host, `${script} clients; echo DONE`, 20_000);
+	if (!stdout.includes('DONE')) throw new Error((stderr || err?.message || 'ssh failed').trim().split('\n').pop());
+	const clients = [...stdout.matchAll(/^(main|aux)\t(\d*)\t(\d+)$/gm)].map((m) => ({ kind: m[1], profile: Number(m[2]) || 0 }));
+	return { clients, ...gameProfiles(), loginUntil: auxLoginUntil };
 }
 
-async function clientAlive() {
-	const { host } = config();
-	const { stdout } = await ssh(host, 'pgrep -x VRChat.exe >/dev/null && echo ALIVE', 15_000);
+async function auxAlive() {
+	const { host, script } = config();
+	const { stdout } = await ssh(host, `${script} alive-aux`, 15_000);
 	return stdout.includes('ALIVE');
 }
 
 /**
- * Relay: account `fromId` (has access) enters the instance in the game and invites the `toIds` accounts from inside it
- * (VRChat only accepts an invite from someone who is in the instance), then the client is closed.
+ * The helper client must not linger: it is closed the moment its task is over. This is the safety net for everything
+ * that slips through (a restart of the service in the middle of a relay, a login screen nobody finished): a helper client
+ * that no task owns and that is not waiting for a login is killed.
+ */
+async function reapAux() {
+	if (running.aux || Date.now() < auxLoginUntil) return;
+	try {
+		if (await auxAlive()) await closeAux();
+	} catch {}
+}
+setInterval(reapAux, 30_000).unref?.();
+void reapAux();
+
+/**
+ * Relay: the helper client signs in as account `fromId` (which has access), enters the instance and invites the `toIds`
+ * accounts from inside it (VRChat only accepts an invite from someone who is in the instance); the helper is closed the
+ * moment the invites are out. The main client (the player's game) is never touched, except in mode 'join'.
  *   mode 'invite'  nothing else: the invited accounts accept in their own client
- *   mode 'join'    (one target) the game is started as that account in the instance
- * The first account does not have to finish loading: it only has to be in the instance as far as VRChat is concerned,
- * which is when the invite is accepted.
+ *   mode 'join'    (one target) the main client is started as that account in the instance
+ * The helper does not have to finish loading: it only has to be in the instance as far as VRChat is concerned, which is
+ * when the invite is accepted.
  */
 export function relayJoin(fromId, toIds, location, mode = 'join') {
-	if (running) return Promise.reject(new Error('A game launch is already in progress'));
+	if (running.aux) return Promise.reject(new Error('The helper client is busy'));
 	if (!LOCATION_RE.test(location || '')) return Promise.reject(new Error('Not a valid instance location'));
 	// the account that enters is never its own target; duplicates collapse
 	const targets = [...new Set((Array.isArray(toIds) ? toIds : [toIds]).map(String).filter((t) => t && t !== String(fromId)))];
 	if (!targets.length) return Promise.reject(new Error('No target account'));
 	if (mode === 'join' && targets.length !== 1) return Promise.reject(new Error('Join relays one account'));
-	const body = async () => {
+	if (mode === 'join' && running.main) return Promise.reject(new Error('A game launch is already in progress'));
+	running.aux = (async () => {
 		const users = targets.map((id) => {
 			const u = getSession(id)?.user;
 			if (!u?.id) throw new Error('A target account is not logged in');
 			return { id, userId: u.id, name: u.displayName };
 		});
-		let a = await launch(fromId, location, true);
-		if (a.needLogin) return { needLogin: true, profile: a.profile };
-		if (!a.join?.launched) {
-			// the client froze or the instance would not open: close it so the next launch starts clean
-			await closeClient();
-			throw new Error(`${a.name} could not join the instance: ${a.join?.failed || 'unknown'}`);
-		}
-		const meta = await getWorldMeta(fromId, location.split(':')[0]).catch(() => null);
-		// the API learns the new location a moment after the client logs it: retry until the invite is accepted
-		const invited = [];
-		let lastError = '';
-		let relaunched = false;
-		for (let i = 0; i < 120 && invited.length < users.length; i++) {
-			if (i) await new Promise((r) => setTimeout(r, 700));
-			for (const u of users) {
-				if (invited.includes(u.name)) continue;
-				const inv = await sendInvite(fromId, u.userId, location, { worldName: meta?.name });
-				if (inv.ok) invited.push(u.name);
-				else lastError = inv.error;
-			}
-			// the client died after it was launched (the startup crash): once start it again instead of waiting for nothing
-			if (!invited.length && i && i % 12 === 0 && !(await clientAlive())) {
-				if (relaunched) break;
-				relaunched = true;
-				a = await launch(fromId, location, true);
-				if (a.needLogin) return { needLogin: true, profile: a.profile };
-				if (!a.join?.launched) break;
-				i = 0;
-			}
-		}
-		await closeClient();
-		if (!invited.length) throw new Error(`${a.name} is in the instance but the invite failed: ${lastError || 'the game closed'}`);
-		const missed = users.filter((u) => !invited.includes(u.name)).map((u) => u.name);
-		if (mode === 'invite') return { from: a.name, invited, missed };
-		const b = await launch(targets[0], location);
-		if (b.needLogin) return { needLogin: true, profile: b.profile, from: a.name, invited };
-		return { from: a.name, to: b.name, invited, join: b.join };
-	};
-	running = (async () => {
-		// an invite-only relay ends with nobody started: the client that was open before it comes back (a join relay ends in the target's client)
-		const prev = mode === 'invite' ? await currentClient().catch(() => null) : null;
-		let result;
+		let invited = [];
+		let from = '';
 		try {
-			result = await body();
-		} catch (err) {
-			if (prev) await restoreClient(prev);
-			throw err;
+			let a = await launch(fromId, location, true, 'aux');
+			if (a.needLogin) return { needLogin: true, profile: a.profile, client: 'aux' };
+			if (!a.join?.launched) throw new Error(`${a.name} could not join the instance: ${a.join?.failed || 'unknown'}`);
+			from = a.name;
+			const meta = await getWorldMeta(fromId, location.split(':')[0]).catch(() => null);
+			// the API learns the new location a moment after the client logs it: retry until the invite is accepted
+			let lastError = '';
+			let relaunched = false;
+			for (let i = 0; i < 120 && invited.length < users.length; i++) {
+				if (i) await new Promise((r) => setTimeout(r, 700));
+				for (const u of users) {
+					if (invited.includes(u.name)) continue;
+					const inv = await sendInvite(fromId, u.userId, location, { worldName: meta?.name });
+					if (inv.ok) invited.push(u.name);
+					else lastError = inv.error;
+				}
+				// the client died after it was launched (the startup crash): start it once more instead of waiting for nothing
+				if (!invited.length && i && i % 12 === 0 && !(await auxAlive())) {
+					if (relaunched) break;
+					relaunched = true;
+					a = await launch(fromId, location, true, 'aux');
+					if (a.needLogin) return { needLogin: true, profile: a.profile, client: 'aux' };
+					if (!a.join?.launched) break;
+					i = 0;
+				}
+			}
+			if (!invited.length) throw new Error(`${a.name} is in the instance but the invite failed: ${lastError || 'the helper client closed'}`);
+		} finally {
+			// the task is over, whatever the outcome: the helper goes at once (a login screen left for the user is the one exception)
+			if (Date.now() >= auxLoginUntil) await closeAux().catch(() => {});
 		}
-		// a login screen left open for the user must stay
-		if (prev && !result.needLogin) result.restored = await restoreClient(prev);
-		return result;
-	})().finally(() => (running = null));
-	return running;
+		const missed = users.filter((u) => !invited.includes(u.name)).map((u) => u.name);
+		if (mode === 'invite') return { from, invited, missed };
+		// join: the player's main client starts as the invited account
+		if (running.main) throw new Error(`${invited[0]} was invited by ${from}, but a game launch is already in progress: join from the invite`);
+		running.main = launch(targets[0], location, false, 'main').finally(() => (running.main = null));
+		const b = await running.main;
+		if (b.needLogin) return { needLogin: true, profile: b.profile, from, invited, client: 'main' };
+		return { from, to: b.name, invited, join: b.join };
+	})().finally(() => (running.aux = null));
+	return running.aux;
 }
