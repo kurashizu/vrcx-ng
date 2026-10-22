@@ -87,12 +87,12 @@ export async function playAs(accountId, label = '', location = '') {
  */
 export async function relayAs(fromId, fromLabel, targets, location, mode = 'join') {
 	const names = targets.map((t) => t.label).join(', ');
-	toasts.push(`Relay: joining as ${fromLabel} to invite ${names}${mode === 'join' ? ', then starting the game as them' : ''}… (about ${mode === 'join' ? '1–2 minutes' : '1 minute'})`, 'info', 15000);
+	toasts.push(`Relay: joining as ${fromLabel} to invite ${names}${mode === 'join' ? ', then starting the game as them' : ''}… (about ${mode === 'join' ? '1–2 minutes' : '1–2 minutes, the game that is open now comes back afterwards'})`, 'info', 15000);
 	try {
 		const r = await api(`${accountPath(fromId)}/relay`, { method: 'POST', body: { to: targets.map((t) => t.id), location, mode } });
 		if (r.needLogin) toasts.push(`No saved login for this account yet: log in once in the game window (profile ${r.profile}), then try again`, 'info', 12000);
 		else if (mode === 'invite' && r.missed?.length) toasts.error(`${r.from} invited ${r.invited.join(', ')}, but not ${r.missed.join(', ')}: try again for those`);
-		else if (mode === 'invite') toasts.success(`${r.from} invited ${r.invited.join(', ')}: accept the invite in the game or on vrchat.com`);
+		else if (mode === 'invite') toasts.success(`${r.from} invited ${r.invited.join(', ')}: accept the invite in the game or on vrchat.com${r.restored?.name ? `. ${r.restored.name}'s game is back${r.restored.location ? ' in its instance' : ''}` : r.restored?.failed ? `. Could not bring the previous game back: ${r.restored.failed}` : ''}`);
 		else if (r.join?.room) toasts.success(`${r.to} joined ${r.join.room} (invited by ${r.from})`);
 		else toasts.error(`${r.to}: ${r.join?.failed || 'the game started but did not join the instance'}`);
 		return r;

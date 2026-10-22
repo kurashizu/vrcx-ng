@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 // the bridge script that runs on the game machine, bundled into the build so it can be deployed from Settings
 import bundled from './vrc-game.sh?raw';
-import { getSession } from './accounts.js';
+import { getSession, listAccounts } from './accounts.js';
 import { sendInvite } from './vrchat.js';
 import { getWorldMeta } from './worldCache.js';
 import { getSetting, setSettings } from './settings.js';
@@ -173,6 +173,34 @@ async function closeClient() {
 	await ssh(host, 'pkill -KILL -x VRChat.exe; for i in 1 2 3 4 5 6 7 8 9 10; do pgrep -x VRChat.exe >/dev/null || break; sleep 0.3; done; echo DONE', 20_000);
 }
 
+/**
+ * What the game box is running right now: the profile, the account on it and the instance that account is in
+ * (the live location from the API wins over the launch URL, the player may have moved since). Null when no client runs.
+ */
+async function currentClient() {
+	const { host } = config();
+	const { stdout } = await ssh(host, "pgrep -fa '[V]RChat.exe --no-vr' | head -1; echo DONE", 15_000);
+	const line = stdout.split('\n').find((l) => l.includes('VRChat.exe'));
+	if (!line) return null;
+	const profile = /--profile=(\d+)/.exec(line)?.[1] || '0';
+	const userId = (getSetting('game.profiles') || {})[profile] || undefined;
+	let location = /[?&]id=(wrld_\S+)/.exec(line)?.[1];
+	const acc = userId && listAccounts().find((a) => getSession(a.id)?.user?.id === userId);
+	const live = acc ? getSession(acc.id)?.user?.location : '';
+	if (live && LOCATION_RE.test(live)) location = live;
+	return { profile, userId, location: LOCATION_RE.test(location || '') ? location : undefined };
+}
+
+/** Start the client that was running before a relay, in the instance it was in. Never throws: the relay itself already succeeded or failed. */
+async function restoreClient(prev) {
+	try {
+		const r = await runProfile(config(), prev.profile, false, prev.location, false, prev.userId);
+		return { name: r.name, profile: Number(prev.profile), location: prev.location, join: r.join };
+	} catch (err) {
+		return { failed: err.message };
+	}
+}
+
 async function clientAlive() {
 	const { host } = config();
 	const { stdout } = await ssh(host, 'pgrep -x VRChat.exe >/dev/null && echo ALIVE', 15_000);
@@ -194,7 +222,7 @@ export function relayJoin(fromId, toIds, location, mode = 'join') {
 	const targets = [...new Set((Array.isArray(toIds) ? toIds : [toIds]).map(String).filter((t) => t && t !== String(fromId)))];
 	if (!targets.length) return Promise.reject(new Error('No target account'));
 	if (mode === 'join' && targets.length !== 1) return Promise.reject(new Error('Join relays one account'));
-	running = (async () => {
+	const body = async () => {
 		const users = targets.map((id) => {
 			const u = getSession(id)?.user;
 			if (!u?.id) throw new Error('A target account is not logged in');
@@ -237,6 +265,20 @@ export function relayJoin(fromId, toIds, location, mode = 'join') {
 		const b = await launch(targets[0], location);
 		if (b.needLogin) return { needLogin: true, profile: b.profile, from: a.name, invited };
 		return { from: a.name, to: b.name, invited, join: b.join };
+	};
+	running = (async () => {
+		// an invite-only relay ends with nobody started: the client that was open before it comes back (a join relay ends in the target's client)
+		const prev = mode === 'invite' ? await currentClient().catch(() => null) : null;
+		let result;
+		try {
+			result = await body();
+		} catch (err) {
+			if (prev) await restoreClient(prev);
+			throw err;
+		}
+		// a login screen left open for the user must stay
+		if (prev && !result.needLogin) result.restored = await restoreClient(prev);
+		return result;
 	})().finally(() => (running = null));
 	return running;
 }
