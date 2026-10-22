@@ -1,4 +1,5 @@
 <script>
+	import Section from '$lib/components/ui/Section.svelte';
 	import Icon from '../ui/Icon.svelte';
 	import { untrack } from 'svelte';
 	import { accountLabel, loggedInAccounts } from '$lib/stores/accounts.js';
@@ -59,6 +60,7 @@
 	const PLATFORM = { standalonewindows: 'PC', android: 'Android', ios: 'iOS' };
 
 	let inviteOpen = $state(false);
+	let relayOpen = $state(false);
 	let busy = $state('');
 	// one trip through the first account that has access invites every relay account it is a friend of
 	const relayAll = $derived.by(() => {
@@ -142,22 +144,27 @@
 			</Block>
 
 			{#if relay.length}
-				<Block title="Via a friend" hint="These accounts cannot open it themselves: a friend's account enters first and invites them">
-					{#if relayAll}
-						<div class="all"><button class="btn xs" disabled={!!busy} onclick={inviteAll}><Icon name="mail" /> {busy === 'all' ? 'Inviting…' : `Invite all ${relayAll.targets.length} accounts`}</button><span class="faint small">relay through {accountLabel(relayAll.via)}, one trip</span></div>
-					{/if}
-					<ul class="acc">
-						{#each relay as { account: b, via } (b.id)}
-							<li>
-								<Avatar src={b.currentUser?.currentAvatarThumbnailImageUrl} name={accountLabel(b)} size={32} accountId={b.id} />
-								<div class="n"><strong>{accountLabel(b)}</strong><span class="faint small">Relay through {accountLabel(via)}</span></div>
-								<span class="spacer"></span>
-								<button class="btn xs" disabled={!!busy} title="Only send the invite: accept it later in the game or on vrchat.com" onclick={() => relayJoin(b, via, 'invite')}><Icon name="mail" /> {busy === b.id + ':invite' ? 'Inviting…' : 'Invite'}</button>
-								<button class="btn primary xs" disabled={!!busy} title="Invite, then start the game as this account in the instance" onclick={() => relayJoin(b, via, 'join')}><Icon name="play" /> {busy === b.id + ':join' ? 'Starting…' : 'Join in game'}</button>
-							</li>
-						{/each}
-					</ul>
-				</Block>
+				<div class="via">
+					<Section title="Via a friend" icon="mail" count={relay.length} open={relayOpen} ontoggle={(o) => (relayOpen = o)}>
+						{#snippet actions()}
+							{#if relayAll}
+								<button class="btn xs" disabled={!!busy} title="One trip through {accountLabel(relayAll.via)}: it enters and invites all of them" onclick={(e) => { e.stopPropagation(); inviteAll(); }}><Icon name="mail" /> {busy === 'all' ? 'Inviting…' : `Invite all ${relayAll.targets.length}`}</button>
+							{/if}
+						{/snippet}
+						<p class="faint small hint">These accounts cannot open it themselves: a friend's account enters first and invites them.</p>
+						<ul class="acc">
+							{#each relay as { account: b, via } (b.id)}
+								<li>
+									<Avatar src={b.currentUser?.currentAvatarThumbnailImageUrl} name={accountLabel(b)} size={32} accountId={b.id} />
+									<div class="n"><strong>{accountLabel(b)}</strong><span class="faint small">Relay through {accountLabel(via)}</span></div>
+									<span class="spacer"></span>
+									<button class="btn xs" disabled={!!busy} title="Only send the invite: accept it later in the game or on vrchat.com" onclick={() => relayJoin(b, via, 'invite')}><Icon name="mail" /> {busy === b.id + ':invite' ? 'Inviting…' : 'Invite'}</button>
+									<button class="btn primary xs" disabled={!!busy} title="Invite, then start the game as this account in the instance" onclick={() => relayJoin(b, via, 'join')}><Icon name="play" /> {busy === b.id + ':join' ? 'Starting…' : 'Join in game'}</button>
+								</li>
+							{/each}
+						</ul>
+					</Section>
+				</div>
 			{/if}
 
 			<Block title="Who is here" hint={ours.length ? `Your accounts: ${ours.length}` : ''}>
@@ -244,6 +251,19 @@
 		flex-direction: column;
 		gap: 18px;
 		padding: 16px 20px 20px;
+	}
+	.via {
+		margin-top: 14px;
+		border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+		border-radius: 10px;
+		overflow: hidden;
+	}
+	.via .hint {
+		margin: 0 0 8px;
+		padding: 0 12px;
+	}
+	.via .acc {
+		padding: 0 4px 4px;
 	}
 	.all {
 		display: flex;
