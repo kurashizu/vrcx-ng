@@ -1,5 +1,6 @@
 <script>
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import UserLink from '$lib/components/ui/UserLink.svelte';
 	import { settings, settingsLoaded, updateSetting, saveSettings, resetSettings } from '$lib/stores/settings.js';
 	import { accounts, accountLabel, refreshAccounts } from '$lib/stores/accounts.js';
 	import { addAccountOpen, askConfirm } from '$lib/stores/overlay.js';
@@ -313,7 +314,7 @@
 						{#each Array.from({ length: gameProfileCount }, (_, i) => i) as i (i)}
 							{@const o = gameOwner(gameMap[String(i)])}
 							<SettingRow label={`Profile ${i}`} desc={i === 0 ? 'The default profile (no --profile flag)' : `--profile=${i}`}>
-								<span class={o.kind === 'ok' ? '' : 'faint'}>{o.text}</span>
+								<span class={o.kind === 'ok' ? '' : 'faint'}>{#if o.kind === 'ok'}<UserLink id={gameMap[String(i)]} name={o.text} />{:else}{o.text}{/if}</span>
 								{#if gameMap[String(i)] !== undefined}<button class="btn ghost xs" onclick={() => forget(i)}>Forget</button>{/if}
 							</SettingRow>
 						{/each}

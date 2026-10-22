@@ -6,6 +6,7 @@
 	import { shortId } from '$lib/shared/format.js';
 	import Modal from '../ui/Modal.svelte';
 	import Avatar from '../ui/Avatar.svelte';
+	import UserLink from '../ui/UserLink.svelte';
 	import UserName from '../ui/UserName.svelte';
 	import Notice from '../ui/Notice.svelte';
 
@@ -82,7 +83,7 @@
 						<input type="checkbox" checked={selected.has(f.id)} onchange={() => toggle(f.id)} />
 						<Avatar src={f.currentAvatarThumbnailImageUrl} name={f.displayName} size={30} {accountId} presence={f.state} status={f.status} />
 						<span class="who">
-							<UserName user={f} />
+							<UserLink id={f.id} name={f.displayName} {accountId}><UserName user={f} /></UserLink>
 							<span class="faint small ellipsis">{f.state === 'online' ? f.worldName || f.statusDescription || 'Online' : f.state === 'active' ? 'Online (not in game)' : 'Offline'}</span>
 						</span>
 					</label>

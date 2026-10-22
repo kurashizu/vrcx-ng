@@ -1,4 +1,5 @@
 <script>
+	import UserLink from '../ui/UserLink.svelte';
 	import Icon from '../ui/Icon.svelte';
 	import { untrack } from 'svelte';
 	import { accountLabel, loggedInAccounts } from '$lib/stores/accounts.js';
@@ -95,7 +96,7 @@
 			<Avatar src={w.thumbnailUrl || w.imageUrl} name={w.name} size={88} {accountId} square />
 			<div class="who">
 				<h2>{w.name || worldId}</h2>
-				<div class="muted">by {w.authorName || w.authorId || 'unknown'}</div>
+				<div class="muted">by <UserLink id={w.authorId} name={w.authorName || w.authorId || 'unknown'} {accountId} /></div>
 				<div class="stats">
 					<span title="Players"><Icon name="users" /> {comma(w.occupants)}</span>
 					<span title="Favorites"><Icon name="star" /> {comma(w.favorites)}</span>

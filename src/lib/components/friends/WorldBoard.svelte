@@ -1,4 +1,5 @@
 <script>
+	import UserLink from '../ui/UserLink.svelte';
 	import Icon from '../ui/Icon.svelte';
 	import { accountName } from '$lib/stores/accounts.js';
 	import { friendsData } from '$lib/stores/friends.js';
@@ -117,7 +118,7 @@
 				<button class="wname" title="Open world" onclick={() => openWorld(w.worldId, w.friends[0]?.accountIds?.[0] || '', '')}>
 					<Icon name="globe" /><span class="ellipsis">{w.label}</span>
 				</button>
-				{#if covers[w.worldId]?.author}<span class="by ellipsis" title="World author">by {covers[w.worldId].author}</span>{/if}
+				{#if covers[w.worldId]?.author}<span class="by ellipsis" title="World author">by <UserLink id={covers[w.worldId].authorId} name={covers[w.worldId].author} /></span>{/if}
 				<span class="count" title="Friends in this world"><Icon name="users" /> {w.count}</span>
 			</header>
 			<PackBoard items={w.instances.map((i, k) => ({ key: i.key, span: spans[k], data: i }))} gap={8} minCol={200} maxCols={innerCols(spanOf(w))}>

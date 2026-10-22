@@ -1,4 +1,5 @@
 <script>
+	import UserLink from '../ui/UserLink.svelte';
 	import Section from '$lib/components/ui/Section.svelte';
 	import Icon from '../ui/Icon.svelte';
 	import { untrack } from 'svelte';
@@ -133,7 +134,7 @@
 						{#each access as { account: a, reason } (a.id)}
 							<li>
 								<Avatar src={a.currentUser?.currentAvatarThumbnailImageUrl} name={accountLabel(a)} size={32} accountId={a.id} />
-								<div class="n"><strong>{accountLabel(a)}</strong><span class="faint small">{reason}</span></div>
+								<div class="n"><strong><UserLink id={a.currentUser?.id} name={accountLabel(a)} accountId={a.id} /></strong><span class="faint small">{reason}</span></div>
 								<span class="spacer"></span>
 								<button class="btn xs" title="Invite this account to the instance (works for every access type)" onclick={() => selfInvite(a.id, location)}><Icon name="mail" /> Invite myself</button>
 								<button class="btn primary xs" disabled={busy === a.id} onclick={() => join(a)}><Icon name="play" /> {busy === a.id ? 'Starting…' : 'Join in game'}</button>
@@ -156,7 +157,7 @@
 							{#each relay as { account: b, via } (b.id)}
 								<li>
 									<Avatar src={b.currentUser?.currentAvatarThumbnailImageUrl} name={accountLabel(b)} size={32} accountId={b.id} />
-									<div class="n"><strong>{accountLabel(b)}</strong><span class="faint small">Relay through {accountLabel(via)}</span></div>
+									<div class="n"><strong><UserLink id={b.currentUser?.id} name={accountLabel(b)} accountId={b.id} /></strong><span class="faint small">Relay through <UserLink id={via.currentUser?.id} name={accountLabel(via)} accountId={via.id} /></span></div>
 									<span class="spacer"></span>
 									<button class="btn xs" disabled={!!busy} title="Only send the invite: accept it later in the game or on vrchat.com" onclick={() => relayJoin(b, via, 'invite')}><Icon name="mail" /> {busy === b.id + ':invite' ? 'Inviting…' : 'Invite'}</button>
 									<button class="btn primary xs" disabled={!!busy} title="Invite, then start the game as this account in the instance" onclick={() => relayJoin(b, via, 'join')}><Icon name="play" /> {busy === b.id + ':join' ? 'Starting…' : 'Join in game'}</button>

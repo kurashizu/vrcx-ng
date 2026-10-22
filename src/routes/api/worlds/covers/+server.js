@@ -33,7 +33,7 @@ export function GET({ url }) {
 	return (async () => {
 		for (const id of ids) {
 			const m = await getWorldMeta(accountId, id, { fetchOnMiss: false });
-			if (m?.imageUrl || m?.thumbnailUrl) covers[id] = { image: m.imageUrl || m.thumbnailUrl, thumb: m.thumbnailUrl || m.imageUrl, author: m.authorName || '' };
+			if (m?.imageUrl || m?.thumbnailUrl) covers[id] = { image: m.imageUrl || m.thumbnailUrl, thumb: m.thumbnailUrl || m.imageUrl, author: m.authorName || '', authorId: m.authorId || '' };
 			else missing.push(id);
 		}
 		const todo = missing.filter((id) => !fetching.has(id));

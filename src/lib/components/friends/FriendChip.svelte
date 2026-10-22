@@ -1,9 +1,10 @@
 <script>
 	import Avatar from '../ui/Avatar.svelte';
+	import UserLink from '../ui/UserLink.svelte';
 	import UserName from '../ui/UserName.svelte';
 	import { openUser } from '$lib/stores/overlay.js';
 	import { openFriendMenu } from '$lib/client/friendMenu.js';
-	import { accountName, loggedInAccounts } from '$lib/stores/accounts.js';
+	import { accountName, accountById, loggedInAccounts } from '$lib/stores/accounts.js';
 
 	/** A friend as a small pill inside an instance bubble. @type {{ friend: import('$lib/stores/friends.js').Friend }} */
 	let { friend: f } = $props();
@@ -11,7 +12,7 @@
 	const accountId = $derived(f.accountIds?.[0] || '');
 
 	/** which of our accounts this person is a friend of (only worth showing with more than one account) */
-	const via = $derived($loggedInAccounts.length > 1 ? (f.accountIds || []).map((id) => ({ id, name: accountName(id) })) : []);
+	const via = $derived($loggedInAccounts.length > 1 ? (f.accountIds || []).map((id) => ({ id, name: accountName(id), userId: $accountById.get(id)?.currentUser?.id })) : []);
 	const hue = (id) => {
 		let h = 0;
 		for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360;
@@ -30,7 +31,7 @@
 		<span class="n ellipsis"><UserName user={f} /></span>
 		{#if via.length}
 			<span class="via">
-				{#each via as v (v.id)}<span class="a ellipsis" style="--h: {hue(v.id)}">{v.name}</span>{/each}
+				{#each via as v (v.id)}<span class="a ellipsis" style="--h: {hue(v.id)}"><UserLink id={v.userId} name={v.name} accountId={v.id} /></span>{/each}
 			</span>
 		{/if}
 	</span>
