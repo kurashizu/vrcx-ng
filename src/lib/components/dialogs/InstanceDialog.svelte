@@ -60,8 +60,20 @@
 
 	let inviteOpen = $state(false);
 	let busy = $state('');
+	// one trip through the first account that has access invites every relay account it is a friend of
+	const relayAll = $derived.by(() => {
+		if (relay.length < 2) return null;
+		const via = relay[0].via;
+		const targets = relay.filter((o) => o.via.id === via.id).map((o) => o.account);
+		return targets.length > 1 ? { via, targets } : null;
+	});
+	async function inviteAll() {
+		busy = 'all';
+		await relayAs(relayAll.via.id, accountLabel(relayAll.via), relayAll.targets.map((t) => ({ id: t.id, label: accountLabel(t) })), location, 'invite');
+		busy = '';
+	}
 	async function relayJoin(b, via, mode) {
-		busy = b.id;
+		busy = `${b.id}:${mode}`;
 		await relayAs(via.id, accountLabel(via), [{ id: b.id, label: accountLabel(b) }], location, mode);
 		busy = '';
 	}
@@ -112,9 +124,9 @@
 
 		<div class="pane">
 			<Block title="Join" hint="Accounts that can open this instance">
-				{#if !access.length}
+				{#if !access.length && !relay.length}
 					<Notice icon="door" text="None of your logged-in accounts has access to this instance. {WHO[place.accessTypeLabel] || WHO[place.accessType] || ''}" />
-				{:else}
+				{:else if access.length}
 					<ul class="acc">
 						{#each access as { account: a, reason } (a.id)}
 							<li>
@@ -127,20 +139,26 @@
 						{/each}
 					</ul>
 				{/if}
-				{#if relay.length}
+			</Block>
+
+			{#if relay.length}
+				<Block title="Via a friend" hint="These accounts cannot open it themselves: a friend's account enters first and invites them">
+					{#if relayAll}
+						<div class="all"><button class="btn xs" disabled={!!busy} onclick={inviteAll}><Icon name="mail" /> {busy === 'all' ? 'Inviting…' : `Invite all ${relayAll.targets.length} accounts`}</button><span class="faint small">relay through {accountLabel(relayAll.via)}, one trip</span></div>
+					{/if}
 					<ul class="acc">
 						{#each relay as { account: b, via } (b.id)}
 							<li>
 								<Avatar src={b.currentUser?.currentAvatarThumbnailImageUrl} name={accountLabel(b)} size={32} accountId={b.id} />
-								<div class="n"><strong>{accountLabel(b)}</strong><span class="faint small">Relay via {accountLabel(via)}: it enters and invites this account</span></div>
+								<div class="n"><strong>{accountLabel(b)}</strong><span class="faint small">Relay through {accountLabel(via)}</span></div>
 								<span class="spacer"></span>
-								<button class="btn xs" disabled={!!busy} onclick={() => relayJoin(b, via, 'invite')}><Icon name="mail" /> {busy === b.id ? 'Relaying…' : 'Invite'}</button>
-								<button class="btn primary xs" disabled={!!busy} onclick={() => relayJoin(b, via, 'join')}><Icon name="play" /> Join in game</button>
+								<button class="btn xs" disabled={!!busy} title="Only send the invite: accept it later in the game or on vrchat.com" onclick={() => relayJoin(b, via, 'invite')}><Icon name="mail" /> {busy === b.id + ':invite' ? 'Inviting…' : 'Invite'}</button>
+								<button class="btn primary xs" disabled={!!busy} title="Invite, then start the game as this account in the instance" onclick={() => relayJoin(b, via, 'join')}><Icon name="play" /> {busy === b.id + ':join' ? 'Starting…' : 'Join in game'}</button>
 							</li>
 						{/each}
 					</ul>
-				{/if}
-			</Block>
+				</Block>
+			{/if}
 
 			<Block title="Who is here" hint={ours.length ? `Your accounts: ${ours.length}` : ''}>
 				{#if here.length}
@@ -226,6 +244,12 @@
 		flex-direction: column;
 		gap: 18px;
 		padding: 16px 20px 20px;
+	}
+	.all {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding-bottom: 10px;
 	}
 	.acc {
 		list-style: none;
